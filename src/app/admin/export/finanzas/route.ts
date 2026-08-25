@@ -19,7 +19,6 @@ export async function GET(request: NextRequest) {
 
   const from = params.get("from") || `${today.slice(0, 8)}01`;
   const to = params.get("to") || today;
-  const cat = params.get("cat");
 
   // Pedidos
   const { data: orders } = await supabase
@@ -30,18 +29,20 @@ export async function GET(request: NextRequest) {
     .order("created_at");
 
   // Gastos
-  let expQuery = supabase
+  const { data: expenses } = await supabase
     .from("expenses")
     .select("expense_date, concept, amount, category:expense_categories(name)")
     .gte("expense_date", from)
     .lte("expense_date", to)
     .order("expense_date");
 
-  if (cat && cat !== "todas") {
-    expQuery = expQuery.eq("expense_category_id", Number(cat));
-  }
-
-  const { data: expenses } = await expQuery;
+  // Compras materia prima
+  const { data: production } = await supabase
+    .from("production_records")
+    .select("record_date, total_cost")
+    .gte("record_date", from)
+    .lte("record_date", to)
+    .order("record_date");
 
   // Settings
   const { data: settingsRows } = await supabase
@@ -58,9 +59,10 @@ export async function GET(request: NextRequest) {
   let totalSubtotal = 0;
   let totalRetainedFees = 0;
   let totalExternalFees = 0;
-  let totalGastos = 0;
+  let totalExpenses = 0;
+  let totalProduction = 0;
 
-  // Sección de pedidos
+  // === VENTAS ===
   lines.push(["=== VENTAS ===", "", "", "", "", "", "", "", ""].join(";"));
   lines.push(["#", "Fecha", "Cliente", "Estado", "Pago", "Subtotal", "Dom", "Retenido", "Total"].join(";"));
 
@@ -85,20 +87,19 @@ export async function GET(request: NextRequest) {
     ].join(";"));
   }
 
-  const totalVentas = totalSubtotal + totalRetainedFees;
   lines.push(["", "", "", "", "SUBTOTAL PRODUCTOS", String(totalSubtotal).replace(".", ","), "", "", ""].join(";"));
   lines.push(["", "", "", "", "DOMICILIOS RETENIDOS", String(totalRetainedFees).replace(".", ","), "", "", ""].join(";"));
   lines.push(["", "", "", "", "DOMICILIOS EXTERNOS", String(totalExternalFees).replace(".", ","), "", "", ""].join(";"));
-  lines.push(["", "", "", "", "TOTAL VENTAS", String(totalVentas).replace(".", ","), "", "", ""].join(";"));
+  lines.push(["", "", "", "", "TOTAL VENTAS", String(totalSubtotal + totalRetainedFees).replace(".", ","), "", "", ""].join(";"));
   lines.push("");
 
-  // Sección de gastos
-  lines.push(["=== GASTOS ===", "", "", ""].join(";"));
+  // === GASTOS ===
+  lines.push(["=== GASTOS OPERATIVOS ===", "", "", ""].join(";"));
   lines.push(["Fecha", "Categoría", "Concepto", "Valor"].join(";"));
 
   for (const e of expenses ?? []) {
     const amount = Number(e.amount);
-    totalGastos += amount;
+    totalExpenses += amount;
     const catName = (e.category as unknown as { name?: string } | null)?.name ?? "";
     lines.push([
       e.expense_date,
@@ -108,14 +109,33 @@ export async function GET(request: NextRequest) {
     ].join(";"));
   }
 
-  lines.push(["", "", "TOTAL GASTOS", String(totalGastos).replace(".", ",")].join(";"));
+  lines.push(["", "", "TOTAL GASTOS", String(totalExpenses).replace(".", ",")].join(";"));
   lines.push("");
 
-  // Resumen
-  lines.push(["=== RESUMEN ===", "", "", ""].join(";"));
-  lines.push(["Ventas (productos + dom retenidos)", String(totalVentas).replace(".", ",")].join(";"));
-  lines.push(["(-) Gastos operativos", String(totalGastos).replace(".", ",")].join(";"));
-  lines.push(["Utilidad operativa", String(totalVentas - totalGastos).replace(".", ",")].join(";"));
+  // === COMPRAS MATERIA PRIMA ===
+  lines.push(["=== COMPRAS MATERIA PRIMA ===", "", ""].join(";"));
+  lines.push(["Fecha", "Costo total", ""].join(";"));
+
+  for (const p of production ?? []) {
+    const cost = Number(p.total_cost);
+    totalProduction += cost;
+    lines.push([
+      p.record_date,
+      String(cost).replace(".", ","),
+      "",
+    ].join(";"));
+  }
+
+  lines.push(["TOTAL COMPRAS", String(totalProduction).replace(".", ",")].join(";"));
+  lines.push("");
+
+  // === RESUMEN ===
+  const netProfit = (totalSubtotal + totalRetainedFees) - totalExpenses - totalProduction;
+  lines.push(["=== RESUMEN FINANCIERO ===", ""].join(";"));
+  lines.push(["Ventas (productos + dom retenidos)", String(totalSubtotal + totalRetainedFees).replace(".", ",")].join(";"));
+  lines.push(["(-) Gastos operativos", String(totalExpenses).replace(".", ",")].join(";"));
+  lines.push(["(-) Compras materia prima", String(totalProduction).replace(".", ",")].join(";"));
+  lines.push(["UTILIDAD NETA", String(netProfit).replace(".", ",")].join(";"));
 
   const csv = "\uFEFF" + lines.join("\r\n");
 
@@ -123,7 +143,7 @@ export async function GET(request: NextRequest) {
     status: 200,
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="reporte_${from}_${to}.csv"`,
+      "Content-Disposition": `attachment; filename="finanzas_${from}_${to}.csv"`,
       "Cache-Control": "no-store",
     },
   });

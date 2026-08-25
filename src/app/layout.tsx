@@ -20,6 +20,9 @@ export const metadata: Metadata = {
   title: "TETSUBURGER",
   description:
     "Las mejores hamburguesas artesanales y perros calientes de la ciudad. Pide por WhatsApp.",
+  icons: {
+    icon: "/images/logo.webp",
+  },
 };
 
 export default function RootLayout({

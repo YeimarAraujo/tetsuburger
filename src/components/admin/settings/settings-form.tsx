@@ -41,7 +41,8 @@ const TEXT_FIELDS: TextDef[] = [
 ];
 
 const NUMBER_FIELDS: TextDef[] = [
-  { key: "delivery_fee", label: "Costo de domicilio (COP)" },
+  { key: "delivery_fee", label: "Costo de domicilio para el cliente (COP)" },
+  { key: "delivery_fee_business", label: "Valor fijo que la empresa recibe por domicilio (COP)", hint: "Lo que se cuenta como ingreso cuando el domicilio es retenido. Ej: cliente paga $6.000, empresa recibe $2.000" },
   { key: "min_order_total", label: "Pedido mínimo (COP)", hint: "0 = sin mínimo" },
 ];
 

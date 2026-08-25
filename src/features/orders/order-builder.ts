@@ -100,6 +100,7 @@ export async function persistOrder(params: {
   lines: PreparedLine[];
   subtotal: number;
   deliveryFee: number;
+  deliveryFeeRetained: boolean;
   total: number;
   customerName: string;
   customerPhone: string;
@@ -123,6 +124,7 @@ export async function persistOrder(params: {
       delivery_type: params.deliveryType,
       payment_method: params.paymentMethod,
       delivery_fee: params.deliveryFee,
+      delivery_fee_retained: params.deliveryFeeRetained,
       subtotal: params.subtotal,
       total: params.total,
       notes: params.notes,

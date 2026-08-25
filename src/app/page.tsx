@@ -1,5 +1,6 @@
 import { Header } from "@/components/public/header";
 import { ClosedOverlay } from "@/components/public/closed-overlay";
+import { FloatingCartButton } from "@/components/public/floating-cart-button";
 import {
   ProductCard,
   type ProductCardData,
@@ -74,6 +75,7 @@ export default async function HomePage() {
   return (
     <div className="min-h-screen bg-background">
       <Header />
+      <FloatingCartButton />
 
       {!status.isOpen ? (
         <ClosedOverlay message={status.message} nextOpensAt={status.nextOpensAt} />
@@ -104,7 +106,7 @@ export default async function HomePage() {
             {status.isOpen ? "Abierto" : "Cerrado"}
           </span>
 
-          <h1 className="font-display text-5xl tracking-wider text-white sm:text-7xl">
+          <h1 className="font-display text-5xl tracking-wider text-white sm:text-5xl">
             SAZÓN SOBRE LA PLANCHA
           </h1>
           <p className="font-display text-5xl tracking-wider text-white sm:text-3xl">

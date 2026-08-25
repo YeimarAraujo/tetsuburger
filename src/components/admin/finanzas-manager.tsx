@@ -2,12 +2,13 @@
 
 import { useMemo, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { DollarSign, TrendingDown, TrendingUp, Wallet, BarChart3 } from "lucide-react";
+import { DollarSign, Download, TrendingDown, TrendingUp, Wallet } from "lucide-react";
 import { formatCOP, formatDate } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 interface Filters {
   from: string;
@@ -34,12 +35,14 @@ export function FinanzasManager({
   production,
   closings,
   filters,
+  deliveryFeeBusiness,
 }: {
-  orders: { id: string; status: string; total: number | string; delivery_fee: number | string; payment_method: string | null; origin: string; created_at: string }[];
-  expenses: { id: string; expense_date: string; amount: number | string; category?: { name: string } | null }[];
+  orders: { id: string; status: string; total: number | string; subtotal: number | string; delivery_fee: number | string; delivery_fee_retained: boolean; payment_method: string | null; origin: string; created_at: string }[];
+  expenses: { id: string; expense_date: string; amount: number | string; concept: string; category?: { name: string } | null }[];
   production: { id: string; record_date: string; total_cost: number | string }[];
   closings: { id: string; closing_date: string; orders_count: number; sales_total: number | string; expenses_total: number | string; estimated_profit: number | string }[];
   filters: Filters;
+  deliveryFeeBusiness: number;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -48,8 +51,14 @@ export function FinanzasManager({
     const validOrders = orders.filter((o) => o.status !== "CANCELADO");
     const cancelled = orders.length - validOrders.length;
 
-    const sales = validOrders.reduce((s, o) => s + Number(o.total), 0);
-    const fees = validOrders.reduce((s, o) => s + Number(o.delivery_fee), 0);
+    // Ingresos = subtotal de todos + valor fijo por domicilio retenido
+    const subtotalSales = validOrders.reduce((s, o) => s + Number(o.subtotal), 0);
+    const retainedCount = validOrders.filter((o) => o.delivery_fee_retained && Number(o.delivery_fee) > 0).length;
+    const retainedFees = retainedCount * deliveryFeeBusiness;
+    const externalFees = validOrders.reduce((s, o) =>
+      s + (!o.delivery_fee_retained ? Number(o.delivery_fee) : 0), 0
+    );
+    const sales = subtotalSales + retainedFees;
     const expTotal = expenses.reduce((s, e) => s + Number(e.amount), 0);
     const prodCost = production.reduce((s, p) => s + Number(p.total_cost), 0);
 
@@ -81,7 +90,10 @@ export function FinanzasManager({
       validOrdersCount: validOrders.length,
       cancelled,
       sales,
-      fees,
+      subtotalSales,
+      retainedFees,
+      retainedCount,
+      externalFees,
       expenses: expTotal,
       prodCost,
       netProfit,
@@ -91,7 +103,7 @@ export function FinanzasManager({
       expByCategory,
       totalDelivered: validOrders.length,
     };
-  }, [orders, expenses, production]);
+  }, [orders, expenses, production, deliveryFeeBusiness]);
 
   // Utilidad diaria (solo días con cierre)
   const dailyData = useMemo(() => {
@@ -112,6 +124,11 @@ export function FinanzasManager({
     const q = new URLSearchParams({ from: filters.from, to });
     startTransition(() => router.push(`/admin/finanzas?${q.toString()}`));
   }
+
+  const exportHref = useMemo(() => {
+    const q = new URLSearchParams({ from: filters.from, to: filters.to });
+    return `/admin/export/finanzas?${q.toString()}`;
+  }, [filters]);
 
   return (
     <>
@@ -142,6 +159,14 @@ export function FinanzasManager({
               </button>
             ))}
           </div>
+          <div className="ml-auto">
+            <a href={exportHref}>
+              <Button variant="outline" size="sm">
+                <Download className="size-4" />
+                Exportar CSV
+              </Button>
+            </a>
+          </div>
         </CardContent>
       </Card>
 
@@ -156,7 +181,13 @@ export function FinanzasManager({
               <div>
                 <p className="text-xs text-muted-foreground">Ingresos por ventas</p>
                 <p className="text-xl font-bold text-emerald-600">{formatCOP(stats.sales)}</p>
-                <p className="text-[10px] text-muted-foreground">{stats.validOrdersCount} pedidos válidos</p>
+                <p className="text-[10px] text-muted-foreground">
+                  Productos: {formatCOP(stats.subtotalSales)}
+                  {stats.retainedCount > 0 ? ` · Dom (${stats.retainedCount}×${formatCOP(deliveryFeeBusiness)}): ${formatCOP(stats.retainedFees)}` : ""}
+                </p>
+                {stats.externalFees > 0 ? (
+                  <p className="text-[10px] text-zinc-500">Dom externo (no cuenta): {formatCOP(stats.externalFees)}</p>
+                ) : null}
               </div>
             </div>
           </CardContent>
@@ -218,7 +249,7 @@ export function FinanzasManager({
             {Object.entries(stats.byMethod).map(([method, data]) => (
               <div key={method} className="flex items-center justify-between">
                 <span className="flex items-center gap-2 text-sm">
-                  {method === "EFECTIVO" ? "💵" : "🏦"} {method === "EFECTIVO" ? "Efectivo" : "Transferencia"}
+                  {method === "EFECTIVO" ? "Efectivo" : "Transferencia"}
                   <Badge variant="outline" className="text-[10px]">{data.count}</Badge>
                 </span>
                 <span className="font-semibold">{formatCOP(data.total)}</span>
@@ -303,12 +334,55 @@ export function FinanzasManager({
         </Card>
       ) : null}
 
+      {/* Historial de gastos */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">Historial de gastos ({expenses.length})</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {expenses.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Sin gastos en este período</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-muted-foreground">
+                    <th className="pb-2 pr-4 font-medium">Fecha</th>
+                    <th className="pb-2 pr-4 font-medium">Categoría</th>
+                    <th className="pb-2 pr-4 font-medium">Concepto</th>
+                    <th className="pb-2 text-right font-medium">Valor</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {expenses.map((e) => (
+                    <tr key={e.id} className="border-b last:border-0">
+                      <td className="py-2 pr-4 whitespace-nowrap">{formatDate(`${e.expense_date}T12:00:00Z`)}</td>
+                      <td className="py-2 pr-4">
+                        <Badge variant="outline" className="text-[10px]">{e.category?.name ?? "Sin categoría"}</Badge>
+                      </td>
+                      <td className="py-2 pr-4 text-muted-foreground">{e.concept}</td>
+                      <td className="py-2 text-right font-semibold text-red-600">{formatCOP(Number(e.amount))}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t font-bold">
+                    <td colSpan={3} className="py-2 pr-4 text-right">Total gastos</td>
+                    <td className="py-2 text-right text-red-600">{formatCOP(stats.expenses)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Fórmula */}
       <Card className="border-dashed">
         <CardContent className="py-4 text-center text-sm text-muted-foreground">
           <p className="font-medium">Fórmula de utilidad neta</p>
           <p className="mt-1">
-            <span className="text-emerald-600">Ventas</span> −{" "}
+            <span className="text-emerald-600">Productos + {formatCOP(deliveryFeeBusiness)}/dom retenido</span> −{" "}
             <span className="text-red-600">Gastos operativos</span> −{" "}
             <span className="text-amber-600">Compras de materia prima</span> ={" "}
             <span className="font-bold text-blue-600">Utilidad neta</span>

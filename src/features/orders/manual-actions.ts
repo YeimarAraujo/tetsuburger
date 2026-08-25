@@ -19,6 +19,7 @@ const manualSchema = z
     customer_address: z.string().trim().max(200).default(""),
     delivery_type: z.enum(["DOMICILIO", "RECOGIDA", "LOCAL"]),
     delivery_fee: z.coerce.number().min(0).max(999_999),
+    delivery_fee_retained: z.boolean().default(true),
     payment_method: z.enum(["EFECTIVO", "TRANSFERENCIA"]),
     notes: z.string().trim().max(300).default(""),
   })
@@ -64,6 +65,7 @@ export async function createManualOrder(
     lines: built.lines,
     subtotal,
     deliveryFee,
+    deliveryFeeRetained: data.delivery_fee_retained,
     total,
     customerName: data.customer_name,
     customerPhone: data.customer_phone,

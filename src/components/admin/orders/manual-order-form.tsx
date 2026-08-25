@@ -143,6 +143,7 @@ export function ManualOrderForm({
         customer_address: address,
         delivery_type: deliveryType,
         delivery_fee: fee,
+        delivery_fee_retained: chargeDeliveryFee,
         payment_method: paymentMethod,
         notes,
       },

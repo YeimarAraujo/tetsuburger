@@ -8,6 +8,7 @@ import {
   CheckCheck,
   Clock,
   Landmark,
+  Pencil,
   RefreshCw,
   Store,
   Truck,
@@ -38,6 +39,7 @@ export interface BoardOrder {
   delivery_type: string;
   payment_method: string;
   delivery_fee: number;
+  delivery_fee_retained: boolean;
   subtotal: number;
   total: number;
   notes: string;
@@ -85,6 +87,8 @@ export function OrdersBoard({ initialOrders }: { initialOrders: BoardOrder[] }) 
   const [refreshing, setRefreshing] = useState(false);
   const [cancelTarget, setCancelTarget] = useState<BoardOrder | null>(null);
   const [cancelReason, setCancelReason] = useState("");
+  const [editingFeeId, setEditingFeeId] = useState<string | null>(null);
+  const [editingFeeValue, setEditingFeeValue] = useState("");
   const mutedRef = useRef(false);
 
   useEffect(() => {
@@ -192,6 +196,53 @@ export function OrdersBoard({ initialOrders }: { initialOrders: BoardOrder[] }) 
     toast.success(`Pedido ${formatOrderNumber(cancelTarget.order_number)} cancelado`);
     setCancelTarget(null);
     setCancelReason("");
+  }
+
+  async function toggleDeliveryRetained(order: BoardOrder) {
+    const newValue = !order.delivery_fee_retained;
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("orders")
+      .update({ delivery_fee_retained: newValue })
+      .eq("id", order.id);
+
+    if (error) {
+      toast.error("No se pudo actualizar");
+      return;
+    }
+
+    upsertOrder({ ...order, delivery_fee_retained: newValue });
+    toast.success(
+      newValue
+        ? `Domicilio ahora retenido por la empresa`
+        : `Domicilio marcado como repartidor externo`
+    );
+  }
+
+  async function saveDeliveryFee(order: BoardOrder) {
+    const newFee = Number(editingFeeValue);
+    if (isNaN(newFee) || newFee < 0) {
+      toast.error("Valor inválido");
+      setEditingFeeId(null);
+      return;
+    }
+
+    const supabase = createClient();
+    const newTotal = Number(order.subtotal) + newFee;
+    const { error } = await supabase
+      .from("orders")
+      .update({ delivery_fee: newFee, total: newTotal })
+      .eq("id", order.id);
+
+    if (error) {
+      toast.error("No se pudo actualizar el valor");
+      setEditingFeeId(null);
+      return;
+    }
+
+    upsertOrder({ ...order, delivery_fee: newFee, total: newTotal });
+    setEditingFeeId(null);
+    toast.success(`Domicilio actualizado a ${formatCOP(newFee)}`);
   }
 
   const counts = useMemo(() => {
@@ -311,15 +362,72 @@ export function OrdersBoard({ initialOrders }: { initialOrders: BoardOrder[] }) 
                         </span>
                       </div>
 
-                      {order.delivery_type === "DOMICILIO" ? (
-                        <span className={cn(
-                          "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold",
-                          order.delivery_fee > 0
-                            ? "bg-emerald-50 text-emerald-700"
-                            : "bg-zinc-100 text-zinc-500"
-                        )}>
+                      {order.delivery_type === "DOMICILIO" && order.delivery_fee > 0 ? (
+                        <div className="flex items-center gap-1">
+                          {editingFeeId === order.id ? (
+                            <div className="flex items-center gap-1">
+                              <input
+                                type="number"
+                                value={editingFeeValue}
+                                onChange={(e) => setEditingFeeValue(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") saveDeliveryFee(order);
+                                  if (e.key === "Escape") setEditingFeeId(null);
+                                }}
+                                className="h-6 w-20 rounded border px-1.5 text-[11px] font-semibold"
+                                autoFocus
+                                min={0}
+                                step={500}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => saveDeliveryFee(order)}
+                                className="rounded bg-emerald-500 px-1.5 py-0.5 text-[10px] font-bold text-white hover:bg-emerald-600"
+                              >
+                                ✓
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingFeeId(null)}
+                                className="rounded bg-zinc-300 px-1.5 py-0.5 text-[10px] font-bold text-zinc-700 hover:bg-zinc-400"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => toggleDeliveryRetained(order)}
+                                className={cn(
+                                  "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold transition-colors",
+                                  order.delivery_fee_retained
+                                    ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                                    : "bg-zinc-100 text-zinc-500 hover:bg-zinc-200"
+                                )}
+                                title={order.delivery_fee_retained ? "Retenido. Click para marcar externo" : "Externo. Click para marcar retenido"}
+                              >
+                                <Truck className="size-3" />
+                                {order.delivery_fee_retained ? `Retenido: ${formatCOP(order.delivery_fee)}` : `Externo: ${formatCOP(order.delivery_fee)}`}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingFeeId(order.id);
+                                  setEditingFeeValue(String(order.delivery_fee));
+                                }}
+                                className="rounded p-0.5 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-600"
+                                title="Editar valor del domicilio"
+                              >
+                                <Pencil className="size-3" />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      ) : order.delivery_type === "DOMICILIO" ? (
+                        <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold bg-zinc-100 text-zinc-500">
                           <Truck className="size-3" />
-                          {order.delivery_fee > 0 ? `Domicilio: ${formatCOP(order.delivery_fee)}` : "Sin cargo domicilio"}
+                          Sin cargo domicilio
                         </span>
                       ) : null}
 

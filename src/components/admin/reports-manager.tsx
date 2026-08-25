@@ -17,7 +17,9 @@ interface OrderRow {
   status: string;
   customer_name: string;
   total: number;
+  subtotal: number;
   delivery_fee: number;
+  delivery_fee_retained: boolean;
   payment_method: string | null;
   origin: string;
   created_at: string;
@@ -62,19 +64,26 @@ export function ReportsManager({
   expenses,
   filters,
   categories,
+  deliveryFeeBusiness,
 }: {
   orders: OrderRow[];
   expenses: ExpenseRow[];
   filters: Filters;
   categories: { id: number; name: string }[];
+  deliveryFeeBusiness: number;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
   const stats = useMemo(() => {
     const validOrders = orders.filter((o) => o.status !== "CANCELADO");
-    const sales = validOrders.reduce((s, o) => s + Number(o.total), 0);
-    const fees = validOrders.reduce((s, o) => s + Number(o.delivery_fee), 0);
+    const subtotalSales = validOrders.reduce((s, o) => s + Number(o.subtotal), 0);
+    const retainedCount = validOrders.filter((o) => o.delivery_fee_retained && Number(o.delivery_fee) > 0).length;
+    const retainedFees = retainedCount * deliveryFeeBusiness;
+    const externalFees = validOrders.reduce((s, o) =>
+      s + (!o.delivery_fee_retained ? Number(o.delivery_fee) : 0), 0
+    );
+    const sales = subtotalSales + retainedFees;
     const expTotal = expenses.reduce((s, e) => s + Number(e.amount), 0);
     const byMethod: Record<string, number> = {};
     validOrders.forEach((o) => {
@@ -85,12 +94,15 @@ export function ReportsManager({
       ordersCount: validOrders.length,
       cancelledCount: orders.length - validOrders.length,
       sales,
-      fees,
+      subtotalSales,
+      retainedFees,
+      retainedCount,
+      externalFees,
       expenses: expTotal,
       profit: sales - expTotal,
       byMethod,
     };
-  }, [orders, expenses]);
+  }, [orders, expenses, deliveryFeeBusiness]);
 
   function pushFilter(next: Partial<Filters>) {
     const merged = { ...filters, ...next };
@@ -168,6 +180,13 @@ export function ReportsManager({
               <div>
                 <p className="text-xs text-muted-foreground">Ventas netas</p>
                 <p className="text-xl font-bold text-emerald-600">{formatCOP(stats.sales)}</p>
+                <p className="text-[10px] text-muted-foreground">
+                  Productos: {formatCOP(stats.subtotalSales)}
+                  {stats.retainedCount > 0 ? ` · Dom (${stats.retainedCount}×${formatCOP(deliveryFeeBusiness)}): ${formatCOP(stats.retainedFees)}` : ""}
+                </p>
+                {stats.externalFees > 0 ? (
+                  <p className="text-[10px] text-zinc-500">Dom externo: {formatCOP(stats.externalFees)}</p>
+                ) : null}
               </div>
             </div>
           </CardContent>
@@ -221,7 +240,7 @@ export function ReportsManager({
             <div className="flex gap-4">
               {Object.entries(stats.byMethod).map(([method, total]) => (
                 <Badge key={method} variant="secondary" className="gap-1 px-3 py-1 text-sm">
-                  {method === "EFECTIVO" ? "💵" : "🏦"} {method}: {formatCOP(total)}
+                  {method}: {formatCOP(total)}
                 </Badge>
               ))}
             </div>
@@ -259,6 +278,43 @@ export function ReportsManager({
                   </tr>
                 ))}
               </tbody>
+            </table>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Historial de gastos */}
+      <Card>
+        <CardContent className="overflow-x-auto py-4">
+          <p className="mb-3 text-sm font-medium">Historial de gastos ({expenses.length})</p>
+          {expenses.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Sin gastos en este período</p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left text-muted-foreground">
+                  <th className="pb-2 pr-2 font-medium">Fecha</th>
+                  <th className="pb-2 pr-2 font-medium">Categoría</th>
+                  <th className="pb-2 pr-2 font-medium">Concepto</th>
+                  <th className="pb-2 text-right font-medium">Valor</th>
+                </tr>
+              </thead>
+              <tbody>
+                {expenses.map((e) => (
+                  <tr key={e.id} className="border-b last:border-0">
+                    <td className="py-2 pr-2 whitespace-nowrap">{e.expense_date}</td>
+                    <td className="py-2 pr-2"><Badge variant="outline" className="text-[10px]">{e.category_name ?? "—"}</Badge></td>
+                    <td className="py-2 pr-2 text-muted-foreground">{e.concept}</td>
+                    <td className="py-2 text-right font-semibold text-red-600">{formatCOP(Number(e.amount))}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t font-bold">
+                  <td colSpan={3} className="py-2 pr-2 text-right">Total gastos</td>
+                  <td className="py-2 text-right text-red-600">{formatCOP(stats.expenses)}</td>
+                </tr>
+              </tfoot>
             </table>
           )}
         </CardContent>

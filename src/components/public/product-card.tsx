@@ -150,11 +150,50 @@ export function ProductCard({ product }: { product: ProductCardData }) {
             alt={product.name}
             className="w-full rounded-lg object-contain"
           />
-          <div className="p-4">
-            <DialogTitle>{product.name}</DialogTitle>
-            <p className="mt-1 text-lg font-bold text-primary">
-              {formatCOP(product.price)}
-            </p>
+          <div className="space-y-3 p-4">
+            <div>
+              <DialogTitle className="text-xl">{product.name}</DialogTitle>
+              {product.description ? (
+                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                  {product.description}
+                </p>
+              ) : null}
+            </div>
+
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-xl font-bold text-primary">
+                {formatCOP(product.price)}
+              </span>
+
+              {soldOut ? (
+                <span className="rounded-full border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-600">
+                  Agotado
+                </span>
+              ) : (
+                <Button
+                  size="lg"
+                  disabled={adding}
+                  onClick={() => {
+                    setImageOpen(false);
+                    if (product.addons.length > 0) {
+                      setDialogOpen(true);
+                    } else {
+                      addDirect();
+                    }
+                  }}
+                  className="gap-1.5"
+                >
+                  {adding ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <>
+                      <Plus className="size-4" />
+                      Agregar
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
           </div>
         </DialogContent>
       </Dialog>

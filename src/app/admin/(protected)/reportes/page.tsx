@@ -42,10 +42,10 @@ export default async function ReportsPage({
     expensesQuery = expensesQuery.eq("expense_category_id", Number(category));
   }
 
-  const [ordersRes, expensesRes, categoriesRes] = await Promise.all([
+  const [ordersRes, expensesRes, categoriesRes, settingsRes] = await Promise.all([
     supabase
       .from("orders")
-      .select("id, order_number, status, customer_name, total, delivery_fee, payment_method, origin, created_at")
+      .select("id, order_number, status, customer_name, total, subtotal, delivery_fee, delivery_fee_retained, payment_method, origin, created_at")
       .gte("created_at", `${from}T00:00:00-05:00`)
       .lte("created_at", `${to}T23:59:59-05:00`)
       .order("created_at", { ascending: false }),
@@ -55,6 +55,10 @@ export default async function ReportsPage({
       .select("id, name")
       .eq("is_active", true)
       .order("name"),
+    supabase
+      .from("settings")
+      .select("key, value")
+      .eq("key", "delivery_fee_business"),
   ]);
 
   const expenses = ((expensesRes.data ?? []) as unknown as {
@@ -71,6 +75,10 @@ export default async function ReportsPage({
     category_name: (e.category as unknown as { name?: string } | null)?.name ?? null,
   }));
 
+  const deliveryFeeBusiness = Number(
+    (settingsRes.data ?? []).find((r) => r.key === "delivery_fee_business")?.value ?? 0
+  );
+
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-4 lg:p-6">
       <header>
@@ -85,6 +93,7 @@ export default async function ReportsPage({
         expenses={expenses}
         categories={(categoriesRes.data ?? []) as any[]}
         filters={{ from, to, category }}
+        deliveryFeeBusiness={deliveryFeeBusiness}
       />
     </div>
   );

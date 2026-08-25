@@ -125,6 +125,7 @@ export async function placeOrder(
     lines: built.lines,
     subtotal,
     deliveryFee,
+    deliveryFeeRetained: true,
     total,
     customerName: customer.customer_name,
     customerPhone: customer.customer_phone,

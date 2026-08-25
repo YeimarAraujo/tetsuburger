@@ -104,8 +104,8 @@ export function Header() {
           </Link>
 
           <SheetTrigger asChild>
-            <Button variant="outline" size="sm" className="relative gap-2">
-              <ShoppingBag className="size-4" />
+            <Button variant="outline" size="lg" className="relative gap-2">
+              <ShoppingBag className="size-5  " />
               <span className="hidden sm:inline">Carrito</span>
               {count > 0 ? (
                 <>

@@ -67,16 +67,17 @@ export default async function AdminDashboardPage() {
   const orders = ordersRes.data ?? [];
   const expenses = expensesRes.data ?? [];
 
-  const totalSales = orders.reduce((s, o) => s + Number(o.total), 0);
+  const validOrders = orders.filter((o) => o.status !== "CANCELADO");
+  const totalSales = validOrders.reduce((s, o) => s + Number(o.total), 0);
   const totalExpenses = expenses.reduce((s, o) => s + Number(o.amount), 0);
-  const ordersByStatus = orders.reduce(
+  const ordersByStatus = validOrders.reduce(
     (acc, o) => {
       acc[o.status] = (acc[o.status] || 0) + 1;
       return acc;
     },
     {} as Record<string, number>
   );
-  const paymentsByMethod = orders.reduce(
+  const paymentsByMethod = validOrders.reduce(
     (acc, o) => {
       acc[o.payment_method ?? "EFECTIVO"] = (acc[o.payment_method ?? "EFECTIVO"] || 0) + 1;
       return acc;
@@ -100,7 +101,7 @@ export default async function AdminDashboardPage() {
       <DashboardStats
         status={status}
         today={{
-          ordersCount: orders.length,
+          ordersCount: validOrders.length,
           totalSales,
           totalExpenses,
           profit: totalSales - totalExpenses,
