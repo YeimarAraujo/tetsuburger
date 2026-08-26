@@ -3,19 +3,14 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Loader2, Banknote, Landmark } from "lucide-react";
+import { ArrowLeft, Loader2, Banknote, Landmark } from "lucide-react";
 import { toast } from "sonner";
-import { cartSubtotal, itemUnitPrice, useCart } from "@/store/cart";
+import { cartSubtotal, cartCount, useCart } from "@/store/cart";
 import { placeOrder } from "@/features/orders/actions";
 import { formatCOP } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
@@ -31,6 +26,7 @@ export function CheckoutForm({ deliveryFee }: { deliveryFee: number }) {
 
   const subtotal = cartSubtotal(items);
   const total = subtotal + deliveryFee;
+  const count = cartCount(items);
 
   if (items.length === 0 && !submitting) {
     return (
@@ -62,11 +58,9 @@ export function CheckoutForm({ deliveryFee }: { deliveryFee: number }) {
       addon_ids: item.addons.map((a) => a.id),
     }));
 
-    // Honeypot anti-spam: si el campo oculto viene lleno, es un bot
+    // Honeypot anti-spam
     const honeypot = String(formData.get("website") ?? "");
-    if (honeypot) {
-      return;
-    }
+    if (honeypot) return;
 
     const result = await placeOrder(customer, payloadItems);
 
@@ -76,7 +70,6 @@ export function CheckoutForm({ deliveryFee }: { deliveryFee: number }) {
       if (!result.orderNumber) return;
     }
 
-    // Pedido registrado: guarda resumen para la pantalla de confirmación
     sessionStorage.setItem(
       "tetsuburger-last-order",
       JSON.stringify({
@@ -91,7 +84,8 @@ export function CheckoutForm({ deliveryFee }: { deliveryFee: number }) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-[1fr_380px]">
+    <form onSubmit={handleSubmit} className="space-y-6">
+
       {/* Datos de entrega */}
       <Card>
         <CardHeader>
@@ -172,69 +166,25 @@ export function CheckoutForm({ deliveryFee }: { deliveryFee: number }) {
               ))}
             </div>
           </div>
+
+          <Separator />
+
+          <Button type="submit" size="lg" className="w-full" disabled={submitting || isPending}>
+            {submitting || isPending ? (
+              <>
+                <Loader2 className="size-4 animate-spin" />
+                Registrando pedido…
+              </>
+            ) : (
+              `Enviar por whatsapp · ${formatCOP(total)}`
+            )}
+          </Button>
+
+          <p className="text-center text-xs text-muted-foreground">
+            Tu pedido queda registrado y te llevamos a WhatsApp para confirmar el pago.
+          </p>
         </CardContent>
       </Card>
-
-      {/* Resumen */}
-      <div className="space-y-4 lg:sticky lg:top-20 lg:self-start">
-        <Card>
-          <CardHeader>
-            <CardTitle>Resumen del pedido</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm">
-            {items.map((item) => (
-              <div key={item.key} className="flex justify-between gap-3">
-                <span className="min-w-0">
-                  <span className="font-medium">{item.quantity}×</span>{" "}
-                  {item.name}
-                  {item.addons.length > 0 ? (
-                    <span className="block text-xs text-muted-foreground">
-                      + {item.addons.map((a) => a.name).join(", ")}
-                    </span>
-                  ) : null}
-                </span>
-                <span className="shrink-0 font-medium">
-                  {formatCOP(itemUnitPrice(item) * item.quantity)}
-                </span>
-              </div>
-            ))}
-
-            <Separator />
-
-            <div className="flex justify-between text-muted-foreground">
-              <span>Subtotal</span>
-              <span>{formatCOP(subtotal)}</span>
-            </div>
-            <div className="flex justify-between text-muted-foreground">
-              <span>Domicilio</span>
-              <span>{deliveryFee > 0 ? formatCOP(deliveryFee) : "Gratis"}</span>
-            </div>
-
-            <Separator />
-
-            <div className="flex justify-between text-base font-bold">
-              <span>Total</span>
-              <span className="text-primary">{formatCOP(total)}</span>
-            </div>
-
-            <Button type="submit" size="lg" className="w-full" disabled={submitting || isPending}>
-              {submitting || isPending ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" />
-                  Registrando pedido…
-                </>
-              ) : (
-                `Confirmar y pagar por WhatsApp · ${formatCOP(total)}`
-              )}
-            </Button>
-
-            <p className="text-center text-xs text-muted-foreground">
-              Tu pedido queda registrado y te llevamos a WhatsApp para confirmar
-              el pago.
-            </p>
-          </CardContent>
-        </Card>
-      </div>
     </form>
   );
 }

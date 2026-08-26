@@ -63,9 +63,6 @@ export function MobileNav() {
       <SheetContent side="left" className="w-72 p-0">
         <SheetHeader className="border-b px-6 py-4">
           <SheetTitle className="text-left">
-            <span className="text-lg font-extrabold tracking-tight">
-              TETSU<span className="text-primary">BURGER</span>
-            </span>
             <span className="ml-2 rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase text-muted-foreground">
               Admin
             </span>

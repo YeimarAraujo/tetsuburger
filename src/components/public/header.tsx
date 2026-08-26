@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ShoppingBag } from "lucide-react";
+import { ShoppingCart } from "lucide-react";
 import { useCart, cartCount, cartSubtotal } from "@/store/cart";
 import { formatCOP } from "@/lib/format";
 import { Button } from "@/components/ui/button";
@@ -21,7 +21,7 @@ function CartLines() {
   if (items.length === 0) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-2 py-16 text-center">
-        <ShoppingBag className="size-10 text-muted-foreground/40" />
+        <ShoppingCart className="size-10 text-muted-foreground/40" />
         <p className="font-medium">Tu carrito está vacío</p>
         <p className="text-sm text-muted-foreground">¡Agrega algo rico del menú!</p>
       </div>
@@ -105,16 +105,16 @@ export function Header() {
 
           <SheetTrigger asChild>
             <Button variant="outline" size="lg" className="relative gap-2">
-              <ShoppingBag className="size-5  " />
+              <ShoppingCart className="size-5  " />
               <span className="hidden sm:inline">Carrito</span>
               {count > 0 ? (
                 <>
                   <span className="flex size-5 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-primary-foreground">
                     {count}
                   </span>
-                  <span className="hidden text-xs font-semibold text-muted-foreground md:inline">
+                  {/* <span className="hidden text-xs font-semibold text-muted-foreground md:inline">
                     {formatCOP(subtotal)}
-                  </span>
+                  </span> */}
                 </>
               ) : null}
             </Button>
@@ -137,9 +137,9 @@ export function Header() {
               <p className="-mt-1 text-xs text-muted-foreground">
                 El costo de domicilio se suma en el siguiente paso.
               </p>
-              <Link href="/checkout" onClick={() => setOpen(false)} className="block">
+              <Link href="/resumen" onClick={() => setOpen(false)} className="block">
                 <Button className="w-full" size="lg">
-                  Ir a pedir · {formatCOP(subtotal)}
+                  Ver pedido · {formatCOP(subtotal)}
                 </Button>
               </Link>
             </div>

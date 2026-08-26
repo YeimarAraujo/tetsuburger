@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Loader2, Plus, ShoppingBag, X } from "lucide-react";
+import { Check, Loader2, Plus, ShoppingCart, X } from "lucide-react";
 import { toast } from "sonner";
 import type { CartAddon } from "@/store/cart";
 import { useCart } from "@/store/cart";
@@ -251,7 +251,7 @@ export function ProductCard({ product }: { product: ProductCardData }) {
           ) : null}
 
           <Button size="lg" onClick={addWithAddons}>
-            <ShoppingBag className="size-4" />
+            <ShoppingCart className="size-4" />
             Agregar ·{" "}
             {formatCOP(
               product.price +
