@@ -106,7 +106,7 @@ export default async function HomePage() {
             {status.isOpen ? "Abierto" : "Cerrado"}
           </span>
 
-          <h1 className="max-w-60 font-display text-3xl leading-tight tracking-wider text-white sm:text-4xl lg:text-6xl">
+          <h1 className="max-w-60 font-display text-3xl leading-tight tracking-wider text-white sm:max-w-md sm:text-5xl lg:max-w-xl lg:text-5xl">
             SAZÓN SOBRE LA PLANCHA
           </h1>
 
