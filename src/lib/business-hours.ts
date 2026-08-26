@@ -150,7 +150,7 @@ export function computeOpenStatus(
   // Fuera de rango hoy
   return {
     isOpen: false,
-    message: `Nuestro horario de atención comienza a las ${formatHour12(today.opens_at)}`,
+    message: `Nuestro horario atención comienza a las ${formatHour12(today.opens_at)}`,
     nextOpensAt: nextOpensISO(dayOfWeek, today.opens_at, now),
   };
 }

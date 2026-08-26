@@ -234,9 +234,8 @@ export function ProductCard({ product }: { product: ProductCardData }) {
                         data-state={checked ? "checked" : "unchecked"}
                       />
                       <span
-                        className={`flex size-5 items-center justify-center rounded border ${
-                          checked ? "border-primary bg-primary text-primary-foreground" : ""
-                        }`}
+                        className={`flex size-5 items-center justify-center rounded border ${checked ? "border-primary bg-primary text-primary-foreground" : ""
+                          }`}
                       >
                         {checked ? <Check className="size-3.5" /> : null}
                       </span>
@@ -256,9 +255,9 @@ export function ProductCard({ product }: { product: ProductCardData }) {
             Agregar ·{" "}
             {formatCOP(
               product.price +
-                product.addons
-                  .filter((a) => selected.includes(a.id))
-                  .reduce((s, a) => s + a.price, 0)
+              product.addons
+                .filter((a) => selected.includes(a.id))
+                .reduce((s, a) => s + a.price, 0)
             )}
           </Button>
         </DialogContent>

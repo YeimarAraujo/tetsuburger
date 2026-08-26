@@ -86,7 +86,7 @@ export default async function HomePage() {
         {heroImage ? (
           <img
             src={heroImage}
-            alt=""
+            alt="imagen del heroe de Tetsuburger"
             className="absolute inset-0 h-full w-full object-cover"
           />
         ) : (
@@ -106,10 +106,11 @@ export default async function HomePage() {
             {status.isOpen ? "Abierto" : "Cerrado"}
           </span>
 
-          <h1 className="font-display text-5xl tracking-wider text-white sm:text-5xl">
+          <h1 className="font-display text-xl leading-tight tracking-wider text-white sm:text-3xl lg:text-4xl">
             SAZÓN SOBRE LA PLANCHA
           </h1>
-          <p className="font-display text-5xl tracking-wider text-white sm:text-3xl">
+
+          <p className="max-w-xl font-display text-xs leading-relaxed tracking-wide text-white sm:text-base lg:text-lg">
             {status.message}
           </p>
         </div>
