@@ -64,7 +64,7 @@ export function ProductCard({ product }: { product: ProductCardData }) {
 
   return (
     <>
-      <div className="group flex gap-4 rounded-2xl border bg-card p-3 transition-all hover:shadow-md sm:p-4">
+      <div className="group flex gap-4 rounded-2xl border bg-card p-3 transition-all sm:p-4">
         {/* Imagen grande */}
         {product.imageUrl ? (
           <button

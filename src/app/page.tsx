@@ -122,11 +122,9 @@ export default async function HomePage() {
           <h2 className="mb-3 font-display text-2xl tracking-wide uppercase">
             🔥 Destacados
           </h2>
-          <div className="flex snap-x gap-3 overflow-x-auto pb-2">
+          <div className="grid gap-3 sm:grid-cols-2">
             {featured.map((p) => (
-              <div key={p.id} className="w-[320px] shrink-0 snap-start">
-                <ProductCard product={toCard(p)} />
-              </div>
+              <ProductCard key={p.id} product={toCard(p)} />
             ))}
           </div>
         </section>
