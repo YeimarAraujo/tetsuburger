@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { ShoppingCart } from "lucide-react";
 import { useCart, cartCount, cartSubtotal } from "@/store/cart";
 import { formatCOP } from "@/lib/format";
@@ -33,12 +34,15 @@ function CartLines() {
       {items.map((item) => (
         <div key={item.key} className="flex gap-3 py-3">
           {item.imageUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={item.imageUrl}
-              alt={item.name}
-              className="size-14 shrink-0 rounded-md border object-cover"
-            />
+            <div className="relative size-14 shrink-0 overflow-hidden rounded-md border">
+              <Image
+                src={item.imageUrl}
+                alt={item.name}
+                fill
+                sizes="56px"
+                className="object-cover"
+              />
+            </div>
           ) : (
             <div className="size-14 shrink-0 rounded-md border bg-muted" />
           )}
@@ -112,9 +116,6 @@ export function Header() {
                   <span className="flex size-5 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-primary-foreground">
                     {count}
                   </span>
-                  {/* <span className="hidden text-xs font-semibold text-muted-foreground md:inline">
-                    {formatCOP(subtotal)}
-                  </span> */}
                 </>
               ) : null}
             </Button>

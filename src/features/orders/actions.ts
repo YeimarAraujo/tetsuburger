@@ -1,9 +1,11 @@
 "use server";
 
+import { headers } from "next/headers";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { computeOpenStatus } from "@/lib/business-hours";
 import { formatCOP, formatOrderNumber } from "@/lib/format";
+import { rateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import {
   buildOrderFromItems,
   persistOrder,
@@ -80,6 +82,17 @@ export async function placeOrder(
   const parsedCustomer = customerSchema.safeParse(customerRaw);
   if (!parsedCustomer.success) {
     return { error: parsedCustomer.error.issues[0].message };
+  }
+
+  // Rate limit: 10 pedidos / 10 min por IP
+  const hdrs = await headers();
+  const ip =
+    hdrs.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+    hdrs.get("x-real-ip") ??
+    "anonymous";
+  const { allowed } = rateLimit(`placeOrder:${ip}`, RATE_LIMITS.placeOrder);
+  if (!allowed) {
+    return { error: "Has hecho muchos pedidos recientemente. Intenta en unos minutos." };
   }
 
   const built = await buildOrderFromItems(itemsRaw);

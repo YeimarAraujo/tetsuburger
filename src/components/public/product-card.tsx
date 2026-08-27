@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { Check, Loader2, Plus, ShoppingCart, X } from "lucide-react";
 import { toast } from "sonner";
 import type { CartAddon } from "@/store/cart";
@@ -65,19 +66,19 @@ export function ProductCard({ product }: { product: ProductCardData }) {
   return (
     <>
       <div className="group flex gap-4 rounded-2xl border bg-card p-3 transition-all sm:p-4">
-        {/* Imagen grande */}
+        {/* Imagen del producto */}
         {product.imageUrl ? (
           <button
             type="button"
             onClick={() => setImageOpen(true)}
             className="relative size-28 shrink-0 overflow-hidden rounded-xl border sm:size-36"
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
+            <Image
               src={product.imageUrl}
               alt={product.name}
-              loading="lazy"
-              className="size-full object-cover transition-transform group-hover:scale-105"
+              fill
+              sizes="(max-width: 640px) 112px, 144px"
+              className="object-cover transition-transform group-hover:scale-105"
             />
             {soldOut && (
               <div className="absolute inset-0 flex items-center justify-center bg-black/50">
@@ -144,12 +145,16 @@ export function ProductCard({ product }: { product: ProductCardData }) {
           >
             <X className="size-5" />
           </button>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={product.imageUrl}
-            alt={product.name}
-            className="w-full rounded-lg object-contain"
-          />
+          <div className="relative aspect-square w-full">
+            <Image
+              src={product.imageUrl}
+              alt={product.name}
+              fill
+              sizes="(max-width: 640px) 100vw, 576px"
+              className="rounded-lg object-contain"
+              priority
+            />
+          </div>
           <div className="space-y-3 p-4">
             <div>
               <DialogTitle className="text-xl">{product.name}</DialogTitle>

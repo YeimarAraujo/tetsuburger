@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, ChevronLeft, Pencil, Trash2 } from "lucide-react";
+import Image from "next/image";
+import { ChevronLeft, Pencil, Trash2 } from "lucide-react";
 import { useCart, cartSubtotal, cartCount, itemUnitPrice } from "@/store/cart";
 import { formatCOP } from "@/lib/format";
 import { Button } from "@/components/ui/button";
@@ -44,8 +45,15 @@ export function ResumenContent({ deliveryFee }: { deliveryFee: number }) {
           {items.map((item) => (
             <div key={item.key} className="flex items-start gap-3 p-4">
               {item.imageUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={item.imageUrl} alt="" className="size-14 shrink-0 rounded-lg border object-cover" />
+                <div className="relative size-14 shrink-0 overflow-hidden rounded-lg border">
+                  <Image
+                    src={item.imageUrl}
+                    alt={item.name}
+                    fill
+                    sizes="56px"
+                    className="object-cover"
+                  />
+                </div>
               ) : (
                 <div className="size-14 shrink-0 rounded-lg border bg-muted" />
               )}

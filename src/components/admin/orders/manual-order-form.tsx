@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Banknote, Landmark, Loader2, Plus, Search, Truck, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -201,8 +202,15 @@ export function ManualOrderForm({
                 )}
               >
                 {product.image_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={product.image_url} alt="" className="size-10 rounded-md border object-cover" />
+                  <div className="relative size-10 shrink-0 overflow-hidden rounded-md border">
+                    <Image
+                      src={product.image_url}
+                      alt={product.name}
+                      fill
+                      sizes="40px"
+                      className="object-cover"
+                    />
+                  </div>
                 ) : (
                   <div className="size-10 rounded-md border bg-muted" />
                 )}

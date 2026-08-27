@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { rateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 
 export type LoginState = { error?: string };
 
@@ -22,6 +23,12 @@ export async function signInAction(
 
   if (!parsed.success) {
     return { error: parsed.error.issues[0].message };
+  }
+
+  // Rate limit: 5 intentos / 15 min por email
+  const { allowed } = rateLimit(`login:${parsed.data.email}`, RATE_LIMITS.login);
+  if (!allowed) {
+    return { error: "Demasiados intentos. Intenta en 15 minutos." };
   }
 
   const supabase = await createClient();

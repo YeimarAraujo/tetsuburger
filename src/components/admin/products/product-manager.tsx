@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState, useTransition } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { ImageIcon, Loader2, Pencil, Plus, Search, Star } from "lucide-react";
 import { toast } from "sonner";
@@ -110,6 +111,15 @@ export function ProductManager({ products, categories, addons }: Props) {
     setError(null);
 
     const formData = new FormData(e.currentTarget);
+
+    // Compress image before upload
+    const file = formData.get("image_file");
+    if (file instanceof File && file.size > 0) {
+      const { compressImage } = await import("@/lib/compress-image");
+      const compressed = await compressImage(file);
+      formData.set("image_file", compressed);
+    }
+
     const result = editing
       ? await updateProduct(editing.id, formData)
       : await createProduct(formData);
@@ -224,12 +234,15 @@ export function ProductManager({ products, categories, addons }: Props) {
                       <td className="py-3 pr-2">
                         <div className="flex items-center gap-3">
                           {p.image_url ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={p.image_url}
-                              alt={p.name}
-                              className="size-11 shrink-0 rounded-md border object-cover"
-                            />
+                            <div className="relative size-11 shrink-0 overflow-hidden rounded-md border">
+                              <Image
+                                src={p.image_url}
+                                alt={p.name}
+                                fill
+                                sizes="44px"
+                                className="object-cover"
+                              />
+                            </div>
                           ) : (
                             <div className="flex size-11 shrink-0 items-center justify-center rounded-md border bg-muted">
                               <ImageIcon className="size-4 text-muted-foreground" />
@@ -455,12 +468,15 @@ function ProductDialog({
             <Label>Imagen (JPG, PNG o WebP · máx. 3 MB)</Label>
             <div className="flex items-center gap-4">
               {shownImage ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={shownImage}
-                  alt="Vista previa"
-                  className="size-20 rounded-md border object-cover"
-                />
+                <div className="relative size-20 shrink-0 overflow-hidden rounded-md border">
+                  <Image
+                    src={shownImage}
+                    alt="Vista previa"
+                    fill
+                    sizes="80px"
+                    className="object-cover"
+                  />
+                </div>
               ) : (
                 <div className="flex size-20 items-center justify-center rounded-md border bg-muted">
                   <ImageIcon className="size-5 text-muted-foreground" />

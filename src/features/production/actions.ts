@@ -1,60 +1,59 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 
 export interface ActionResult {
   error?: string;
 }
 
-/**
- * Registra una compra de materia prima.
- * Si se asigna un insumo del inventario, automáticamente crea un movimiento
- * de ENTRADA y actualiza el stock actual.
- */
+const purchaseSchema = z.object({
+  record_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha inválida"),
+  inventory_item_id: z.string().uuid().nullable().optional(),
+  description: z.string().trim().min(2, "La descripción es obligatoria").max(200),
+  quantity: z.coerce.number().positive("La cantidad debe ser mayor a 0"),
+  unit: z.string().trim().max(30).default("unidad"),
+  unit_cost: z.coerce.number().min(0).default(0),
+  notes: z.string().trim().max(300).default(""),
+});
+
+const createItemSchema = z.object({
+  name: z.string().trim().min(2, "El nombre es obligatorio").max(60),
+  unit: z.string().trim().max(30).default("unidad"),
+});
+
 export async function createProductionRecord(input: unknown): Promise<ActionResult> {
-  const data = input as {
-    record_date: string;
-    inventory_item_id: string | null;
-    description: string;
-    quantity: number;
-    unit: string;
-    unit_cost: number;
-    notes: string;
-  };
+  const parsed = purchaseSchema.safeParse(input);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0].message };
+  }
 
-  if (!data.description?.trim()) return { error: "La descripción es obligatoria" };
-  if (!data.quantity || data.quantity <= 0) return { error: "La cantidad debe ser mayor a 0" };
-
+  const data = parsed.data;
   const supabase = await createClient();
+  const totalCost = data.quantity * data.unit_cost;
 
-  const totalCost = Number(data.quantity) * Number(data.unit_cost || 0);
-
-  // 1. Insertar el registro de compra
   const { error } = await supabase.from("production_records").insert({
-    record_date: data.record_date || undefined,
-    inventory_item_id: data.inventory_item_id || null,
-    description: data.description.trim(),
-    quantity: Number(data.quantity),
-    unit: data.unit || "unidad",
-    unit_cost: Number(data.unit_cost || 0),
+    record_date: data.record_date,
+    inventory_item_id: data.inventory_item_id ?? null,
+    description: data.description,
+    quantity: data.quantity,
+    unit: data.unit,
+    unit_cost: data.unit_cost,
     total_cost: totalCost,
-    notes: data.notes || "",
+    notes: data.notes,
   });
 
   if (error) return { error: "No se pudo registrar la compra: " + error.message };
 
-  // 2. Si tiene insumo asociado, actualizar inventario automáticamente
   if (data.inventory_item_id) {
-    // Crear movimiento ENTRADA
     await supabase.from("inventory_movements").insert({
       inventory_item_id: data.inventory_item_id,
       movement_type: "ENTRADA",
-      quantity: Number(data.quantity),
-      reference: `Compra: ${data.description.trim()}`,
+      quantity: data.quantity,
+      reference: `Compra: ${data.description}`,
     });
 
-    // Actualizar stock del insumo
     const { data: item } = await supabase
       .from("inventory_items")
       .select("current_stock")
@@ -62,7 +61,7 @@ export async function createProductionRecord(input: unknown): Promise<ActionResu
       .single();
 
     if (item) {
-      const newStock = Number(item.current_stock) + Number(data.quantity);
+      const newStock = Number(item.current_stock) + data.quantity;
       await supabase
         .from("inventory_items")
         .update({ current_stock: newStock })
@@ -76,21 +75,19 @@ export async function createProductionRecord(input: unknown): Promise<ActionResu
   return {};
 }
 
-/**
- * Crea un nuevo insumo en inventario desde el formulario de compras.
- */
 export async function createItemFromPurchase(input: unknown): Promise<ActionResult & { id?: string }> {
-  const data = input as { name: string; unit: string };
-
-  if (!data.name?.trim()) return { error: "El nombre del insumo es obligatorio" };
+  const parsed = createItemSchema.safeParse(input);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0].message };
+  }
 
   const supabase = await createClient();
 
   const { data: item, error } = await supabase
     .from("inventory_items")
     .insert({
-      name: data.name.trim(),
-      unit: data.unit || "unidad",
+      name: parsed.data.name,
+      unit: parsed.data.unit,
       current_stock: 0,
       min_stock: 0,
     })
