@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Download, TrendingDown, TrendingUp, Wallet } from "lucide-react";
+import { Download, Package, ReceiptText, Search, ShoppingCart } from "lucide-react";
 import { formatCOP, formatDate } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -31,6 +31,17 @@ interface ExpenseRow {
   concept: string;
   amount: number;
   category_name: string | null;
+}
+
+interface ProductionRow {
+  id: string;
+  record_date: string;
+  description: string;
+  quantity: number;
+  unit: string;
+  unit_cost: number;
+  total_cost: number;
+  item?: { name: string } | null;
 }
 
 interface Filters {
@@ -62,47 +73,55 @@ function shiftDays(days: number): string {
 export function ReportsManager({
   orders,
   expenses,
+  production,
   filters,
   categories,
   deliveryFeeBusiness,
 }: {
   orders: OrderRow[];
   expenses: ExpenseRow[];
+  production: ProductionRow[];
   filters: Filters;
   categories: { id: number; name: string }[];
   deliveryFeeBusiness: number;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [search, setSearch] = useState("");
 
   const stats = useMemo(() => {
     const validOrders = orders.filter((o) => o.status !== "CANCELADO");
     const subtotalSales = validOrders.reduce((s, o) => s + Number(o.subtotal), 0);
-    const retainedCount = validOrders.filter((o) => o.delivery_fee_retained && Number(o.delivery_fee) > 0).length;
+    const retainedCount = validOrders.filter((o) =>
+      o.delivery_fee_retained === true && Number(o.delivery_fee) > 0
+    ).length;
     const retainedFees = retainedCount * deliveryFeeBusiness;
-    const externalFees = validOrders.reduce((s, o) =>
-      s + (!o.delivery_fee_retained ? Number(o.delivery_fee) : 0), 0
-    );
     const sales = subtotalSales + retainedFees;
     const expTotal = expenses.reduce((s, e) => s + Number(e.amount), 0);
-    const byMethod: Record<string, number> = {};
-    validOrders.forEach((o) => {
-      const m = o.payment_method ?? "EFECTIVO";
-      byMethod[m] = (byMethod[m] || 0) + Number(o.total);
-    });
+    const prodTotal = production.reduce((s, p) => s + Number(p.total_cost), 0);
     return {
-      ordersCount: validOrders.length,
+      ordersCount: orders.length,
+      validOrdersCount: validOrders.length,
       cancelledCount: orders.length - validOrders.length,
       sales,
-      subtotalSales,
-      retainedFees,
       retainedCount,
-      externalFees,
       expenses: expTotal,
-      profit: sales - expTotal,
-      byMethod,
+      production: prodTotal,
     };
-  }, [orders, expenses, deliveryFeeBusiness]);
+  }, [orders, expenses, production, deliveryFeeBusiness]);
+
+  const filteredOrders = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return orders;
+    const num = q.replace(/^#/, "");
+    const numOnly = /^\d+$/.test(num);
+    return orders.filter((o) => {
+      const byNumber =
+        numOnly && String(o.order_number).toLowerCase().includes(num);
+      const byName = (o.customer_name || "").toLowerCase().includes(q);
+      return byNumber || byName;
+    });
+  }, [orders, search]);
 
   function pushFilter(next: Partial<Filters>) {
     const merged = { ...filters, ...next };
@@ -113,10 +132,10 @@ export function ReportsManager({
     startTransition(() => router.push(`/admin/reportes?${q.toString()}`));
   }
 
-  const exportHref = useMemo(() => {
+  const exportParams = useMemo(() => {
     const q = new URLSearchParams({ from: filters.from, to: filters.to });
     if (filters.category !== "todas") q.set("cat", filters.category);
-    return `/admin/export/reports?${q.toString()}`;
+    return q.toString();
   }, [filters]);
 
   return (
@@ -158,35 +177,24 @@ export function ReportsManager({
               </Button>
             ))}
           </div>
-          <div className="ml-auto">
-            <a href={exportHref}>
-              <Button variant="outline" size="sm">
-                <Download className="size-4" />
-                Exportar CSV
-              </Button>
-            </a>
-          </div>
         </CardContent>
       </Card>
 
-      {/* KPIs */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {/* KPIs: sumas de cada historial */}
+      <div className="grid gap-4 sm:grid-cols-3">
         <Card>
           <CardContent className="py-4">
             <div className="flex items-center gap-3">
               <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10">
-                <TrendingUp className="size-5 text-primary" />
+                <ShoppingCart className="size-5 text-primary" />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Ventas netas</p>
+                <p className="text-xs text-muted-foreground">Ventas (subtotal + retenido)</p>
                 <p className="text-xl font-bold text-emerald-600">{formatCOP(stats.sales)}</p>
                 <p className="text-[10px] text-muted-foreground">
-                  Productos: {formatCOP(stats.subtotalSales)}
-                  {stats.retainedCount > 0 ? ` · Dom (${stats.retainedCount}×${formatCOP(deliveryFeeBusiness)}): ${formatCOP(stats.retainedFees)}` : ""}
+                  {stats.validOrdersCount} pedidos · {stats.retainedCount} retenidos
+                  {stats.cancelledCount > 0 ? ` · ${stats.cancelledCount} cancelados` : ""}
                 </p>
-                {stats.externalFees > 0 ? (
-                  <p className="text-[10px] text-zinc-500">Dom externo: {formatCOP(stats.externalFees)}</p>
-                ) : null}
               </div>
             </div>
           </CardContent>
@@ -195,11 +203,12 @@ export function ReportsManager({
           <CardContent className="py-4">
             <div className="flex items-center gap-3">
               <div className="flex size-10 items-center justify-center rounded-xl bg-red-500/10">
-                <TrendingDown className="size-5 text-red-600" />
+                <ReceiptText className="size-5 text-red-600" />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Gastos</p>
+                <p className="text-xs text-muted-foreground">Gastos (suma)</p>
                 <p className="text-xl font-bold text-red-600">{formatCOP(stats.expenses)}</p>
+                <p className="text-[10px] text-muted-foreground">{expenses.length} registros</p>
               </div>
             </div>
           </CardContent>
@@ -207,78 +216,97 @@ export function ReportsManager({
         <Card>
           <CardContent className="py-4">
             <div className="flex items-center gap-3">
-              <div className="flex size-10 items-center justify-center rounded-xl bg-blue-500/10">
-                <Wallet className="size-5 text-blue-600" />
+              <div className="flex size-10 items-center justify-center rounded-xl bg-amber-500/10">
+                <Package className="size-5 text-amber-600" />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Utilidad</p>
-                <p className={`text-xl font-bold ${stats.profit >= 0 ? "text-blue-600" : "text-red-600"}`}>
-                  {formatCOP(stats.profit)}
-                </p>
+                <p className="text-xs text-muted-foreground">Compras materia prima (suma)</p>
+                <p className="text-xl font-bold text-amber-600">{formatCOP(stats.production)}</p>
+                <p className="text-[10px] text-muted-foreground">{production.length} registros</p>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="py-4">
-            <div className="space-y-1">
-              <p className="text-xs text-muted-foreground">Pedidos</p>
-              <p className="text-xl font-bold">{stats.ordersCount} <span className="text-xs font-normal text-muted-foreground">válidos</span></p>
-              {stats.cancelledCount > 0 && (
-                <p className="text-xs text-destructive">{stats.cancelledCount} cancelados</p>
-              )}
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Desglose por pago */}
-      {Object.keys(stats.byMethod).length > 0 ? (
-        <Card>
-          <CardContent className="py-4">
-            <p className="mb-2 text-sm font-medium">Ventas por método de pago</p>
-            <div className="flex gap-4">
-              {Object.entries(stats.byMethod).map(([method, total]) => (
-                <Badge key={method} variant="secondary" className="gap-1 px-3 py-1 text-sm">
-                  {method}: {formatCOP(total)}
-                </Badge>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      ) : null}
-
-      {/* Pedidos del período */}
+      {/* Historial de pedidos */}
       <Card>
         <CardContent className="overflow-x-auto py-4">
-          <p className="mb-3 text-sm font-medium">Pedidos del período ({orders.length})</p>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-medium">Historial de pedidos ({orders.length})</p>
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  type="search"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Buscar por # pedido o nombre del cliente…"
+                  className="h-8 w-64 pl-8"
+                />
+              </div>
+              <a href={`/admin/export/pedidos?${exportParams}`}>
+                <Button variant="outline" size="sm">
+                  <Download className="size-4" />
+                  CSV
+                </Button>
+              </a>
+            </div>
+          </div>
           {orders.length === 0 ? (
             <p className="text-sm text-muted-foreground">No hay pedidos en este período</p>
+          ) : filteredOrders.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Sin resultados para “{search.trim()}”
+            </p>
           ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b text-left text-muted-foreground">
-                  <th className="pb-2 pr-2 font-medium">#</th>
-                  <th className="pb-2 pr-2 font-medium">Fecha</th>
-                  <th className="pb-2 pr-2 font-medium">Cliente</th>
-                  <th className="pb-2 pr-2 font-medium">Estado</th>
-                  <th className="pb-2 pr-2 font-medium">Pago</th>
-                  <th className="pb-2 text-right font-medium">Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {orders.map((o) => (
-                  <tr key={o.id} className="border-b last:border-0">
-                    <td className="py-2 pr-2 font-bold text-muted-foreground">#{o.order_number}</td>
-                    <td className="py-2 pr-2 whitespace-nowrap">{formatDate(o.created_at)}</td>
-                    <td className="py-2 pr-2">{o.customer_name || "—"}</td>
-                    <td className="py-2 pr-2"><Badge variant="outline" className="text-[10px]">{o.status}</Badge></td>
-                    <td className="py-2 pr-2 text-xs">{o.payment_method ?? "EFECTIVO"}</td>
-                    <td className="py-2 text-right font-semibold">{formatCOP(Number(o.total))}</td>
+            <>
+              {search.trim() ? (
+                <p className="mb-2 text-xs text-muted-foreground">
+                  {filteredOrders.length} de {orders.length} pedidos
+                </p>
+              ) : null}
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-muted-foreground">
+                    <th className="pb-2 pr-2 font-medium">#</th>
+                    <th className="pb-2 pr-2 font-medium">Fecha</th>
+                    <th className="pb-2 pr-2 font-medium">Cliente</th>
+                    <th className="pb-2 pr-2 font-medium">Estado</th>
+                    <th className="pb-2 pr-2 font-medium">Pago</th>
+                    <th className="pb-2 pr-2 text-right font-medium">Subtotal</th>
+                    <th className="pb-2 pr-2 text-right font-medium">Retenido (empresa)</th>
+                    <th className="pb-2 text-right font-medium">Total</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {filteredOrders.map((o) => {
+                    const retained = o.delivery_fee_retained === true && Number(o.delivery_fee) > 0;
+                    const rowTotal = Number(o.subtotal) + (retained ? deliveryFeeBusiness : 0);
+                    return (
+                      <tr key={o.id} className="border-b last:border-0">
+                        <td className="py-2 pr-2 font-bold text-muted-foreground">#{o.order_number}</td>
+                        <td className="py-2 pr-2 whitespace-nowrap">{formatDate(o.created_at)}</td>
+                        <td className="py-2 pr-2">{o.customer_name || "—"}</td>
+                        <td className="py-2 pr-2"><Badge variant="outline" className="text-[10px]">{o.status}</Badge></td>
+                        <td className="py-2 pr-2 text-xs">{o.payment_method ?? "EFECTIVO"}</td>
+                        <td className="py-2 pr-2 text-right">{formatCOP(Number(o.subtotal))}</td>
+                        <td className="py-2 pr-2 text-right">{retained ? formatCOP(deliveryFeeBusiness) : "—"}</td>
+                        <td className="py-2 text-right font-semibold">{formatCOP(rowTotal)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              <table className="mt-2 w-full text-sm">
+                <tfoot>
+                  <tr className="border-t font-bold">
+                    <td colSpan={7} className="py-2 text-right">Total (subtotal + retenido)</td>
+                    <td className="py-2 text-right">{formatCOP(stats.sales)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </>
           )}
         </CardContent>
       </Card>
@@ -286,7 +314,15 @@ export function ReportsManager({
       {/* Historial de gastos */}
       <Card>
         <CardContent className="overflow-x-auto py-4">
-          <p className="mb-3 text-sm font-medium">Historial de gastos ({expenses.length})</p>
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <p className="text-sm font-medium">Historial de gastos ({expenses.length})</p>
+            <a href={`/admin/export/expenses?${exportParams}`}>
+              <Button variant="outline" size="sm">
+                <Download className="size-4" />
+                CSV
+              </Button>
+            </a>
+          </div>
           {expenses.length === 0 ? (
             <p className="text-sm text-muted-foreground">Sin gastos en este período</p>
           ) : (
@@ -313,6 +349,55 @@ export function ReportsManager({
                 <tr className="border-t font-bold">
                   <td colSpan={3} className="py-2 pr-2 text-right">Total gastos</td>
                   <td className="py-2 text-right text-red-600">{formatCOP(stats.expenses)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Historial de compras */}
+      <Card>
+        <CardContent className="overflow-x-auto py-4">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <p className="text-sm font-medium">Historial de compras ({production.length})</p>
+            <a href={`/admin/export/produccion?from=${filters.from}&to=${filters.to}`}>
+              <Button variant="outline" size="sm">
+                <Download className="size-4" />
+                CSV
+              </Button>
+            </a>
+          </div>
+          {production.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Sin compras en este período</p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left text-muted-foreground">
+                  <th className="pb-2 pr-2 font-medium">Fecha</th>
+                  <th className="pb-2 pr-2 font-medium">Insumo</th>
+                  <th className="pb-2 pr-2 font-medium">Descripción</th>
+                  <th className="pb-2 pr-2 text-right font-medium">Cantidad</th>
+                  <th className="pb-2 pr-2 text-right font-medium">Costo/ud</th>
+                  <th className="pb-2 text-right font-medium">Costo total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {production.map((p) => (
+                  <tr key={p.id} className="border-b last:border-0">
+                    <td className="py-2 pr-2 whitespace-nowrap">{p.record_date}</td>
+                    <td className="py-2 pr-2">{p.item?.name ?? "—"}</td>
+                    <td className="py-2 pr-2 text-muted-foreground">{p.description || "—"}</td>
+                    <td className="py-2 pr-2 text-right">{p.quantity} {p.unit}</td>
+                    <td className="py-2 pr-2 text-right text-muted-foreground">{formatCOP(p.unit_cost)}</td>
+                    <td className="py-2 text-right font-semibold text-amber-600">{formatCOP(p.total_cost)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t font-bold">
+                  <td colSpan={5} className="py-2 pr-2 text-right">Total compras</td>
+                  <td className="py-2 text-right text-amber-600">{formatCOP(stats.production)}</td>
                 </tr>
               </tfoot>
             </table>

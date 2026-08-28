@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Pencil, Plus } from "lucide-react";
+import { Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import type { Addon } from "@/types/db";
 import {
@@ -10,6 +10,10 @@ import {
   setAddonActive,
   updateAddon,
 } from "@/features/products/actions";
+import {
+  setAddonConsumption,
+  deleteAddonConsumption,
+} from "@/features/consumption/actions";
 import { formatCOP } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,15 +31,40 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 
-export function AddonManager({ initial }: { initial: Addon[] }) {
+interface AddonConsumptionRow {
+  id: string;
+  addon_id: string;
+  inventory_item_id: string;
+  quantity: number;
+  item?: { name: string; unit: string } | null;
+}
+
+export function AddonManager({
+  initial,
+  inventoryItems,
+  consumptions,
+}: {
+  initial: Addon[];
+  inventoryItems: { id: string; name: string; unit: string }[];
+  consumptions: AddonConsumptionRow[];
+}) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Addon | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [consumptionAddon, setConsumptionAddon] = useState<Addon | null>(null);
+
+  const addonConsumptions = new Map<string, AddonConsumptionRow[]>();
+  for (const c of consumptions) {
+    const list = addonConsumptions.get(c.addon_id) ?? [];
+    list.push(c);
+    addonConsumptions.set(c.addon_id, list);
+  }
 
   function openCreate() {
     setEditing(null);
@@ -129,10 +158,15 @@ export function AddonManager({ initial }: { initial: Addon[] }) {
                         />
                       </td>
                       <td className="py-3 text-right">
-                        <Button variant="outline" size="sm" onClick={() => openEdit(addon)}>
-                          <Pencil className="size-3.5" />
-                          Editar
-                        </Button>
+                        <div className="flex justify-end gap-1.5">
+                          <Button variant="outline" size="sm" onClick={() => setConsumptionAddon(addon)}>
+                            Consumos
+                          </Button>
+                          <Button variant="outline" size="sm" onClick={() => openEdit(addon)}>
+                            <Pencil className="size-3.5" />
+                            Editar
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -213,6 +247,167 @@ export function AddonManager({ initial }: { initial: Addon[] }) {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Consumos de insumos por adición */}
+      <AddonConsumptionDialog
+        open={Boolean(consumptionAddon)}
+        onOpenChange={(o) => { if (!o) setConsumptionAddon(null); }}
+        addon={consumptionAddon}
+        inventoryItems={inventoryItems}
+        consumptions={
+          consumptionAddon ? addonConsumptions.get(consumptionAddon.id) ?? [] : []
+        }
+      />
     </>
+  );
+}
+
+/* --------------------------- Diálogo de consumos --------------------------- */
+
+function AddonConsumptionDialog({
+  open,
+  onOpenChange,
+  addon,
+  inventoryItems,
+  consumptions,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  addon: Addon | null;
+  inventoryItems: { id: string; name: string; unit: string }[];
+  consumptions: AddonConsumptionRow[];
+}) {
+  const router = useRouter();
+  const [working, setWorking] = useState(false);
+  const [, startTransition] = useTransition();
+  const [selectedItem, setSelectedItem] = useState("");
+  const [qty, setQty] = useState("");
+
+  if (!addon) return null;
+
+  const a = addon;
+  const assignedIds = new Set(consumptions.map((c) => c.inventory_item_id));
+  const availableItems = inventoryItems.filter((i) => !assignedIds.has(i.id));
+
+  async function addConsumption(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selectedItem || !qty) return;
+    setWorking(true);
+    const res = await setAddonConsumption(a.id, selectedItem, Number(qty));
+    setWorking(false);
+    if (res.error) {
+      toast.error(res.error);
+      return;
+    }
+    toast.success("Consumo agregado");
+    setSelectedItem("");
+    setQty("");
+    startTransition(() => router.refresh());
+  }
+
+  async function removeConsumption(id: string) {
+    setWorking(true);
+    const res = await deleteAddonConsumption(id);
+    setWorking(false);
+    if (res.error) {
+      toast.error(res.error);
+      return;
+    }
+    toast.success("Consumo eliminado");
+    startTransition(() => router.refresh());
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Consumos de insumos · {addon.name}</DialogTitle>
+        </DialogHeader>
+
+        <p className="-mt-1 text-xs text-muted-foreground">
+          Estos insumos se suman al descuento de inventario cuando el cliente
+          agrega este adicional (× la cantidad del adicional × las unidades del
+          producto). Ej: si la hamburguesa ya lleva gaseosa y piden 1 extra, se
+          descuentan 2.
+        </p>
+
+        {/* Agregar consumo */}
+        <form onSubmit={addConsumption} className="rounded-lg border p-3">
+          <p className="mb-2 text-sm font-medium">Agregar insumo</p>
+          <div className="grid grid-cols-[1fr_auto_auto] items-end gap-2">
+            <div className="space-y-1">
+              <Label>Insumo</Label>
+              <Select value={selectedItem} onValueChange={setSelectedItem}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecciona…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableItems.length === 0 ? (
+                    <div className="px-2 py-3 text-center text-xs text-muted-foreground">
+                      Todos los insumos ya están asignados
+                    </div>
+                  ) : (
+                    availableItems.map((i) => (
+                      <SelectItem key={i.id} value={i.id}>
+                        {i.name} ({i.unit})
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label>Cant.</Label>
+              <Input
+                type="number"
+                min={0.001}
+                step="any"
+                value={qty}
+                onChange={(e) => setQty(e.target.value)}
+                placeholder="0"
+                className="w-20"
+                required
+              />
+            </div>
+            <Button type="submit" size="icon" disabled={working || !selectedItem || !qty}>
+              <Plus className="size-4" />
+            </Button>
+          </div>
+        </form>
+
+        {/* Lista de consumos */}
+        <div className="space-y-1.5">
+          <p className="text-sm font-medium">Insumos asignados</p>
+          {consumptions.length === 0 ? (
+            <p className="rounded-md border border-dashed p-4 text-center text-sm text-muted-foreground">
+              No hay consumos configurados para esta adición.
+            </p>
+          ) : (
+            consumptions.map((c) => (
+              <div
+                key={c.id}
+                className="flex items-center justify-between rounded-lg border px-3 py-2 text-sm"
+              >
+                <div>
+                  <span className="font-medium">{c.item?.name ?? "Insumo"}</span>
+                  <span className="ml-2 text-muted-foreground">
+                    {c.quantity} {c.item?.unit ?? ""}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => removeConsumption(c.id)}
+                  disabled={working}
+                  className="text-destructive hover:opacity-70"
+                  aria-label="Quitar insumo"
+                >
+                  <Trash2 className="size-4" />
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -13,17 +13,26 @@ export const dynamic = "force-dynamic";
 export default async function OrdersPage() {
   const supabase = await createClient();
 
-  const { data } = await supabase
-    .from("orders")
-    .select("*, items:order_items(*, order_item_addons(*))")
-    .in("status", [
-      "PENDIENTE",
-      "CONFIRMADO",
-      "EN_PREPARACION",
-      "LISTO",
-      "EN_CAMINO",
-    ])
-    .order("created_at");
+  const [orders, settings] = await Promise.all([
+    supabase
+      .from("orders")
+      .select("*, items:order_items(*, order_item_addons(*))")
+      .in("status", [
+        "PENDIENTE",
+        "CONFIRMADO",
+        "EN_PREPARACION",
+        "LISTO",
+        "EN_CAMINO",
+      ])
+      .order("created_at"),
+    supabase
+      .from("settings")
+      .select("key, value")
+      .eq("key", "delivery_fee_business")
+      .single(),
+  ]);
+
+  const deliveryFeeBusiness = Number(settings.data?.value ?? 0);
 
   return (
     <div className="mx-auto max-w-[1600px] space-y-6 p-4 lg:p-6">
@@ -43,7 +52,10 @@ export default async function OrdersPage() {
         </Link>
       </header>
 
-      <OrdersBoard initialOrders={(data ?? []) as unknown as BoardOrder[]} />
+      <OrdersBoard
+        initialOrders={(orders.data ?? []) as unknown as BoardOrder[]}
+        deliveryFeeBusiness={deliveryFeeBusiness}
+      />
     </div>
   );
 }

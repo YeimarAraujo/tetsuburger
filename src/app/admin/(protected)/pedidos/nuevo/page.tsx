@@ -3,6 +3,7 @@ import {
   ManualOrderForm,
   type ManualProduct,
 } from "@/components/admin/orders/manual-order-form";
+import { getAddonsAvailability } from "@/lib/consumption-availability";
 
 export const metadata = {
   title: "Pedido manual · TETSUBURGER Admin",
@@ -24,6 +25,12 @@ export default async function ManualOrderPage() {
     supabase.from("settings").select("key, value").eq("is_public", true),
   ]);
 
+  const rawProducts = productsRes.data ?? [];
+
+  const availabilityByProduct = await getAddonsAvailability(
+    rawProducts.map((p) => p.id)
+  );
+
   const addonMap = new Map(
     (addonsRes.data ?? []).map((a) => [a.id, { id: a.id, name: a.name, price: Number(a.price) }])
   );
@@ -36,16 +43,20 @@ export default async function ManualOrderPage() {
     productAddonsMap.set(pa.product_id, list);
   }
 
-  const products: ManualProduct[] = (productsRes.data ?? []).map((p) => ({
-    id: p.id,
-    name: p.name,
-    price: Number(p.price),
-    image_url: p.image_url,
-    is_available: p.is_available,
-    addons: (productAddonsMap.get(p.id) ?? [])
-      .map((id) => addonMap.get(id))
-      .filter((a): a is NonNullable<typeof a> => Boolean(a)),
-  }));
+  const products: ManualProduct[] = rawProducts.map((p) => {
+    const avail = availabilityByProduct.get(p.id) ?? new Map<string, boolean>();
+    return {
+      id: p.id,
+      name: p.name,
+      price: Number(p.price),
+      image_url: p.image_url,
+      is_available: p.is_available,
+      addons: (productAddonsMap.get(p.id) ?? [])
+        .map((id) => addonMap.get(id))
+        .filter((a): a is NonNullable<typeof a> => Boolean(a))
+        .map((a) => ({ ...a, available: avail.get(a.id) })),
+    };
+  });
 
   const settings = Object.fromEntries(
     (settingsRes.data ?? []).map((r) => [r.key, r.value])

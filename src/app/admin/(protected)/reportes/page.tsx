@@ -42,7 +42,7 @@ export default async function ReportsPage({
     expensesQuery = expensesQuery.eq("expense_category_id", Number(category));
   }
 
-  const [ordersRes, expensesRes, categoriesRes, settingsRes] = await Promise.all([
+  const [ordersRes, expensesRes, categoriesRes, productionRes, settingsRes] = await Promise.all([
     supabase
       .from("orders")
       .select("id, order_number, status, customer_name, total, subtotal, delivery_fee, delivery_fee_retained, payment_method, origin, created_at")
@@ -55,6 +55,12 @@ export default async function ReportsPage({
       .select("id, name")
       .eq("is_active", true)
       .order("name"),
+    supabase
+      .from("production_records")
+      .select("id, record_date, description, quantity, unit, unit_cost, total_cost, item:inventory_items(name)")
+      .gte("record_date", from)
+      .lte("record_date", to)
+      .order("record_date", { ascending: false }),
     supabase
       .from("settings")
       .select("key, value")
@@ -75,6 +81,57 @@ export default async function ReportsPage({
     category_name: (e.category as unknown as { name?: string } | null)?.name ?? null,
   }));
 
+  const production = ((productionRes.data ?? []) as unknown as {
+    id: string;
+    record_date: string;
+    description: string;
+    quantity: number;
+    unit: string;
+    unit_cost: number | string;
+    total_cost: number | string;
+    item?: { name: string } | null;
+  }[]).map((r) => ({
+    id: r.id,
+    record_date: r.record_date,
+    description: r.description,
+    quantity: Number(r.quantity),
+    unit: r.unit,
+    unit_cost: Number(r.unit_cost),
+    total_cost: Number(r.total_cost),
+    item: r.item && !Array.isArray(r.item) ? r.item : null,
+  }));
+
+  const orders = ((ordersRes.data ?? []) as unknown as {
+    id: string;
+    order_number: number;
+    status: string;
+    customer_name: string;
+    total: number | string;
+    subtotal: number | string;
+    delivery_fee: number | string;
+    delivery_fee_retained: boolean;
+    payment_method: string | null;
+    origin: string;
+    created_at: string;
+  }[]).map((o) => ({
+    id: o.id,
+    order_number: o.order_number,
+    status: o.status,
+    customer_name: o.customer_name,
+    total: Number(o.total),
+    subtotal: Number(o.subtotal),
+    delivery_fee: Number(o.delivery_fee),
+    delivery_fee_retained: o.delivery_fee_retained,
+    payment_method: o.payment_method,
+    origin: o.origin,
+    created_at: o.created_at,
+  }));
+
+  const categories = ((categoriesRes.data ?? []) as unknown as {
+    id: number;
+    name: string;
+  }[]).map((c) => ({ id: c.id, name: c.name }));
+
   const deliveryFeeBusiness = Number(
     (settingsRes.data ?? []).find((r) => r.key === "delivery_fee_business")?.value ?? 0
   );
@@ -84,14 +141,15 @@ export default async function ReportsPage({
       <header>
         <h1 className="font-display text-3xl tracking-wide">REPORTES</h1>
         <p className="text-sm text-muted-foreground">
-          Resumen de ventas, gastos y utilidad por período
+          Historiales de pedidos, gastos y compras por período
         </p>
       </header>
 
       <ReportsManager
-        orders={(ordersRes.data as unknown as any[]) ?? []}
+        orders={orders}
         expenses={expenses}
-        categories={(categoriesRes.data ?? []) as any[]}
+        production={production}
+        categories={categories}
         filters={{ from, to, category }}
         deliveryFeeBusiness={deliveryFeeBusiness}
       />

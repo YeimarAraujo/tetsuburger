@@ -8,6 +8,7 @@ export const productSchema = z.object({
   category_id: z.string().uuid("Selecciona una categoría válida"),
   description: z.string().trim().max(500, "Máximo 500 caracteres").default(""),
   price: z.coerce.number({ message: "Precio inválido" }).min(0, "El precio no puede ser negativo").max(99_999_999),
+  cost: z.coerce.number({ message: "Costo inválido" }).min(0, "El costo no puede ser negativo").max(99_999_999).default(0),
   is_active: z.boolean().default(true),
   is_available: z.boolean().default(true),
   is_featured: z.boolean().default(false),

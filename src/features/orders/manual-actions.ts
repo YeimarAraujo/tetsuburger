@@ -19,7 +19,7 @@ const manualSchema = z
     customer_address: z.string().trim().max(200).default(""),
     delivery_type: z.enum(["DOMICILIO", "RECOGIDA", "LOCAL"]),
     delivery_fee: z.coerce.number().min(0).max(999_999),
-    delivery_fee_retained: z.boolean().default(true),
+    delivery_fee_retained: z.boolean().default(false),
     payment_method: z.enum(["EFECTIVO", "TRANSFERENCIA"]),
     notes: z.string().trim().max(300).default(""),
   })
@@ -57,6 +57,9 @@ export async function createManualOrder(
   // RECOGIDA/LOCAL no llevan costo de domicilio
   const deliveryFee =
     data.delivery_type === "DOMICILIO" ? Number(data.delivery_fee) : 0;
+  // Si el pedido es exento (sin cargo de domicilio), no puede marcarse como retenido.
+  const deliveryFeeRetained =
+    data.delivery_fee_retained && deliveryFee > 0;
   const total = subtotal + deliveryFee;
 
   const persisted = await persistOrder({
@@ -65,7 +68,7 @@ export async function createManualOrder(
     lines: built.lines,
     subtotal,
     deliveryFee,
-    deliveryFeeRetained: data.delivery_fee_retained,
+    deliveryFeeRetained,
     total,
     customerName: data.customer_name,
     customerPhone: data.customer_phone,

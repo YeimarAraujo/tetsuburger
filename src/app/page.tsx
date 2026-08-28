@@ -7,6 +7,7 @@ import {
 } from "@/components/public/product-card";
 import { createClient } from "@/lib/supabase/server";
 import { computeOpenStatus } from "@/lib/business-hours";
+import { getAddonsAvailability } from "@/lib/consumption-availability";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -50,10 +51,18 @@ export default async function HomePage() {
     productAddonsMap.set(pa.product_id, list);
   }
 
+  const products = productsRes.data ?? [];
+
+  // Disponibilidad de adiciones (si el insumo no alcanza, se desactivan).
+  const availabilityByProduct = await getAddonsAvailability(
+    products.map((p) => p.id)
+  );
+
   function toCard(p: {
     id: string; name: string; description: string; price: number;
     image_url: string; is_available: boolean;
   }): ProductCardData {
+    const avail = availabilityByProduct.get(p.id) ?? new Map<string, boolean>();
     return {
       id: p.id,
       name: p.name,
@@ -64,11 +73,15 @@ export default async function HomePage() {
       addons: (productAddonsMap.get(p.id) ?? [])
         .map((id) => addonMap.get(id))
         .filter((a): a is NonNullable<typeof a> => Boolean(a))
-        .map((a) => ({ id: a.id, name: a.name, price: Number(a.price) })),
+        .map((a) => ({
+          id: a.id,
+          name: a.name,
+          price: Number(a.price),
+          available: avail.get(a.id),
+        })),
     };
   }
 
-  const products = productsRes.data ?? [];
   const featured = products.filter((p) => p.is_featured && p.is_available);
   const heroImage = "/images/bannerTetsu.webp";
 

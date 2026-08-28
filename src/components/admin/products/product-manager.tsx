@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState, useTransition } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { ImageIcon, Loader2, Pencil, Plus, Search, Star } from "lucide-react";
+import { Copy, Dumbbell, ImageIcon, Loader2, Pencil, Plus, Search, Star, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import type { Addon, Category } from "@/types/db";
 import {
@@ -13,6 +13,11 @@ import {
   setProductFeatured,
   updateProduct,
 } from "@/features/products/actions";
+import {
+  copyConsumptions,
+  deleteProductConsumption,
+  setProductConsumption,
+} from "@/features/consumption/actions";
 import { formatCOP } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -48,6 +53,7 @@ export interface ProductRow {
   slug: string;
   description: string;
   price: number;
+  cost: number;
   image_url: string;
   is_active: boolean;
   is_available: boolean;
@@ -60,11 +66,21 @@ interface Props {
   products: ProductRow[];
   categories: Pick<Category, "id" | "name">[];
   addons: Addon[];
+  inventoryItems: { id: string; name: string; unit: string }[];
+  consumptions: ConsumptionRow[];
+}
+
+export interface ConsumptionRow {
+  id: string;
+  product_id: string;
+  inventory_item_id: string;
+  quantity: number;
+  item?: { name: string; unit: string } | null;
 }
 
 type StatusFilter = "todos" | "activos" | "inactivos" | "agotados" | "destacados";
 
-export function ProductManager({ products, categories, addons }: Props) {
+export function ProductManager({ products, categories, addons, inventoryItems, consumptions }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [search, setSearch] = useState("");
@@ -77,6 +93,8 @@ export function ProductManager({ products, categories, addons }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
+
+  const [consumptionProduct, setConsumptionProduct] = useState<ProductRow | null>(null);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -302,10 +320,16 @@ export function ProductManager({ products, categories, addons }: Props) {
                         />
                       </td>
                       <td className="py-3 text-right">
-                        <Button variant="outline" size="sm" onClick={() => openEdit(p)}>
-                          <Pencil className="size-3.5" />
-                          Editar
-                        </Button>
+                        <div className="flex justify-end gap-2">
+                          <Button variant="outline" size="sm" onClick={() => setConsumptionProduct(p)}>
+                            <Dumbbell className="size-3.5" />
+                            Consumos
+                          </Button>
+                          <Button variant="outline" size="sm" onClick={() => openEdit(p)}>
+                            <Pencil className="size-3.5" />
+                            Editar
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -329,7 +353,224 @@ export function ProductManager({ products, categories, addons }: Props) {
         setPreview={setPreview}
         onSubmit={handleSubmit}
       />
+
+      {/* Consumos de insumos por producto */}
+      <ConsumptionDialog
+        open={Boolean(consumptionProduct)}
+        onOpenChange={(open) => !open && setConsumptionProduct(null)}
+        product={consumptionProduct}
+        inventoryItems={inventoryItems}
+        consumptions={consumptions.filter(
+          (c) => c.product_id === consumptionProduct?.id
+        )}
+        allProducts={products}
+      />
     </>
+  );
+}
+
+/* ----------------------------- Diálogo de consumos ---------------------------- */
+
+function ConsumptionDialog({
+  open,
+  onOpenChange,
+  product,
+  inventoryItems,
+  consumptions,
+  allProducts,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  product: ProductRow | null;
+  inventoryItems: { id: string; name: string; unit: string }[];
+  consumptions: ConsumptionRow[];
+  allProducts: ProductRow[];
+}) {
+  const router = useRouter();
+  const [working, setWorking] = useState(false);
+  const [, startTransition] = useTransition();
+  const [selectedItem, setSelectedItem] = useState("");
+  const [qty, setQty] = useState("");
+  const [copyFrom, setCopyFrom] = useState("");
+  const [unassigned, setUnassigned] = useState(false);
+
+  if (!product) return null;
+
+  const prod = product;
+
+  const assignedIds = new Set(consumptions.map((c) => c.inventory_item_id));
+  const availableItems = inventoryItems.filter((i) => !assignedIds.has(i.id));
+  const otherProducts = allProducts.filter((p) => p.id !== prod.id);
+
+  async function addConsumption(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selectedItem || !qty) return;
+    setWorking(true);
+    const res = await setProductConsumption(
+      prod.id,
+      selectedItem,
+      Number(qty)
+    );
+    setWorking(false);
+    if (res.error) {
+      toast.error(res.error);
+      return;
+    }
+    toast.success("Consumo agregado");
+    setSelectedItem("");
+    setQty("");
+    startTransition(() => router.refresh());
+  }
+
+  async function removeConsumption(id: string) {
+    setWorking(true);
+    const res = await deleteProductConsumption(id);
+    setWorking(false);
+    if (res.error) {
+      toast.error(res.error);
+      return;
+    }
+    toast.success("Consumo eliminado");
+    startTransition(() => router.refresh());
+  }
+
+  async function doCopy() {
+    if (!copyFrom) return;
+    setWorking(true);
+    const res = await copyConsumptions(copyFrom, prod.id);
+    setWorking(false);
+    if (res.error) {
+      toast.error(res.error);
+      return;
+    }
+    toast.success("Consumos copiados");
+    setCopyFrom("");
+    startTransition(() => router.refresh());
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Consumos de insumos · {product.name}</DialogTitle>
+        </DialogHeader>
+
+        <p className="-mt-1 text-xs text-muted-foreground">
+          Estos insumos se descontarán del inventario al marcar un pedido como
+          ENTREGADO. La cantidad se multiplica por cada unidad vendida.
+        </p>
+
+        {/* Copiar desde otro producto */}
+        <div className="rounded-lg border p-3">
+          <p className="mb-2 text-sm font-medium">Copiar consumos desde otro producto</p>
+          <div className="flex gap-2">
+            <Select value={copyFrom} onValueChange={setCopyFrom}>
+              <SelectTrigger className="flex-1">
+                <SelectValue placeholder="Elegir producto…" />
+              </SelectTrigger>
+              <SelectContent>
+                {otherProducts.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button variant="outline" onClick={doCopy} disabled={working || !copyFrom}>
+              <Copy className="size-4" />
+              Copiar
+            </Button>
+          </div>
+        </div>
+
+        {/* Agregar consumo */}
+        <form onSubmit={addConsumption} className="rounded-lg border p-3">
+          <p className="mb-2 text-sm font-medium">Agregar insumo</p>
+          <div className="grid grid-cols-[1fr_auto_auto] items-end gap-2">
+            <div className="space-y-1">
+              <Label>Insumo</Label>
+              <Select value={selectedItem} onValueChange={setSelectedItem}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecciona…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableItems.length === 0 ? (
+                    <div className="px-2 py-3 text-center text-xs text-muted-foreground">
+                      Todos los insumos ya están asignados
+                    </div>
+                  ) : (
+                    availableItems.map((i) => (
+                      <SelectItem key={i.id} value={i.id}>
+                        {i.name} ({i.unit})
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label>Cant.</Label>
+              <Input
+                type="number"
+                min={0.001}
+                step="any"
+                value={qty}
+                onChange={(e) => setQty(e.target.value)}
+                placeholder="0"
+                className="w-20"
+                required
+              />
+            </div>
+            <Button type="submit" size="icon" disabled={working || !selectedItem || !qty}>
+              <Plus className="size-4" />
+            </Button>
+          </div>
+        </form>
+
+        {/* Lista de consumos */}
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium">Insumos asignados</p>
+            <button
+              type="button"
+              onClick={() => setUnassigned((v) => !v)}
+              className="text-xs text-muted-foreground hover:text-primary"
+            >
+              {unassigned ? "Ocultar sin asignar" : "Mostrar sin asignar"}
+            </button>
+          </div>
+
+          {consumptions.length === 0 ? (
+            <p className="rounded-md border border-dashed p-4 text-center text-sm text-muted-foreground">
+              No hay consumos configurados para este producto.
+            </p>
+          ) : (
+            consumptions.map((c) => (
+              <div
+                key={c.id}
+                className="flex items-center justify-between rounded-lg border px-3 py-2 text-sm"
+              >
+                <div>
+                  <span className="font-medium">{c.item?.name ?? "Insumo"}</span>
+                  <span className="ml-2 text-muted-foreground">
+                    {c.quantity} {c.item?.unit ?? ""}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => removeConsumption(c.id)}
+                  disabled={working}
+                  className="text-destructive hover:opacity-70"
+                  aria-label="Quitar insumo"
+                >
+                  <Trash2 className="size-4" />
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -433,22 +674,17 @@ function ProductDialog({
                 required
               />
             </div>
-            <div className="space-y-3 pt-1">
-              <div className="flex items-center justify-between gap-2">
-                <Label htmlFor="sw-active" className="text-sm">Activo</Label>
-                <Switch id="sw-active" checked={isActive} onCheckedChange={setIsActive} />
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <Label htmlFor="sw-available" className="text-sm">
-                  Disponible{" "}
-                  <span className="font-normal text-muted-foreground">(agotable hoy)</span>
-                </Label>
-                <Switch id="sw-available" checked={isAvailable} onCheckedChange={setIsAvailable} />
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <Label htmlFor="sw-featured" className="text-sm">Destacado</Label>
-                <Switch id="sw-featured" checked={isFeatured} onCheckedChange={setIsFeatured} />
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="prod-cost">Costo (COP)</Label>
+              <Input
+                id="prod-cost"
+                name="cost"
+                type="number"
+                min={0}
+                step={100}
+                defaultValue={editing?.cost ?? 0}
+                placeholder="0"
+              />
             </div>
           </div>
 

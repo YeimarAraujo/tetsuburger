@@ -45,6 +45,7 @@ export interface Product {
   slug: string;
   description: string;
   price: number;
+  cost: number;
   image_url: string;
   is_active: boolean;
   is_available: boolean;
@@ -159,6 +160,40 @@ export interface InventoryItem {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface ProductConsumption {
+  id: string;
+  product_id: string;
+  inventory_item_id: string;
+  quantity: number;
+  created_at: string;
+}
+
+export interface OrderConsumptionLog {
+  id: string;
+  order_id: string;
+  inventory_item_id: string;
+  quantity: number;
+  product_reference: string;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface AddonConsumption {
+  id: string;
+  addon_id: string;
+  inventory_item_id: string;
+  quantity: number;
+  created_at: string;
+}
+
+export interface OrderConsumptionOverride {
+  id: string;
+  order_id: string;
+  inventory_item_id: string;
+  quantity: number;
+  created_at: string;
 }
 
 export interface InventoryMovement {

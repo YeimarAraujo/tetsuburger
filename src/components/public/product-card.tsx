@@ -22,7 +22,7 @@ export interface ProductCardData {
   price: number;
   imageUrl: string;
   isAvailable: boolean;
-  addons: CartAddon[];
+  addons: (CartAddon & { available?: boolean })[];
 }
 
 export function ProductCard({ product }: { product: ProductCardData }) {
@@ -219,15 +219,21 @@ export function ProductCard({ product }: { product: ProductCardData }) {
               <p className="text-sm font-medium">¿Quieres agregar algo más?</p>
               {product.addons.map((addon) => {
                 const checked = selected.includes(addon.id);
+                const noStock = addon.available === false;
                 return (
                   <label
                     key={addon.id}
-                    className="flex cursor-pointer items-center justify-between rounded-lg border p-3 text-sm transition-colors has-[[data-state=checked]]:border-primary"
+                    className={
+                      noStock
+                        ? "flex items-center justify-between rounded-lg border border-dashed p-3 text-sm opacity-50"
+                        : "flex cursor-pointer items-center justify-between rounded-lg border p-3 text-sm transition-colors has-[[data-state=checked]]:border-primary"
+                    }
                   >
                     <span className="flex items-center gap-3">
                       <input
                         type="checkbox"
                         checked={checked}
+                        disabled={noStock}
                         onChange={() =>
                           setSelected((prev) =>
                             checked
@@ -245,6 +251,11 @@ export function ProductCard({ product }: { product: ProductCardData }) {
                         {checked ? <Check className="size-3.5" /> : null}
                       </span>
                       {addon.name}
+                      {noStock ? (
+                        <span className="text-[10px] font-semibold text-destructive">
+                          Sin stock
+                        </span>
+                      ) : null}
                     </span>
                     <span className="font-medium text-muted-foreground">
                       +{formatCOP(addon.price)}

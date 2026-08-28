@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { consumeInventoryForOrder, validateStockForOrder } from "@/features/orders/consumption";
 
 export interface ActionResult {
   error?: string;
@@ -58,6 +59,17 @@ export async function updateOrderStatus(
 
   const supabase = createAdminClient();
 
+  // Al pasar a EN_PREPARACION: validar stock y descontar de inmediato.
+  // El insumo se usa físicamente al preparar, así que la validación/descuento
+  // ocurre aquí (temprano), NO al entregar.
+  if (parsed.data.toStatus === "EN_PREPARACION") {
+    // 1. Validar stock sin descontar aún. Si falta, se bloquea la preparación.
+    const validation = await validateStockForOrder(parsed.data.orderId);
+    if (validation.error) {
+      return { error: validation.error };
+    }
+  }
+
   const { error } = await supabase
     .from("orders")
     .update({
@@ -69,6 +81,19 @@ export async function updateOrderStatus(
     .eq("id", parsed.data.orderId);
 
   if (error) return { error: "No se pudo actualizar el pedido" };
+
+  // 2. Si pasa a EN_PREPARACION, aplicar el descuento de inventario.
+  if (parsed.data.toStatus === "EN_PREPARACION") {
+    const consumption = await consumeInventoryForOrder(parsed.data.orderId);
+    if (consumption.error) {
+      // Revertir si algo falla tras marcar como en preparación (consistencia).
+      await supabase
+        .from("orders")
+        .update({ status: "CONFIRMADO" })
+        .eq("id", parsed.data.orderId);
+      return { error: consumption.error };
+    }
+  }
 
   // El trigger registra historial y timestamps automáticamente.
   revalidatePath("/admin/pedidos");

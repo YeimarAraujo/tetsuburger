@@ -40,7 +40,7 @@ export interface ManualProduct {
   price: number;
   image_url: string;
   is_available: boolean;
-  addons: CartAddon[];
+  addons: (CartAddon & { available?: boolean })[];
 }
 
 interface LineItem {
@@ -83,7 +83,8 @@ export function ManualOrderForm({
   const [deliveryType, setDeliveryType] = useState<"DOMICILIO" | "RECOGIDA" | "LOCAL">("DOMICILIO");
   const [address, setAddress] = useState("");
   const [deliveryFee, setDeliveryFee] = useState(String(defaultDeliveryFee));
-  const [chargeDeliveryFee, setChargeDeliveryFee] = useState(true);
+  const [chargeDeliveryFee, setChargeDeliveryFee] = useState(false);
+  const [deliveryRetained, setDeliveryRetained] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<"EFECTIVO" | "TRANSFERENCIA">("EFECTIVO");
   const [notes, setNotes] = useState("");
 
@@ -144,7 +145,7 @@ export function ManualOrderForm({
         customer_address: address,
         delivery_type: deliveryType,
         delivery_fee: fee,
-        delivery_fee_retained: chargeDeliveryFee,
+        delivery_fee_retained: chargeDeliveryFee && deliveryRetained,
         payment_method: paymentMethod,
         notes,
       },
@@ -297,6 +298,23 @@ export function ManualOrderForm({
                 />
               </div>
             </div>
+            {deliveryType === "DOMICILIO" && chargeDeliveryFee ? (
+              <div className="flex items-center justify-between gap-2 text-muted-foreground">
+                <span>¿Domicilio retenido?</span>
+                <button
+                  type="button"
+                  onClick={() => setDeliveryRetained((v) => !v)}
+                  className={cn(
+                    "flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium transition-colors",
+                    deliveryRetained
+                      ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-600"
+                      : "text-muted-foreground hover:bg-muted"
+                  )}
+                >
+                  {deliveryRetained ? "Sí, retenido" : "Externo (no retenido)"}
+                </button>
+              </div>
+            ) : null}
             <div className="flex justify-between text-base font-bold">
               <span>Total</span>
               <span className="text-primary">{formatCOP(total)}</span>
@@ -407,12 +425,18 @@ export function ManualOrderForm({
               <p className="text-sm font-medium">Adicionales</p>
               {pickerProduct.addons.map((addon) => {
                 const checked = pickerAddons.includes(addon.id);
+                const noStock = addon.available === false;
                 return (
-                  <label key={addon.id} className="flex cursor-pointer items-center justify-between rounded-lg border p-2.5 text-sm hover:bg-muted/50">
+                  <label key={addon.id} className={
+                    noStock
+                      ? "flex items-center justify-between rounded-lg border border-dashed p-2.5 text-sm opacity-50"
+                      : "flex cursor-pointer items-center justify-between rounded-lg border p-2.5 text-sm hover:bg-muted/50"
+                  }>
                     <span className="flex items-center gap-2">
                       <input
                         type="checkbox"
                         checked={checked}
+                        disabled={noStock}
                         onChange={() =>
                           setPickerAddons((prev) =>
                             checked ? prev.filter((id) => id !== addon.id) : [...prev, addon.id]
@@ -421,6 +445,9 @@ export function ManualOrderForm({
                         className="size-4 accent-[var(--primary)]"
                       />
                       {addon.name}
+                      {noStock ? (
+                        <span className="text-[10px] font-semibold text-destructive">Sin stock</span>
+                      ) : null}
                     </span>
                     <span className="text-muted-foreground">+{formatCOP(addon.price)}</span>
                   </label>

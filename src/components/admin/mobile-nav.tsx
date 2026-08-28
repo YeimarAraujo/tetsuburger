@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { Menu, LogOut } from "lucide-react";
 import {
+  BadgePercent,
   BarChart3,
   CalendarCheck,
   ChefHat,
@@ -44,6 +45,7 @@ const NAV_ITEMS = [
   { href: "/admin/finanzas", label: "Finanzas", icon: Wallet },
   { href: "/admin/cierres", label: "Cierres diarios", icon: CalendarCheck },
   { href: "/admin/reportes", label: "Reportes", icon: BarChart3 },
+  { href: "/admin/rentabilidad", label: "Rentabilidad", icon: BadgePercent },
   { href: "/admin/configuracion", label: "Configuración", icon: Settings },
   { href: "/admin/auditoria", label: "Auditoría", icon: ShieldCheck },
 ];

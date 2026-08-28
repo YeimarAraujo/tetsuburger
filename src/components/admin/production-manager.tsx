@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { UNITS } from "@/lib/units";
 
 interface InventoryItem {
   id: string;
@@ -261,7 +262,18 @@ export function ProductionManager({
               </div>
               <div className="space-y-2">
                 <Label>Unidad</Label>
-                <Input name="unit" defaultValue="kg" placeholder="kg, litro…" />
+                <Select name="unit" defaultValue="und">
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecciona unidad" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {UNITS.map((u) => (
+                      <SelectItem key={u} value={u}>
+                        {u}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
                 <Label>Costo unitario (COP)</Label>
@@ -307,7 +319,18 @@ export function ProductionManager({
             </div>
             <div className="space-y-2">
               <Label>Unidad</Label>
-              <Input name="unit" defaultValue="kg" placeholder="kg, litro, unidad…" />
+              <Select name="unit" defaultValue="und">
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecciona unidad" />
+                </SelectTrigger>
+                <SelectContent>
+                  {UNITS.map((u) => (
+                    <SelectItem key={u} value={u}>
+                      {u}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             {error ? <p className="text-sm font-medium text-destructive">{error}</p> : null}
             <div className="flex justify-end gap-2">

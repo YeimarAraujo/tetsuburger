@@ -16,6 +16,7 @@ function sanitize(payload: SettingsPayload): ActionResult & {
   const allowedTexts = new Set([
     "whatsapp_number",
     "delivery_fee",
+    "delivery_fee_business",
     "min_order_total",
     "banner_text",
     "hero_image",
@@ -41,7 +42,7 @@ function sanitize(payload: SettingsPayload): ActionResult & {
       value = digits;
     }
 
-    if (key === "delivery_fee" || key === "min_order_total") {
+    if (key === "delivery_fee" || key === "delivery_fee_business" || key === "min_order_total") {
       const num = Number(value || "0");
       if (Number.isNaN(num) || num < 0) return { error: `${key}: valor numérico inválido` };
       value = String(num);
@@ -73,7 +74,7 @@ export async function saveSettings(payload: SettingsPayload): Promise<ActionResu
     ...Object.entries(clean.texts).map(([key, value]) => ({
       key,
       // Los montos se guardan como número JSON; el resto como texto
-      value: ["delivery_fee", "min_order_total"].includes(key)
+      value: ["delivery_fee", "delivery_fee_business", "min_order_total"].includes(key)
         ? Number(value)
         : value,
       updated_by: user.id,

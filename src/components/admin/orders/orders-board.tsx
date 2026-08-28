@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   Bell,
   BellOff,
@@ -8,8 +8,10 @@ import {
   CheckCheck,
   Clock,
   Landmark,
+  Loader2,
   Pencil,
   RefreshCw,
+  SlidersHorizontal,
   Store,
   Truck,
   X,
@@ -19,6 +21,11 @@ import { createClient } from "@/lib/supabase/client";
 import { playNewOrderSound } from "@/lib/sound";
 import { updateOrderStatus } from "@/features/orders/board-actions";
 import {
+  getOrderConsumptionBreakdown,
+  saveOrderConsumptionOverrides,
+  type ConsumptionBreakDownItem,
+} from "@/features/orders/consumption-actions";
+import {
   ACTIVE_STATUSES,
   NEXT_STATUS,
   ORDER_STATUS_META,
@@ -27,6 +34,13 @@ import { formatCOP, formatOrderNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { OrderItemAddon, OrderStatus } from "@/types/db";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 
 export interface BoardOrder {
   id: string;
@@ -80,15 +94,25 @@ async function fetchOrderDetail(
   return (data as unknown as BoardOrder) ?? null;
 }
 
-export function OrdersBoard({ initialOrders }: { initialOrders: BoardOrder[] }) {
+export function OrdersBoard({
+  initialOrders,
+  deliveryFeeBusiness = 0,
+}: {
+  initialOrders: BoardOrder[];
+  deliveryFeeBusiness?: number;
+}) {
   const [orders, setOrders] = useState<BoardOrder[]>(initialOrders);
-  const [muted, setMuted] = useState(false);
+  const [muted, setMuted] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem("tetsu-board-muted") === "true";
+  });
   const [now, setNow] = useState(() => Date.now());
   const [refreshing, setRefreshing] = useState(false);
   const [cancelTarget, setCancelTarget] = useState<BoardOrder | null>(null);
   const [cancelReason, setCancelReason] = useState("");
   const [editingFeeId, setEditingFeeId] = useState<string | null>(null);
   const [editingFeeValue, setEditingFeeValue] = useState("");
+  const [consumptionTarget, setConsumptionTarget] = useState<BoardOrder | null>(null);
   const mutedRef = useRef(false);
 
   useEffect(() => {
@@ -97,7 +121,6 @@ export function OrdersBoard({ initialOrders }: { initialOrders: BoardOrder[] }) 
   }, [muted]);
 
   useEffect(() => {
-    setMuted(localStorage.getItem("tetsu-board-muted") === "true");
     const timer = setInterval(() => setNow(Date.now()), 30_000);
     return () => clearInterval(timer);
   }, []);
@@ -182,8 +205,12 @@ export function OrdersBoard({ initialOrders }: { initialOrders: BoardOrder[] }) 
     toast.success(
       `Pedido ${formatOrderNumber(order.order_number)} → ${ORDER_STATUS_META[next].label}`
     );
-    // El realtime actualiza la tarjeta; refresco optimista:
-    upsertOrder({ ...order, status: next });
+    // Re-consulta el pedido tras el cambio para no pisar valores (ej. delivery_fee_retained)
+    // desde un cierre desactualizado de la tarjeta.
+    const supabase = createClient();
+    const detail = await fetchOrderDetail(supabase, order.id);
+    if (detail) upsertOrder(detail);
+    else upsertOrder({ ...order, status: next });
   }
 
   async function handleCancel() {
@@ -408,7 +435,9 @@ export function OrdersBoard({ initialOrders }: { initialOrders: BoardOrder[] }) 
                                 title={order.delivery_fee_retained ? "Retenido. Click para marcar externo" : "Externo. Click para marcar retenido"}
                               >
                                 <Truck className="size-3" />
-                                {order.delivery_fee_retained ? `Retenido: ${formatCOP(order.delivery_fee)}` : `Externo: ${formatCOP(order.delivery_fee)}`}
+                                {order.delivery_fee_retained
+                                  ? `Retenido: ${formatCOP(deliveryFeeBusiness)}`
+                                  : `Externo: ${formatCOP(order.delivery_fee)}`}
                               </button>
                               <button
                                 type="button"
@@ -434,10 +463,10 @@ export function OrdersBoard({ initialOrders }: { initialOrders: BoardOrder[] }) 
                       <div className="space-y-0.5 rounded-md bg-muted/60 p-2">
                         <p className="font-semibold">{order.customer_name}</p>
                         <p className="truncate text-xs text-muted-foreground" title={order.customer_phone}>
-                          📞 {order.customer_phone}
+                          {order.customer_phone}
                         </p>
                         <p className="truncate text-xs text-muted-foreground" title={order.customer_address}>
-                          📍 {order.customer_address}
+                          {order.customer_address}
                         </p>
                       </div>
 
@@ -466,6 +495,14 @@ export function OrdersBoard({ initialOrders }: { initialOrders: BoardOrder[] }) 
                         <div className="flex gap-1.5">
                           <button
                             type="button"
+                            onClick={() => setConsumptionTarget(order)}
+                            className="rounded-md border p-1.5 text-muted-foreground hover:bg-muted"
+                            title="Editar consumo de insumos de este pedido"
+                          >
+                            <SlidersHorizontal className="size-3.5" />
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => setCancelTarget(order)}
                             className="rounded-md border p-1.5 text-destructive hover:bg-red-50"
                             title="Cancelar pedido"
@@ -475,7 +512,6 @@ export function OrdersBoard({ initialOrders }: { initialOrders: BoardOrder[] }) 
                           {next ? (
                             <Button size="sm" onClick={() => handleAdvance(order, next)}>
                               <CheckCheck className="size-3.5" />
-                              {ORDER_STATUS_META[next].label}
                             </Button>
                           ) : null}
                         </div>
@@ -488,6 +524,13 @@ export function OrdersBoard({ initialOrders }: { initialOrders: BoardOrder[] }) 
           );
         })}
       </div>
+
+      {/* Consumos por pedido */}
+      <OrderConsumptionDialog
+        key={consumptionTarget?.id ?? "none"}
+        order={consumptionTarget}
+        onOpenChange={(o) => { if (!o) setConsumptionTarget(null); }}
+      />
 
       {/* Cancelar con motivo */}
       {cancelTarget ? (
@@ -527,5 +570,151 @@ export function OrdersBoard({ initialOrders }: { initialOrders: BoardOrder[] }) 
         </div>
       ) : null}
     </div>
+  );
+}
+
+/* ----------------------- Editor de consumos por pedido ----------------------- */
+
+function OrderConsumptionDialog({
+  order,
+  onOpenChange,
+}: {
+  order: BoardOrder | null;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [items, setItems] = useState<ConsumptionBreakDownItem[]>([]);
+  const [, startTransition] = useTransition();
+
+  useEffect(() => {
+    if (!order) return;
+    let cancelled = false;
+    getOrderConsumptionBreakdown(order.id).then((res) => {
+      if (cancelled) return;
+      setLoading(false);
+      if (res.error) {
+        toast.error(res.error);
+        return;
+      }
+      setItems(res.items ?? []);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [order?.id]);
+
+  if (!order) return null;
+
+  const o = order;
+  const isDelivered = o.status === "ENTREGADO";
+
+  async function handleSave() {
+    setSaving(true);
+    const payload = items.map((i) => ({ inventoryItemId: i.inventoryItemId, quantity: i.overrideQty ?? i.autoNeeded }));
+    const res = await saveOrderConsumptionOverrides(o.id, payload);
+    setSaving(false);
+    if (res.error) {
+      toast.error(res.error);
+      return;
+    }
+    toast.success("Consumos del pedido actualizados");
+    startTransition(() => onOpenChange(false));
+  }
+
+  function setQty(index: number, value: string) {
+    const num = value === "" ? 0 : Number(value);
+    setItems((prev) =>
+      prev.map((it, i) => (i === index ? { ...it, overrideQty: isNaN(num) ? 0 : num } : it))
+    );
+  }
+
+  return (
+    <Dialog open onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>
+            Consumos del pedido {formatOrderNumber(order.order_number)}
+          </DialogTitle>
+        </DialogHeader>
+
+        <p className="-mt-1 text-xs text-muted-foreground">
+          Ajusta cuánto se descuentan los insumos de este pedido. Deja{" "}
+          <span className="font-semibold">0</span> en un insumo para no
+          descontarlo (ej. “sin tomate”). Estos valores se usan al marcar el
+          pedido como ENTREGADO.
+        </p>
+
+        {loading ? (
+          <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
+            <Loader2 className="size-4 animate-spin" />
+            Calculando consumos…
+          </div>
+        ) : items.length === 0 ? (
+          <p className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
+            Este pedido no tiene consumos de insumos configurados.
+          </p>
+        ) : (
+          <div className="space-y-1.5">
+            {items.map((it, i) => {
+              const value = it.overrideQty ?? it.autoNeeded;
+              const changed = it.overrideQty !== null && it.overrideQty !== it.autoNeeded;
+              return (
+                <div
+                  key={it.inventoryItemId}
+                  className={cn(
+                    "flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm",
+                    changed && "border-primary/50 bg-primary/5"
+                  )}
+                >
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-medium">{it.name}</span>
+                      <span className="text-xs text-muted-foreground">
+                        ({it.unit})
+                      </span>
+                    </div>
+                    <p className="truncate text-[11px] text-muted-foreground">
+                      {it.references.join(" · ") || "Insumo"}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-muted-foreground">Auto: {it.autoNeeded}</span>
+                    <Input
+                      type="number"
+                      min={0}
+                      step="any"
+                      value={value}
+                      onChange={(e) => setQty(i, e.target.value)}
+                      className="h-8 w-20 text-right"
+                      disabled={isDelivered}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {!loading && items.length > 0 ? (
+          <div className="flex justify-end gap-2 pt-1">
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Cerrar
+            </Button>
+            <Button type="button" onClick={handleSave} disabled={saving || isDelivered}>
+              {saving ? <Loader2 className="size-4 animate-spin" /> : null}
+              Guardar consumos
+            </Button>
+          </div>
+        ) : !loading ? (
+          <div className="flex justify-end">
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Cerrar
+            </Button>
+          </div>
+        ) : null}
+      </DialogContent>
+    </Dialog>
   );
 }

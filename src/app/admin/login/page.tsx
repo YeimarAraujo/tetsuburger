@@ -7,9 +7,14 @@ export const metadata = {
 export default function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-muted/40 p-4">
-      <div className="w-full max-w-sm space-y-8">
+      <div className="w-full max-w-sm space-y-2">
         <div className="text-center">
-          <img src="/images/logo.webp" alt="" className="w-1/2 h-1/2 object-cover" />
+          {/* <img
+            src="/images/logo.webp"
+            alt="Logo"
+            className="mx-auto h-auto w-1/2 object-contain"
+          /> */}
+
           <p className="mt-1 text-sm text-muted-foreground">
             Panel administrativo
           </p>
