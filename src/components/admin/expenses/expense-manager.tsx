@@ -381,9 +381,10 @@ export function ExpenseManager({
                 name="amount"
                 type="number"
                 min={0}
-                step={100}
+                step="0.01"
+                inputMode="decimal"
                 defaultValue={editing?.amount ?? ""}
-                placeholder="150000"
+                placeholder="3250"
                 required
               />
             </div>

@@ -112,6 +112,8 @@ export function OrdersBoard({
   const [cancelReason, setCancelReason] = useState("");
   const [editingFeeId, setEditingFeeId] = useState<string | null>(null);
   const [editingFeeValue, setEditingFeeValue] = useState("");
+  const [editingSubtotalId, setEditingSubtotalId] = useState<string | null>(null);
+  const [editingSubtotalValue, setEditingSubtotalValue] = useState("");
   const [consumptionTarget, setConsumptionTarget] = useState<BoardOrder | null>(null);
   const mutedRef = useRef(false);
 
@@ -270,6 +272,32 @@ export function OrdersBoard({
     upsertOrder({ ...order, delivery_fee: newFee, total: newTotal });
     setEditingFeeId(null);
     toast.success(`Domicilio actualizado a ${formatCOP(newFee)}`);
+  }
+
+  async function saveSubtotal(order: BoardOrder) {
+    const newSubtotal = Number(editingSubtotalValue);
+    if (isNaN(newSubtotal) || newSubtotal < 0) {
+      toast.error("Valor inválido");
+      setEditingSubtotalId(null);
+      return;
+    }
+
+    const supabase = createClient();
+    const newTotal = newSubtotal + Number(order.delivery_fee);
+    const { error } = await supabase
+      .from("orders")
+      .update({ subtotal: newSubtotal, total: newTotal })
+      .eq("id", order.id);
+
+    if (error) {
+      toast.error("No se pudo actualizar el valor");
+      setEditingSubtotalId(null);
+      return;
+    }
+
+    upsertOrder({ ...order, subtotal: newSubtotal, total: newTotal });
+    setEditingSubtotalId(null);
+    toast.success(`Subtotal actualizado a ${formatCOP(newSubtotal)}`);
   }
 
   const counts = useMemo(() => {
@@ -490,8 +518,55 @@ export function OrdersBoard({
                         </p>
                       ) : null}
 
-                      <footer className="flex items-center justify-between gap-2 pt-1">
-                        <span className="font-bold">{formatCOP(Number(order.total))}</span>
+                      <footer className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                        <div className="flex items-center gap-1">
+                          {editingSubtotalId === order.id ? (
+                            <div className="flex items-center gap-1">
+                              <input
+                                type="number"
+                                value={editingSubtotalValue}
+                                onChange={(e) => setEditingSubtotalValue(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") saveSubtotal(order);
+                                  if (e.key === "Escape") setEditingSubtotalId(null);
+                                }}
+                                className="h-6 w-24 rounded border px-1.5 text-[11px] font-bold"
+                                autoFocus
+                                min={0}
+                                step="0.01"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => saveSubtotal(order)}
+                                className="rounded bg-emerald-500 px-1.5 py-0.5 text-[10px] font-bold text-white hover:bg-emerald-600"
+                              >
+                                ✓
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingSubtotalId(null)}
+                                className="rounded bg-zinc-300 px-1.5 py-0.5 text-[10px] font-bold text-zinc-700 hover:bg-zinc-400"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ) : (
+                            <>
+                              <span className="font-bold">{formatCOP(Number(order.total))}</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingSubtotalId(order.id);
+                                  setEditingSubtotalValue(String(order.subtotal));
+                                }}
+                                className="rounded p-0.5 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-600"
+                                title="Editar subtotal (valor de los productos, ej. si regalas uno)"
+                              >
+                                <Pencil className="size-3" />
+                              </button>
+                            </>
+                          )}
+                        </div>
                         <div className="flex gap-1.5">
                           <button
                             type="button"

@@ -30,7 +30,7 @@ export default async function FinanzasPage({
 
   const supabase = await createClient();
 
-  const [ordersRes, expensesRes, productionRes, closingsRes, settingsRes] = await Promise.all([
+  const [ordersRes, expensesRes, productionRes, closingsRes] = await Promise.all([
     supabase
       .from("orders")
       .select("id, status, total, subtotal, delivery_fee, delivery_fee_retained, payment_method, origin, created_at")
@@ -53,10 +53,6 @@ export default async function FinanzasPage({
       .gte("closing_date", from)
       .lte("closing_date", to)
       .order("closing_date", { ascending: false }),
-    supabase
-      .from("settings")
-      .select("key, value")
-      .eq("key", "delivery_fee_business"),
   ]);
 
   const orders = (ordersRes.data ?? []) as {
@@ -83,10 +79,6 @@ export default async function FinanzasPage({
     estimated_profit: string | number;
   }[];
 
-  const deliveryFeeBusiness = Number(
-    (settingsRes.data ?? []).find((r) => r.key === "delivery_fee_business")?.value ?? 0
-  );
-
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-4 lg:p-6">
       <header>
@@ -102,7 +94,6 @@ export default async function FinanzasPage({
         production={production}
         closings={closings}
         filters={{ from, to }}
-        deliveryFeeBusiness={deliveryFeeBusiness}
       />
     </div>
   );

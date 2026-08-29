@@ -35,14 +35,12 @@ export function FinanzasManager({
   production,
   closings,
   filters,
-  deliveryFeeBusiness,
 }: {
   orders: { id: string; status: string; total: number | string; subtotal: number | string; delivery_fee: number | string; delivery_fee_retained: boolean; payment_method: string | null; origin: string; created_at: string }[];
   expenses: { id: string; expense_date: string; amount: number | string; concept: string; category?: { name: string } | null }[];
   production: { id: string; record_date: string; total_cost: number | string }[];
   closings: { id: string; closing_date: string; orders_count: number; sales_total: number | string; expenses_total: number | string; estimated_profit: number | string }[];
   filters: Filters;
-  deliveryFeeBusiness: number;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -51,14 +49,10 @@ export function FinanzasManager({
     const validOrders = orders.filter((o) => o.status !== "CANCELADO");
     const cancelled = orders.length - validOrders.length;
 
-    // Ingresos = subtotal de todos + valor fijo por domicilio retenido
+    // Ingresos por ventas = SOLO el valor de los productos (subtotal).
+    // Los domicilios no se incluyen: ni retenidos ni externos.
     const subtotalSales = validOrders.reduce((s, o) => s + Number(o.subtotal), 0);
-    const retainedCount = validOrders.filter((o) => o.delivery_fee_retained && Number(o.delivery_fee) > 0).length;
-    const retainedFees = retainedCount * deliveryFeeBusiness;
-    const externalFees = validOrders.reduce((s, o) =>
-      s + (!o.delivery_fee_retained ? Number(o.delivery_fee) : 0), 0
-    );
-    const sales = subtotalSales + retainedFees;
+    const sales = subtotalSales;
     const expTotal = expenses.reduce((s, e) => s + Number(e.amount), 0);
     const prodCost = production.reduce((s, p) => s + Number(p.total_cost), 0);
 
@@ -67,12 +61,12 @@ export function FinanzasManager({
       const m = o.payment_method ?? "EFECTIVO";
       if (!byMethod[m]) byMethod[m] = { count: 0, total: 0 };
       byMethod[m].count++;
-      byMethod[m].total += Number(o.total);
+      byMethod[m].total += Number(o.subtotal);
     });
 
     const byOrigin: Record<string, number> = {};
     validOrders.forEach((o) => {
-      byOrigin[o.origin] = (byOrigin[o.origin] || 0) + Number(o.total);
+      byOrigin[o.origin] = (byOrigin[o.origin] || 0) + Number(o.subtotal);
     });
 
     // Gastos por categoría
@@ -90,10 +84,6 @@ export function FinanzasManager({
       validOrdersCount: validOrders.length,
       cancelled,
       sales,
-      subtotalSales,
-      retainedFees,
-      retainedCount,
-      externalFees,
       expenses: expTotal,
       prodCost,
       netProfit,
@@ -103,7 +93,7 @@ export function FinanzasManager({
       expByCategory,
       totalDelivered: validOrders.length,
     };
-  }, [orders, expenses, production, deliveryFeeBusiness]);
+  }, [orders, expenses, production]);
 
   // Utilidad diaria (solo días con cierre)
   const dailyData = useMemo(() => {
@@ -179,15 +169,12 @@ export function FinanzasManager({
                 <TrendingUp className="size-5 text-emerald-600" />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Ingresos por ventas</p>
+                <p className="text-xs text-muted-foreground">Ingresos por venta (productos)</p>
                 <p className="text-xl font-bold text-emerald-600">{formatCOP(stats.sales)}</p>
                 <p className="text-[10px] text-muted-foreground">
-                  Productos: {formatCOP(stats.subtotalSales)}
-                  {stats.retainedCount > 0 ? ` · Dom (${stats.retainedCount}×${formatCOP(deliveryFeeBusiness)}): ${formatCOP(stats.retainedFees)}` : ""}
+                  Sin domicilios · {stats.validOrdersCount} pedidos
+                  {stats.cancelled > 0 ? ` · ${stats.cancelled} cancelados` : ""}
                 </p>
-                {stats.externalFees > 0 ? (
-                  <p className="text-[10px] text-zinc-500">Dom externo (no cuenta): {formatCOP(stats.externalFees)}</p>
-                ) : null}
               </div>
             </div>
           </CardContent>
@@ -382,7 +369,7 @@ export function FinanzasManager({
         <CardContent className="py-4 text-center text-sm text-muted-foreground">
           <p className="font-medium">Fórmula de utilidad neta</p>
           <p className="mt-1">
-            <span className="text-emerald-600">Productos + {formatCOP(deliveryFeeBusiness)}/dom retenido</span> −{" "}
+            <span className="text-emerald-600">Ventas de productos (sin domis)</span> −{" "}
             <span className="text-red-600">Gastos operativos</span> −{" "}
             <span className="text-amber-600">Compras de materia prima</span> ={" "}
             <span className="font-bold text-blue-600">Utilidad neta</span>

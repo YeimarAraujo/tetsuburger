@@ -76,14 +76,12 @@ export function ReportsManager({
   production,
   filters,
   categories,
-  deliveryFeeBusiness,
 }: {
   orders: OrderRow[];
   expenses: ExpenseRow[];
   production: ProductionRow[];
   filters: Filters;
   categories: { id: number; name: string }[];
-  deliveryFeeBusiness: number;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -92,11 +90,7 @@ export function ReportsManager({
   const stats = useMemo(() => {
     const validOrders = orders.filter((o) => o.status !== "CANCELADO");
     const subtotalSales = validOrders.reduce((s, o) => s + Number(o.subtotal), 0);
-    const retainedCount = validOrders.filter((o) =>
-      o.delivery_fee_retained === true && Number(o.delivery_fee) > 0
-    ).length;
-    const retainedFees = retainedCount * deliveryFeeBusiness;
-    const sales = subtotalSales + retainedFees;
+    const sales = subtotalSales;
     const expTotal = expenses.reduce((s, e) => s + Number(e.amount), 0);
     const prodTotal = production.reduce((s, p) => s + Number(p.total_cost), 0);
     return {
@@ -104,11 +98,10 @@ export function ReportsManager({
       validOrdersCount: validOrders.length,
       cancelledCount: orders.length - validOrders.length,
       sales,
-      retainedCount,
       expenses: expTotal,
       production: prodTotal,
     };
-  }, [orders, expenses, production, deliveryFeeBusiness]);
+  }, [orders, expenses, production]);
 
   const filteredOrders = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -189,10 +182,10 @@ export function ReportsManager({
                 <ShoppingCart className="size-5 text-primary" />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Ventas (subtotal + retenido)</p>
+                <p className="text-xs text-muted-foreground">Ventas (productos, sin domis)</p>
                 <p className="text-xl font-bold text-emerald-600">{formatCOP(stats.sales)}</p>
                 <p className="text-[10px] text-muted-foreground">
-                  {stats.validOrdersCount} pedidos · {stats.retainedCount} retenidos
+                  {stats.validOrdersCount} pedidos
                   {stats.cancelledCount > 0 ? ` · ${stats.cancelledCount} cancelados` : ""}
                 </p>
               </div>
@@ -275,33 +268,27 @@ export function ReportsManager({
                     <th className="pb-2 pr-2 font-medium">Estado</th>
                     <th className="pb-2 pr-2 font-medium">Pago</th>
                     <th className="pb-2 pr-2 text-right font-medium">Subtotal</th>
-                    <th className="pb-2 pr-2 text-right font-medium">Retenido (empresa)</th>
-                    <th className="pb-2 text-right font-medium">Total</th>
+                    <th className="pb-2 text-right font-medium">Total (sin domis)</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredOrders.map((o) => {
-                    const retained = o.delivery_fee_retained === true && Number(o.delivery_fee) > 0;
-                    const rowTotal = Number(o.subtotal) + (retained ? deliveryFeeBusiness : 0);
-                    return (
-                      <tr key={o.id} className="border-b last:border-0">
-                        <td className="py-2 pr-2 font-bold text-muted-foreground">#{o.order_number}</td>
-                        <td className="py-2 pr-2 whitespace-nowrap">{formatDate(o.created_at)}</td>
-                        <td className="py-2 pr-2">{o.customer_name || "—"}</td>
-                        <td className="py-2 pr-2"><Badge variant="outline" className="text-[10px]">{o.status}</Badge></td>
-                        <td className="py-2 pr-2 text-xs">{o.payment_method ?? "EFECTIVO"}</td>
-                        <td className="py-2 pr-2 text-right">{formatCOP(Number(o.subtotal))}</td>
-                        <td className="py-2 pr-2 text-right">{retained ? formatCOP(deliveryFeeBusiness) : "—"}</td>
-                        <td className="py-2 text-right font-semibold">{formatCOP(rowTotal)}</td>
-                      </tr>
-                    );
-                  })}
+                  {filteredOrders.map((o) => (
+                    <tr key={o.id} className="border-b last:border-0">
+                      <td className="py-2 pr-2 font-bold text-muted-foreground">#{o.order_number}</td>
+                      <td className="py-2 pr-2 whitespace-nowrap">{formatDate(o.created_at)}</td>
+                      <td className="py-2 pr-2">{o.customer_name || "—"}</td>
+                      <td className="py-2 pr-2"><Badge variant="outline" className="text-[10px]">{o.status}</Badge></td>
+                      <td className="py-2 pr-2 text-xs">{o.payment_method ?? "EFECTIVO"}</td>
+                      <td className="py-2 pr-2 text-right">{formatCOP(Number(o.subtotal))}</td>
+                      <td className="py-2 text-right font-semibold">{formatCOP(Number(o.subtotal))}</td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
               <table className="mt-2 w-full text-sm">
                 <tfoot>
                   <tr className="border-t font-bold">
-                    <td colSpan={7} className="py-2 text-right">Total (subtotal + retenido)</td>
+                    <td colSpan={6} className="py-2 text-right">Total</td>
                     <td className="py-2 text-right">{formatCOP(stats.sales)}</td>
                   </tr>
                 </tfoot>

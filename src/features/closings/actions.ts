@@ -47,14 +47,18 @@ export async function closeDay(date: string): Promise<ActionResult> {
 
   const { data: ordersResult } = await admin
     .from("orders")
-    .select("id, total, status, payment_method")
+    .select("id, subtotal, total, delivery_fee, delivery_fee_retained, status, payment_method")
     .gte("created_at", `${date}T00:00:00-05:00`)
     .lte("created_at", `${date}T23:59:59-05:00`);
 
   const orders = ordersResult ?? [];
   const validOrders = orders.filter((o) => o.status !== "CANCELADO");
   const ordersCount = validOrders.length;
-  const salesTotal = validOrders.reduce((s, o) => s + Number(o.total), 0);
+
+  // Los ingresos por venta del cierre son SOLO el valor de los productos
+  // (subtotal). Los domicilios no se incluyen: ni retenidos ni externos.
+  const subtotalSales = validOrders.reduce((s, o) => s + Number(o.subtotal), 0);
+  const salesTotal = subtotalSales;
 
   const { data: expenses } = await admin
     .from("expenses")
@@ -66,7 +70,7 @@ export async function closeDay(date: string): Promise<ActionResult> {
   const byPayment = validOrders.reduce(
     (acc, o) => {
       const method = o.payment_method ?? "EFECTIVO";
-      acc[method] = (acc[method] || 0) + Number(o.total);
+      acc[method] = (acc[method] || 0) + Number(o.subtotal);
       return acc;
     },
     {} as Record<string, number>
@@ -82,6 +86,8 @@ export async function closeDay(date: string): Promise<ActionResult> {
       by_payment: byPayment,
       total_orders: orders.length,
       cancelled_orders: orders.length - ordersCount,
+      subtotal_sales: subtotalSales,
+      includes_domicilios: false,
     },
   });
 

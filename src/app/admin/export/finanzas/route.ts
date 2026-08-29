@@ -44,35 +44,22 @@ export async function GET(request: NextRequest) {
     .lte("record_date", to)
     .order("record_date");
 
-  // Settings
-  const { data: settingsRows } = await supabase
-    .from("settings")
-    .select("key, value")
-    .eq("key", "delivery_fee_business");
-
-  const deliveryFeeBusiness = Number(
-    (settingsRows ?? []).find((r) => r.key === "delivery_fee_business")?.value ?? 0
-  );
+  // Settings ya no son necesarios: los domicilios no se incluyen en las ventas.
 
   const esc = (v: string) => `"${v.replaceAll('"', '""')}"`;
   const lines: string[] = [];
   let totalSubtotal = 0;
-  let totalRetainedFees = 0;
-  let totalExternalFees = 0;
   let totalExpenses = 0;
   let totalProduction = 0;
 
   // === VENTAS ===
-  lines.push(["=== VENTAS ===", "", "", "", "", "", "", "", ""].join(";"));
-  lines.push(["#", "Fecha", "Cliente", "Estado", "Pago", "Subtotal", "Dom", "Retenido", "Total"].join(";"));
+  lines.push(["=== VENTAS (productos, sin domicilios) ===", "", "", "", "", "", "", ""].join(";"));
+  lines.push(["#", "Fecha", "Cliente", "Estado", "Pago", "Subtotal", "Total"].join(";"));
 
   for (const o of orders ?? []) {
     if (o.status === "CANCELADO") continue;
     const sub = Number(o.subtotal);
-    const fee = Number(o.delivery_fee);
-    const retained = o.delivery_fee_retained === true;
     totalSubtotal += sub;
-    if (retained) totalRetainedFees += deliveryFeeBusiness; else totalExternalFees += fee;
     const fecha = o.created_at ? o.created_at.slice(0, 10) : "";
     lines.push([
       String(o.order_number),
@@ -81,16 +68,11 @@ export async function GET(request: NextRequest) {
       o.status,
       o.payment_method ?? "EFECTIVO",
       String(sub).replace(".", ","),
-      String(fee).replace(".", ","),
-      retained ? "Sí" : "No",
-      String(Number(o.total)).replace(".", ","),
+      String(sub).replace(".", ","),
     ].join(";"));
   }
 
-  lines.push(["", "", "", "", "SUBTOTAL PRODUCTOS", String(totalSubtotal).replace(".", ","), "", "", ""].join(";"));
-  lines.push(["", "", "", "", "DOMICILIOS RETENIDOS", String(totalRetainedFees).replace(".", ","), "", "", ""].join(";"));
-  lines.push(["", "", "", "", "DOMICILIOS EXTERNOS", String(totalExternalFees).replace(".", ","), "", "", ""].join(";"));
-  lines.push(["", "", "", "", "TOTAL VENTAS", String(totalSubtotal + totalRetainedFees).replace(".", ","), "", "", ""].join(";"));
+  lines.push(["", "", "", "", "TOTAL VENTAS", String(totalSubtotal).replace(".", ","), ""].join(";"));
   lines.push("");
 
   // === GASTOS ===
@@ -130,9 +112,9 @@ export async function GET(request: NextRequest) {
   lines.push("");
 
   // === RESUMEN ===
-  const netProfit = (totalSubtotal + totalRetainedFees) - totalExpenses - totalProduction;
+  const netProfit = totalSubtotal - totalExpenses - totalProduction;
   lines.push(["=== RESUMEN FINANCIERO ===", ""].join(";"));
-  lines.push(["Ventas (productos + dom retenidos)", String(totalSubtotal + totalRetainedFees).replace(".", ",")].join(";"));
+  lines.push(["Ventas (productos, sin doms)", String(totalSubtotal).replace(".", ",")].join(";"));
   lines.push(["(-) Gastos operativos", String(totalExpenses).replace(".", ",")].join(";"));
   lines.push(["(-) Compras materia prima", String(totalProduction).replace(".", ",")].join(";"));
   lines.push(["UTILIDAD NETA", String(netProfit).replace(".", ",")].join(";"));

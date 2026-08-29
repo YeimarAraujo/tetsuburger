@@ -26,33 +26,21 @@ export async function GET(request: NextRequest) {
 
   const { data: orders } = await supabase
     .from("orders")
-    .select("order_number, status, customer_name, subtotal, delivery_fee, delivery_fee_retained, payment_method, origin, total, created_at")
+    .select("order_number, status, customer_name, subtotal, payment_method, origin, created_at")
     .gte("created_at", `${from}T00:00:00-05:00`)
     .lte("created_at", `${to}T23:59:59-05:00`)
     .order("created_at");
-
-  const { data: settingsRows } = await supabase
-    .from("settings")
-    .select("key, value")
-    .eq("key", "delivery_fee_business");
-
-  const deliveryFeeBusiness = Number(
-    (settingsRows ?? []).find((r) => r.key === "delivery_fee_business")?.value ?? 0
-  );
 
   const esc = (v: string) => `"${v.replaceAll('"', '""')}"`;
   const lines: string[] = [];
   let total = 0;
 
-  lines.push(["#", "Fecha", "Cliente", "Estado", "Pago", "Subtotal", "Retenido (empresa)", "Total"].join(";"));
+  lines.push(["#", "Fecha", "Cliente", "Estado", "Pago", "Subtotal", "Total (sin doms)"].join(";"));
 
   for (const o of orders ?? []) {
     if (o.status === "CANCELADO") continue;
     const sub = Number(o.subtotal);
-    const fee = Number(o.delivery_fee);
-    const retained = o.delivery_fee_retained === true && fee > 0;
-    const t = sub + (retained ? deliveryFeeBusiness : 0);
-    total += t;
+    total += sub;
     const fecha = o.created_at ? o.created_at.slice(0, 10) : "";
     lines.push([
       String(o.order_number),
@@ -61,12 +49,11 @@ export async function GET(request: NextRequest) {
       o.status,
       o.payment_method ?? "EFECTIVO",
       String(sub).replace(".", ","),
-      retained ? String(deliveryFeeBusiness).replace(".", ",") : "",
-      String(t).replace(".", ","),
+      String(sub).replace(".", ","),
     ].join(";"));
   }
 
-  lines.push(["", "", "", "", "", "", "TOTAL", String(total).replace(".", ",")].join(";"));
+  lines.push(["", "", "", "", "", "TOTAL", String(total).replace(".", ",")].join(";"));
 
   const csv = "\uFEFF" + lines.join("\r\n");
 

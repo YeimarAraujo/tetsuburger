@@ -42,7 +42,7 @@ export default async function ReportsPage({
     expensesQuery = expensesQuery.eq("expense_category_id", Number(category));
   }
 
-  const [ordersRes, expensesRes, categoriesRes, productionRes, settingsRes] = await Promise.all([
+  const [ordersRes, expensesRes, categoriesRes, productionRes] = await Promise.all([
     supabase
       .from("orders")
       .select("id, order_number, status, customer_name, total, subtotal, delivery_fee, delivery_fee_retained, payment_method, origin, created_at")
@@ -61,10 +61,6 @@ export default async function ReportsPage({
       .gte("record_date", from)
       .lte("record_date", to)
       .order("record_date", { ascending: false }),
-    supabase
-      .from("settings")
-      .select("key, value")
-      .eq("key", "delivery_fee_business"),
   ]);
 
   const expenses = ((expensesRes.data ?? []) as unknown as {
@@ -132,10 +128,6 @@ export default async function ReportsPage({
     name: string;
   }[]).map((c) => ({ id: c.id, name: c.name }));
 
-  const deliveryFeeBusiness = Number(
-    (settingsRes.data ?? []).find((r) => r.key === "delivery_fee_business")?.value ?? 0
-  );
-
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-4 lg:p-6">
       <header>
@@ -151,7 +143,6 @@ export default async function ReportsPage({
         production={production}
         categories={categories}
         filters={{ from, to, category }}
-        deliveryFeeBusiness={deliveryFeeBusiness}
       />
     </div>
   );
