@@ -94,27 +94,32 @@ export function ReportsManager({
     const expTotal = expenses.reduce((s, e) => s + Number(e.amount), 0);
     const prodTotal = production.reduce((s, p) => s + Number(p.total_cost), 0);
     return {
-      ordersCount: orders.length,
       validOrdersCount: validOrders.length,
-      cancelledCount: orders.length - validOrders.length,
       sales,
       expenses: expTotal,
       production: prodTotal,
     };
   }, [orders, expenses, production]);
 
+  // El historial solo muestra pedidos no cancelados (los cancelados no aparecen
+  // ni se suman).
+  const activeOrders = useMemo(
+    () => orders.filter((o) => o.status !== "CANCELADO"),
+    [orders]
+  );
+
   const filteredOrders = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return orders;
+    if (!q) return activeOrders;
     const num = q.replace(/^#/, "");
     const numOnly = /^\d+$/.test(num);
-    return orders.filter((o) => {
+    return activeOrders.filter((o) => {
       const byNumber =
         numOnly && String(o.order_number).toLowerCase().includes(num);
       const byName = (o.customer_name || "").toLowerCase().includes(q);
       return byNumber || byName;
     });
-  }, [orders, search]);
+  }, [activeOrders, search]);
 
   function pushFilter(next: Partial<Filters>) {
     const merged = { ...filters, ...next };
@@ -186,7 +191,6 @@ export function ReportsManager({
                 <p className="text-xl font-bold text-emerald-600">{formatCOP(stats.sales)}</p>
                 <p className="text-[10px] text-muted-foreground">
                   {stats.validOrdersCount} pedidos
-                  {stats.cancelledCount > 0 ? ` · ${stats.cancelledCount} cancelados` : ""}
                 </p>
               </div>
             </div>

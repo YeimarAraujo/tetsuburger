@@ -10,7 +10,9 @@ import {
   Landmark,
   Loader2,
   Pencil,
+  Plus,
   RefreshCw,
+  Search,
   SlidersHorizontal,
   Store,
   Truck,
@@ -19,7 +21,7 @@ import {
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { playNewOrderSound } from "@/lib/sound";
-import { updateOrderStatus } from "@/features/orders/board-actions";
+import { addOrderItem, updateOrderStatus } from "@/features/orders/board-actions";
 import {
   getOrderConsumptionBreakdown,
   saveOrderConsumptionOverrides,
@@ -33,6 +35,7 @@ import {
 import { formatCOP, formatOrderNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { OrderItemAddon, OrderStatus } from "@/types/db";
+import type { ManualProduct } from "@/components/admin/orders/manual-order-form";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -41,6 +44,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 export interface BoardOrder {
   id: string;
@@ -97,9 +101,11 @@ async function fetchOrderDetail(
 export function OrdersBoard({
   initialOrders,
   deliveryFeeBusiness = 0,
+  products = [],
 }: {
   initialOrders: BoardOrder[];
   deliveryFeeBusiness?: number;
+  products?: ManualProduct[];
 }) {
   const [orders, setOrders] = useState<BoardOrder[]>(initialOrders);
   const [muted, setMuted] = useState(() => {
@@ -115,6 +121,12 @@ export function OrdersBoard({
   const [editingSubtotalId, setEditingSubtotalId] = useState<string | null>(null);
   const [editingSubtotalValue, setEditingSubtotalValue] = useState("");
   const [consumptionTarget, setConsumptionTarget] = useState<BoardOrder | null>(null);
+  const [addItemTarget, setAddItemTarget] = useState<BoardOrder | null>(null);
+  const [addItemSearch, setAddItemSearch] = useState("");
+  const [addItemProduct, setAddItemProduct] = useState<ManualProduct | null>(null);
+  const [addItemQty, setAddItemQty] = useState(1);
+  const [addItemAddons, setAddItemAddons] = useState<string[]>([]);
+  const [addingItem, setAddingItem] = useState(false);
   const mutedRef = useRef(false);
 
   useEffect(() => {
@@ -299,6 +311,57 @@ export function OrdersBoard({
     setEditingSubtotalId(null);
     toast.success(`Subtotal actualizado a ${formatCOP(newSubtotal)}`);
   }
+
+  function addItemCost(): number {
+    if (!addItemProduct) return 0;
+    const addonSum = addItemProduct.addons
+      .filter((a) => addItemAddons.includes(a.id))
+      .reduce((s, a) => s + Number(a.price), 0);
+    return (Number(addItemProduct.price) + addonSum) * addItemQty;
+  }
+
+  function openAddItem(order: BoardOrder) {
+    setAddItemTarget(order);
+    setAddItemSearch("");
+    setAddItemProduct(null);
+    setAddItemQty(1);
+    setAddItemAddons([]);
+  }
+
+  async function confirmAddItem() {
+    if (!addItemTarget || !addItemProduct) return;
+    setAddingItem(true);
+
+    const result = await addOrderItem(
+      addItemTarget.id,
+      [
+        {
+          product_id: addItemProduct.id,
+          quantity: addItemQty,
+          addon_ids: addItemAddons,
+        },
+      ]
+    );
+
+    setAddingItem(false);
+
+    if (result.error) {
+      toast.error(result.error);
+      return;
+    }
+
+    toast.success("Producto agregado al pedido");
+    setAddItemTarget(null);
+    setAddItemProduct(null);
+    setAddItemAddons([]);
+    await refreshAll();
+  }
+
+  const filteredAddItems = useMemo(() => {
+    const q = addItemSearch.trim().toLowerCase();
+    if (!q) return products;
+    return products.filter((p) => p.name.toLowerCase().includes(q));
+  }, [products, addItemSearch]);
 
   const counts = useMemo(() => {
     const map = Object.fromEntries(BOARD_COLUMNS.map((s) => [s, 0])) as Record<OrderStatus, number>;
@@ -568,6 +631,16 @@ export function OrdersBoard({
                           )}
                         </div>
                         <div className="flex gap-1.5">
+                          {order.status === "PENDIENTE" || order.status === "CONFIRMADO" ? (
+                            <button
+                              type="button"
+                              onClick={() => openAddItem(order)}
+                              className="rounded-md border border-emerald-300 p-1.5 text-emerald-600 hover:bg-emerald-50"
+                              title="Agregar producto a este pedido"
+                            >
+                              <Plus className="size-3.5" />
+                            </button>
+                          ) : null}
                           <button
                             type="button"
                             onClick={() => setConsumptionTarget(order)}
@@ -606,6 +679,145 @@ export function OrdersBoard({
         order={consumptionTarget}
         onOpenChange={(o) => { if (!o) setConsumptionTarget(null); }}
       />
+
+      {/* Agregar producto a pedido */}
+      <Dialog open={addItemTarget !== null} onOpenChange={(o) => { if (!o) setAddItemTarget(null); }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              Agregar producto {addItemTarget ? `a #${formatOrderNumber(addItemTarget.order_number)}` : ""}
+            </DialogTitle>
+          </DialogHeader>
+
+          {!addItemProduct ? (
+            <div className="space-y-3">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
+                <Input
+                  value={addItemSearch}
+                  onChange={(e) => setAddItemSearch(e.target.value)}
+                  placeholder="Buscar producto…"
+                  className="pl-8"
+                  autoFocus
+                />
+              </div>
+              <div className="max-h-72 space-y-1 overflow-y-auto">
+                {filteredAddItems.length === 0 ? (
+                  <p className="py-6 text-center text-sm text-muted-foreground">Sin resultados</p>
+                ) : (
+                  filteredAddItems.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      disabled={!p.is_available}
+                      onClick={() => {
+                        setAddItemProduct(p);
+                        setAddItemQty(1);
+                        setAddItemAddons([]);
+                      }}
+                      className={cn(
+                        "flex w-full items-center justify-between gap-2 rounded-lg border p-2 text-left transition-colors",
+                        p.is_available ? "hover:border-primary hover:bg-muted/50" : "cursor-not-allowed opacity-50"
+                      )}
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-medium">{p.name}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {p.is_available ? formatCOP(p.price) : "Agotado"}
+                        </span>
+                      </span>
+                      {p.is_available ? <Plus className="size-4 shrink-0 text-primary" /> : null}
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <p className="font-semibold">{addItemProduct.name}</p>
+                  <p className="text-xs text-muted-foreground">{formatCOP(addItemProduct.price)}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAddItemProduct(null)}
+                  className="text-xs text-muted-foreground underline"
+                >
+                  Cambiar
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Cantidad</Label>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setAddItemQty((q) => Math.max(1, q - 1))}
+                  >
+                    −
+                  </Button>
+                  <span className="w-10 text-center font-bold">{addItemQty}</span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setAddItemQty((q) => Math.min(50, q + 1))}
+                  >
+                    +
+                  </Button>
+                </div>
+              </div>
+
+              {addItemProduct.addons.length > 0 ? (
+                <div className="space-y-2">
+                  <Label>Adicionales</Label>
+                  <div className="space-y-1">
+                    {addItemProduct.addons.map((a) => (
+                      <label key={a.id} className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={addItemAddons.includes(a.id)}
+                          disabled={a.available === false}
+                          onChange={(e) => {
+                            setAddItemAddons((prev) =>
+                              e.target.checked
+                                ? [...prev, a.id]
+                                : prev.filter((id) => id !== a.id)
+                            );
+                          }}
+                          className="size-4"
+                        />
+                        <span className={cn(a.available === false && "opacity-50")}>
+                          {a.name} · {formatCOP(a.price)}
+                          {a.available === false ? " (agotado)" : ""}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="rounded-lg bg-muted p-3 text-center">
+                <p className="text-xs text-muted-foreground">Subtotal del producto</p>
+                <p className="text-xl font-bold text-primary">{formatCOP(addItemCost())}</p>
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="outline" onClick={() => setAddItemProduct(null)}>
+                  Volver
+                </Button>
+                <Button type="button" onClick={confirmAddItem} disabled={addingItem}>
+                  {addingItem ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+                  Agregar
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Cancelar con motivo */}
       {cancelTarget ? (

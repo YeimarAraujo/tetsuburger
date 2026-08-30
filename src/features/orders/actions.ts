@@ -24,10 +24,15 @@ const customerSchema = z.object({
     .string()
     .trim()
     .regex(/^[0-9+\-\s()]{7,20}$/, "Teléfono inválido"),
-  customer_address: z.string().trim().min(5, "Ingresa una dirección válida").max(200),
+  customer_address: z.string().trim().max(200).default(""),
+  delivery_type: z.enum(["DOMICILIO", "RECOGIDA"]).default("DOMICILIO"),
   notes: z.string().trim().max(300).default(""),
   payment_method: z.enum(["EFECTIVO", "TRANSFERENCIA"]),
-});
+})
+  .refine(
+    (data) => data.delivery_type !== "DOMICILIO" || data.customer_address.length >= 5,
+    { message: "Ingresa una dirección válida para el domicilio", path: ["customer_address"] }
+  );
 
 function paymentLabel(method: "EFECTIVO" | "TRANSFERENCIA"): string {
   return method === "EFECTIVO" ? "Efectivo" : "Transferencia";
@@ -56,12 +61,12 @@ function buildWhatsappMessage(params: {
     ...lines,
     "",
     `Subtotal: ${formatCOP(subtotal)}`,
-    ...(deliveryFee > 0 ? [`Domicilio: ${formatCOP(deliveryFee)}`] : []),
+    ...(deliveryFee > 0 ? [`Domicilio: ${formatCOP(deliveryFee)} (El valor del domicilio puede variar dependiendo de la distancia y la hora. En breve te lo confirmamos.)`] : []),
     `*Total: ${formatCOP(total)}*`,
     `Medio de pago: ${paymentLabel(paymentMethod)}`,
     "",
     `Nombre: ${name}`,
-    `Dirección: ${address}`,
+    ...(address ? [`Dirección: ${address}`] : ["Modalidad: Recoger en el local"]),
     `Teléfono: ${phone}`,
     ...(notes ? ["", `Nota: ${notes}`] : []),
   ];
@@ -121,7 +126,6 @@ export async function placeOrder(
     }
   }
 
-  const deliveryFee = Number(settings.delivery_fee ?? 0);
   const minOrderTotal = Number(settings.min_order_total ?? 0);
   const subtotal = built.subtotal ?? 0;
 
@@ -129,8 +133,11 @@ export async function placeOrder(
     return { error: `El pedido mínimo es de ${formatCOP(minOrderTotal)}.` };
   }
 
-  const total = subtotal + deliveryFee;
   const customer = parsedCustomer.data;
+  const settingsDeliveryFee = Number(settings.delivery_fee ?? 0);
+  const isDelivery = customer.delivery_type === "DOMICILIO";
+  const deliveryFee = isDelivery ? settingsDeliveryFee : 0;
+  const total = subtotal + deliveryFee;
 
   const persisted = await persistOrder({
     origin: "WEB",
@@ -142,9 +149,9 @@ export async function placeOrder(
     total,
     customerName: customer.customer_name,
     customerPhone: customer.customer_phone,
-    customerAddress: customer.customer_address,
+    customerAddress: isDelivery ? customer.customer_address : "",
     notes: customer.notes,
-    deliveryType: "DOMICILIO",
+    deliveryType: isDelivery ? "DOMICILIO" : "RECOGIDA",
     paymentMethod: customer.payment_method,
     createdBy: null,
     confirmedAt: null,

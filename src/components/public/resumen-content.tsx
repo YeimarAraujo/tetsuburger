@@ -15,7 +15,7 @@ export function ResumenContent({ deliveryFee }: { deliveryFee: number }) {
   const removeItem = useCart((s) => s.removeItem);
   const subtotal = cartSubtotal(items);
   const count = cartCount(items);
-  const total = subtotal + deliveryFee;
+  const total = subtotal; //+ deliveryFee;
 
   if (items.length === 0) {
     return (
@@ -95,10 +95,10 @@ export function ResumenContent({ deliveryFee }: { deliveryFee: number }) {
             <span>Subtotal</span>
             <span>{formatCOP(subtotal)}</span>
           </div>
-          <div className="flex justify-between text-muted-foreground">
+          {/* <div className="flex justify-between text-muted-foreground">
             <span>Domicilio</span>
             <span>{deliveryFee > 0 ? formatCOP(deliveryFee) : "Gratis"}</span>
-          </div>
+          </div> */}
 
           <Separator />
 
