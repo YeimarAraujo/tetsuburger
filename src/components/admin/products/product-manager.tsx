@@ -952,8 +952,8 @@ function ProductDialog({
                 placeholder="0"
               />
               <p className="text-xs text-muted-foreground">
-                Caja, bolsa, etiqueta, servilleta… se suma al costo de ingredientes
-                en el simulador de Rentabilidad.
+                Caja, bolsa, etiqueta, servilleta… El costo automático ya la incluye;
+                aquí solo se desglosa dentro del costo total en Rentabilidad (no se suma dos veces).
               </p>
             </div>
           </div>

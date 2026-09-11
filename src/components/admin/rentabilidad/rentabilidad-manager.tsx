@@ -50,6 +50,9 @@ interface RentabilidadRow {
   cost: number;
   packaging_cost: number;
   category?: { name: string } | null;
+  /** Desglose derivado: products.cost ya incluye el empaque. */
+  ingredientes?: number;
+  empaque?: number;
 }
 
 function num(v: string): number {
@@ -107,13 +110,17 @@ export function RentabilidadManager({
 
   const rows = useMemo(() => {
     return products.map((p) => {
-      const unit = { ingredientes: p.cost, empaque: p.packaging_cost };
-      const costoVariable = p.cost + p.packaging_cost;
+      // products.cost ya incluye el empaque (lo escribe el costo automático de
+      // productos); packaging_cost solo se desglosa, NUNCA se suma de nuevo.
+      const empaque = p.packaging_cost;
+      const ingredientes = Math.max(0, p.cost - empaque);
+      const unit = { ingredientes, empaque };
+      const costoVariable = p.cost;
       const margin = p.price - costoVariable;
       const pct = p.price > 0 ? (margin / p.price) * 100 : 0;
       const sugg = fullCostPrice(unit, input).precio;
       const be = breakEvenPrice(unit, input);
-      return { ...p, costoVariable, margin, pct, sugg, be };
+      return { ...p, ingredientes, empaque, costoVariable, margin, pct, sugg, be };
     });
   }, [products, input]);
 
@@ -139,7 +146,10 @@ export function RentabilidadManager({
   }, [rows, fijoUnit, config.unidadesMes, config.utilidadPct]);
 
   async function applyPrice(p: RentabilidadRow) {
-    const { precio } = fullCostPrice({ ingredientes: p.cost, empaque: p.packaging_cost }, input);
+    const { precio } = fullCostPrice(
+      { ingredientes: p.ingredientes ?? Math.max(0, p.cost - p.packaging_cost), empaque: p.empaque ?? p.packaging_cost },
+      input
+    );
     if (precio <= 0) {
       toast.error("Completa los costos para poder sugerir un precio");
       return;
@@ -363,8 +373,8 @@ export function RentabilidadManager({
                     <td className="py-2 pr-2 text-right text-muted-foreground">
                       {formatCOP(p.costoVariable)}
                       <span className="ml-1 text-[10px]">
-                        (ingr. {formatCOP(p.cost)}
-                        {p.packaging_cost > 0 ? ` + emp. ${formatCOP(p.packaging_cost)}` : ""})
+                        (ingr. {formatCOP(p.ingredientes ?? 0)}
+                        {p.empaque && p.empaque > 0 ? ` + emp. ${formatCOP(p.empaque)}` : ""})
                       </span>
                     </td>
                     <td className="py-2 pr-2 text-right">
@@ -462,19 +472,28 @@ function BreakdownDialog({
   const breakdown = useMemo(() => {
     if (!product) return null;
     return fullCostBreakdown(
-      { ingredientes: product.cost, empaque: product.packaging_cost },
+      {
+        ingredientes: product.ingredientes ?? Math.max(0, product.cost - product.packaging_cost),
+        empaque: product.empaque ?? product.packaging_cost,
+      },
       input
     );
   }, [product, input]);
 
   const be = useMemo(() => {
     if (!product) return 0;
-    return breakEvenPrice({ ingredientes: product.cost, empaque: product.packaging_cost }, input);
+    return breakEvenPrice(
+      {
+        ingredientes: product.ingredientes ?? Math.max(0, product.cost - product.packaging_cost),
+        empaque: product.empaque ?? product.packaging_cost,
+      },
+      input
+    );
   }, [product, input]);
 
   if (!product) return null;
 
-  const varCost = product.cost + product.packaging_cost;
+  const varCost = product.cost;
   const currentMargin = product.price - varCost;
 
   return (
