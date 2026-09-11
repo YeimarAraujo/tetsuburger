@@ -1,10 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
+import { getBusinessCosts } from "@/features/rentabilidad/actions";
 import { RentabilidadManager } from "@/components/admin/rentabilidad/rentabilidad-manager";
+import { PageHeader } from "@/components/admin/page-header";
 
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Rentabilidad de productos · TETSUBURGER Admin",
+  title: "Rentabilidad · TETSUBURGER Admin",
 };
 
 export default async function RentabilidadPage() {
@@ -12,7 +14,7 @@ export default async function RentabilidadPage() {
 
   const { data } = await supabase
     .from("products")
-    .select("id, name, price, cost, is_active, category:categories(name)")
+    .select("id, name, price, cost, packaging_cost, is_active, category:categories(name)")
     .eq("is_active", true)
     .order("name");
 
@@ -21,6 +23,7 @@ export default async function RentabilidadPage() {
     name: string;
     price: number | string;
     cost: number | string;
+    packaging_cost: number | string;
     is_active: boolean;
     category?: { name: string } | null;
   }[]).map((p) => ({
@@ -28,19 +31,19 @@ export default async function RentabilidadPage() {
     name: p.name,
     price: Number(p.price),
     cost: Number(p.cost),
+    packaging_cost: Number(p.packaging_cost ?? 0),
     category: p.category && !Array.isArray(p.category) ? p.category : null,
   }));
 
+  const initialConfig = await getBusinessCosts();
+
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-4 lg:p-6">
-      <header>
-        <h1 className="font-display text-3xl tracking-wide">RENTABILIDAD</h1>
-        <p className="text-sm text-muted-foreground">
-          Margen bruto por producto según precio de venta y costo
-        </p>
-      </header>
-
-      <RentabilidadManager products={products} />
+      <PageHeader
+        title="Rentabilidad"
+        description="Costo completo por producto (ingredientes + empaque + costos fijos) y precio sugerido"
+      />
+      <RentabilidadManager products={products} initialConfig={initialConfig} />
     </div>
   );
 }

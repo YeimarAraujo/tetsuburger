@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
-import { InventoryManager } from "@/components/admin/inventory-manager";
+import { InventoryManager, type ItemRow } from "@/components/admin/inventory-manager";
+import { PageHeader } from "@/components/admin/page-header";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +23,11 @@ export default async function InventoryPage() {
       .limit(20),
   ]);
 
+  const items = ((itemsRes.data ?? []) as unknown as ItemRow[]).map((i) => ({
+    ...i,
+    barcode: i.barcode ?? null,
+  }));
+
   const movements = ((movementsRes.data ?? []) as unknown as {
     id: string;
     inventory_item_id: string;
@@ -37,15 +43,13 @@ export default async function InventoryPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-4 lg:p-6">
-      <header>
-        <h1 className="font-display text-3xl tracking-wide">INVENTARIO</h1>
-        <p className="text-sm text-muted-foreground">
-          Control de insumos y stock del negocio
-        </p>
-      </header>
+      <PageHeader
+        title="Inventario"
+        description="Control de insumos y stock del negocio"
+      />
 
       <InventoryManager
-        items={(itemsRes.data as unknown as any[]) ?? []}
+        items={items}
         movements={movements}
       />
     </div>

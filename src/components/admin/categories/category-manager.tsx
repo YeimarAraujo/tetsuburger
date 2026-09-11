@@ -11,7 +11,6 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import type { Category } from "@/types/db";
-import type { CategoryInput } from "@/features/categories/schema";
 import {
   createCategory,
   moveCategory,
@@ -129,7 +128,7 @@ export function CategoryManager({ initial }: { initial: Category[] }) {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0">
           <div>
-            <CardTitle>Categorías</CardTitle>
+            <CardTitle>Lista de categorías</CardTitle>
             <CardDescription>
               Organiza el menú. Las categorías inactivas no aparecen en el
               catálogo público.

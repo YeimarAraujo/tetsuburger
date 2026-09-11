@@ -90,13 +90,15 @@ export async function getOrderConsumptionBreakdown(
   if (itemIds.length > 0) {
     const { data: addons } = await admin
       .from("order_item_addons")
-      .select("order_item_id, addon_id, addon_name, quantity")
+      .select("order_item_id, addon_id, addon_name, quantity, target, components_qty")
       .in("order_item_id", itemIds);
     const addonRows = (addons ?? []) as Array<{
       order_item_id: string;
       addon_id: string | null;
       addon_name: string;
       quantity: number;
+      target: string | null;
+      components_qty: number | null;
     }>;
     const addonIds = [...new Set(addonRows.map((a) => a.addon_id).filter(Boolean))] as string[];
     if (addonIds.length > 0) {
@@ -122,7 +124,11 @@ export async function getOrderConsumptionBreakdown(
             autoNeeded: 0,
             references: [],
           };
-          existing.autoNeeded += Number(c.quantity) * (row.quantity || 1) * itemQty;
+          existing.autoNeeded +=
+            Number(c.quantity) *
+            (row.quantity || 1) *
+            (row.target === "EACH" ? (row.components_qty || 1) : 1) *
+            itemQty;
           if (!existing.references.includes(ref)) existing.references.push(ref);
           breakdown.set(c.inventory_item_id, existing);
         }

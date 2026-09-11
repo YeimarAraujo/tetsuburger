@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { computeOpenStatus } from "@/lib/business-hours";
 import { HoursManager } from "@/components/admin/hours/hours-manager";
+import { PageHeader } from "@/components/admin/page-header";
 
 export const metadata = {
   title: "Horarios · TETSUBURGER Admin",
@@ -25,13 +26,11 @@ export default async function HoursPage() {
   );
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 p-6">
-      <header>
-        <h1 className="text-2xl font-bold">Horarios</h1>
-        <p className="text-sm text-muted-foreground">
-          Define cuándo el catálogo acepta pedidos
-        </p>
-      </header>
+    <div className="mx-auto max-w-4xl space-y-6 p-4 lg:p-6">
+      <PageHeader
+        title="Horarios"
+        description="Define cuándo el catálogo acepta pedidos"
+      />
 
       <HoursManager
         initial={hoursRes.data ?? []}

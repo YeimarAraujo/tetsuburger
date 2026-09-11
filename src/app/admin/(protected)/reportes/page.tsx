@@ -1,5 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
 import { ReportsManager } from "@/components/admin/reports-manager";
+import { PageHeader } from "@/components/admin/page-header";
+import {
+  countSales,
+  productCountMap,
+  type SaleLine,
+} from "@/lib/sales-counting";
 
 export const dynamic = "force-dynamic";
 
@@ -128,14 +134,55 @@ export default async function ReportsPage({
     name: string;
   }[]).map((c) => ({ id: c.id, name: c.name }));
 
+  // Conteo de hamburguesas/perros: líneas de pedidos NO cancelados × conteo del
+  // producto (si el ítem perdió su producto, el núcleo usa el nombre de respaldo).
+  const activeOrderIds = orders
+    .filter((o) => o.status !== "CANCELADO")
+    .map((o) => o.id);
+
+  const [itemsRes, countingProductsRes] =
+    activeOrderIds.length > 0
+      ? await Promise.all([
+          supabase
+            .from("order_items")
+            .select("order_id, product_id, product_name, quantity, line_total")
+            .in("order_id", activeOrderIds),
+          supabase
+            .from("products")
+            .select("id, conteo_hamburguesas, conteo_perros"),
+        ])
+      : [null, null];
+
+  const lines: SaleLine[] = ((itemsRes?.data ?? []) as unknown as {
+    order_id: string;
+    product_id: string | null;
+    product_name: string;
+    quantity: number;
+    line_total: number | string;
+  }[]).map((i) => ({
+    orderId: i.order_id,
+    productId: i.product_id,
+    productName: i.product_name,
+    quantity: Number(i.quantity),
+    lineTotal: Number(i.line_total),
+  }));
+
+  const productCounts = productCountMap(
+    ((countingProductsRes?.data ?? []) as unknown as {
+      id: string;
+      conteo_hamburguesas: number;
+      conteo_perros: number;
+    }[])
+  );
+
+  const sales = countSales(lines, productCounts);
+
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-4 lg:p-6">
-      <header>
-        <h1 className="font-display text-3xl tracking-wide">REPORTES</h1>
-        <p className="text-sm text-muted-foreground">
-          Historiales de pedidos, gastos y compras por período
-        </p>
-      </header>
+      <PageHeader
+        title="Reportes"
+        description="Historiales de pedidos, gastos y compras por período"
+      />
 
       <ReportsManager
         orders={orders}
@@ -143,6 +190,7 @@ export default async function ReportsPage({
         production={production}
         categories={categories}
         filters={{ from, to, category }}
+        sales={sales}
       />
     </div>
   );

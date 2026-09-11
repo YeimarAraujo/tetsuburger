@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 
-interface AuditRow {
+export interface AuditRow {
   id: string;
   user_id: string | null;
   action: string;
@@ -51,7 +51,7 @@ export function AuditLogViewer({
   availableTables: string[];
 }) {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
 
   function pushFilter(key: string, value: string) {
     const q = new URLSearchParams();

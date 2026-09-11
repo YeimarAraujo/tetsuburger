@@ -2,17 +2,18 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { ChevronLeft, Pencil, Trash2 } from "lucide-react";
+import { ChevronLeft, Minus, Pencil, Plus, Trash2 } from "lucide-react";
 import { useCart, cartSubtotal, cartCount, itemUnitPrice } from "@/store/cart";
+import { addonLabel } from "@/lib/addons";
 import { formatCOP } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { FloatingCartButton } from "@/components/public/floating-cart-button";
 
 export function ResumenContent({ deliveryFee }: { deliveryFee: number }) {
   const items = useCart((s) => s.items);
   const removeItem = useCart((s) => s.removeItem);
+  const setQuantity = useCart((s) => s.setQuantity);
   const subtotal = cartSubtotal(items);
   const count = cartCount(items);
   const total = subtotal; //+ deliveryFee;
@@ -63,25 +64,51 @@ export function ResumenContent({ deliveryFee }: { deliveryFee: number }) {
                     <p className="font-semibold">{item.name}</p>
                     {item.addons.length > 0 ? (
                       <p className="text-xs text-muted-foreground">
-                        + {item.addons.map((a) => a.name).join(", ")}
+                        + {item.addons.map((a) => addonLabel(a)).join(", ")}
                       </p>
                     ) : null}
                   </div>
-                  <span className="shrink-0 font-bold">
-                    {formatCOP(itemUnitPrice(item) * item.quantity)}
-                  </span>
-                </div>
-                <div className="mt-2 flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">
-                    {item.quantity} × {formatCOP(itemUnitPrice(item))}
-                  </span>
                   <button
                     type="button"
                     onClick={() => removeItem(item.key)}
                     className="text-destructive transition-opacity hover:opacity-70"
+                    aria-label={`Eliminar ${item.name}`}
+                    title="Eliminar"
                   >
                     <Trash2 className="size-4" />
                   </button>
+                </div>
+                <div className="mt-2 flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">
+                    {formatCOP(itemUnitPrice(item))} c/u
+                  </span>
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center rounded-full border">
+                      <button
+                        type="button"
+                        onClick={() => setQuantity(item.key, item.quantity - 1)}
+                        className="flex size-8 items-center justify-center rounded-l-full text-muted-foreground transition-colors hover:bg-muted disabled:opacity-30"
+                        disabled={item.quantity <= 1}
+                        aria-label="Reducir cantidad"
+                      >
+                        <Minus className="size-4" />
+                      </button>
+                      <span className="min-w-8 text-center text-sm font-semibold">
+                        {item.quantity}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setQuantity(item.key, item.quantity + 1)}
+                        className="flex size-8 items-center justify-center rounded-r-full text-muted-foreground transition-colors hover:bg-muted"
+                        aria-label="Aumentar cantidad"
+                      >
+                        <Plus className="size-4" />
+                      </button>
+                    </div>
+                    <span className="w-20 text-right font-bold">
+                      {formatCOP(itemUnitPrice(item) * item.quantity)}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -95,10 +122,12 @@ export function ResumenContent({ deliveryFee }: { deliveryFee: number }) {
             <span>Subtotal</span>
             <span>{formatCOP(subtotal)}</span>
           </div>
-          {/* <div className="flex justify-between text-muted-foreground">
-            <span>Domicilio</span>
-            <span>{deliveryFee > 0 ? formatCOP(deliveryFee) : "Gratis"}</span>
-          </div> */}
+          {deliveryFee > 0 ? (
+            <div className="flex justify-between text-muted-foreground">
+              <span>Domicilio</span>
+              <span>Se confirma al pagar</span>
+            </div>
+          ) : null}
 
           <Separator />
 
@@ -110,14 +139,15 @@ export function ResumenContent({ deliveryFee }: { deliveryFee: number }) {
           <Link href="/checkout" className="block pt-2">
             <Button size="lg" className="w-full gap-2">
               <Pencil className="size-4" />
-              Continuar pedido
+              Continuar con el pedido
             </Button>
           </Link>
 
-          <Link href="/" className="block text-center text-sm text-muted-foreground hover:text-primary">
-            <div className="flex items-center justify-center gap-2">
-              <ChevronLeft className="size-4" /> Seguir pidiendo
-            </div>
+          <Link href="/" className="block">
+            <Button variant="outline" size="lg" className="w-full gap-2">
+              <Plus className="size-4" />
+              Agregar más productos
+            </Button>
           </Link>
         </CardContent>
       </Card>

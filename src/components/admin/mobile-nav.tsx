@@ -20,6 +20,7 @@ import {
   Tags,
   UtensilsCrossed,
   Wallet,
+  Coins,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { signOutAction } from "@/features/auth/actions";
@@ -42,6 +43,7 @@ const NAV_ITEMS = [
   { href: "/admin/gastos", label: "Gastos", icon: ReceiptText },
   { href: "/admin/produccion", label: "Compras", icon: ChefHat },
   { href: "/admin/inventario", label: "Inventario", icon: Package },
+  { href: "/admin/caja", label: "Caja y Pagos", icon: Coins },
   { href: "/admin/finanzas", label: "Finanzas", icon: Wallet },
   { href: "/admin/cierres", label: "Cierres diarios", icon: CalendarCheck },
   { href: "/admin/reportes", label: "Reportes", icon: BarChart3 },

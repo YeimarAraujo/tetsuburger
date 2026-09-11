@@ -1,7 +1,9 @@
-import { formatCOP, formatDate } from "@/lib/format";
+import { formatDate } from "@/lib/format";
 import { createClient } from "@/lib/supabase/server";
+import { getCogsForOrders, sumCogs } from "@/features/finance/cogs";
 import { computeOpenStatus } from "@/lib/business-hours";
 import { DashboardStats } from "@/components/admin/dashboard-stats";
+import { PageHeader } from "@/components/admin/page-header";
 
 export const dynamic = "force-dynamic";
 
@@ -68,8 +70,20 @@ export default async function AdminDashboardPage() {
   const expenses = expensesRes.data ?? [];
 
   const validOrders = orders.filter((o) => o.status !== "CANCELADO");
-  const totalSales = validOrders.reduce((s, o) => s + Number(o.total), 0);
+  const deliveredOrders = orders.filter((o) => o.status === "ENTREGADO");
+
+  // Ventas del dashboard = SOLO el valor de los productos (subtotal) de los
+  // pedidos ENTREGADO. Los domicilios no se incluyen: ni retenidos ni externos.
+  const totalSales = deliveredOrders.reduce((s, o) => s + Number(o.subtotal), 0);
   const totalExpenses = expenses.reduce((s, o) => s + Number(o.amount), 0);
+
+  // Utilidad = ventas entregadas − costo de lo vendido − gastos.
+  const { map: cogsByOrder, missingCostCount } = await getCogsForOrders(
+    deliveredOrders.map((o) => o.id)
+  );
+  const cogsTotal = sumCogs(cogsByOrder);
+  const profit = totalSales - cogsTotal - totalExpenses;
+
   const ordersByStatus = validOrders.reduce(
     (acc, o) => {
       acc[o.status] = (acc[o.status] || 0) + 1;
@@ -91,12 +105,10 @@ export default async function AdminDashboardPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 p-4 lg:p-6">
-      <header>
-        <h1 className="font-display text-3xl tracking-wide">DASHBOARD</h1>
-        <p className="text-sm text-muted-foreground">
-          Resumen de hoy · {formatDate(`${today}T12:00:00Z`)}
-        </p>
-      </header>
+      <PageHeader
+        title="Dashboard"
+        description={`Resumen de hoy · ${formatDate(`${today}T12:00:00Z`)}`}
+      />
 
       <DashboardStats
         status={status}
@@ -104,7 +116,9 @@ export default async function AdminDashboardPage() {
           ordersCount: validOrders.length,
           totalSales,
           totalExpenses,
-          profit: totalSales - totalExpenses,
+          cogsTotal,
+          profit,
+          missingCostCount,
           ordersByStatus,
           paymentsByMethod,
         }}

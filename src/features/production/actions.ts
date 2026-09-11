@@ -16,11 +16,19 @@ const purchaseSchema = z.object({
   unit: z.string().trim().max(30).default("unidad"),
   unit_cost: z.coerce.number().min(0).default(0),
   notes: z.string().trim().max(300).default(""),
+  from_caja: z.string().transform((v) => v === "true").default(false),
+  metodo: z.enum(["EFECTIVO", "TRANSFERENCIA"]).default("EFECTIVO"),
 });
 
 const createItemSchema = z.object({
   name: z.string().trim().min(2, "El nombre es obligatorio").max(60),
   unit: z.string().trim().max(30).default("unidad"),
+  barcode: z
+    .string()
+    .trim()
+    .max(30, "El código es muy largo")
+    .refine((v) => v === "" || /^[0-9A-Za-z-]+$/.test(v), "Solo números, letras o guiones")
+    .default(""),
 });
 
 export async function createProductionRecord(input: unknown): Promise<ActionResult> {
@@ -33,16 +41,21 @@ export async function createProductionRecord(input: unknown): Promise<ActionResu
   const supabase = await createClient();
   const totalCost = data.quantity * data.unit_cost;
 
-  const { error } = await supabase.from("production_records").insert({
-    record_date: data.record_date,
-    inventory_item_id: data.inventory_item_id ?? null,
-    description: data.description,
-    quantity: data.quantity,
-    unit: data.unit,
-    unit_cost: data.unit_cost,
-    total_cost: totalCost,
-    notes: data.notes,
-  });
+  const { data: record, error } = await supabase
+    .from("production_records")
+    .insert({
+      record_date: data.record_date,
+      inventory_item_id: data.inventory_item_id ?? null,
+      description: data.description,
+      quantity: data.quantity,
+      unit: data.unit,
+      unit_cost: data.unit_cost,
+      total_cost: totalCost,
+      notes: data.notes,
+      from_caja: data.from_caja,
+    })
+    .select("id")
+    .single();
 
   if (error) return { error: "No se pudo registrar la compra: " + error.message };
 
@@ -67,10 +80,35 @@ export async function createProductionRecord(input: unknown): Promise<ActionResu
         .update({ current_stock: newStock })
         .eq("id", data.inventory_item_id);
     }
+
+    // El precio de la compra actualiza el costo del insumo (para el costo
+    // automático de los productos basado en consumos).
+    if (data.unit_cost > 0) {
+      await supabase
+        .from("inventory_items")
+        .update({ cost: data.unit_cost })
+        .eq("id", data.inventory_item_id);
+    }
+  }
+
+  // Si la compra salió de la caja, la plata sale del saldo (efectivo o
+  // transferencia, según el medio elegido).
+  if (data.from_caja && totalCost > 0) {
+    await supabase.from("caja_movements").insert({
+      movement_date: data.record_date,
+      tipo: "COMPRA",
+      metodo: data.metodo,
+      amount: -totalCost,
+      description: data.description,
+      fuente: "Compra de materia prima",
+      ref_type: "production",
+      ref_id: record.id,
+    });
   }
 
   revalidatePath("/admin/produccion");
   revalidatePath("/admin/inventario");
+  revalidatePath("/admin/caja");
   revalidatePath("/admin");
   return {};
 }
@@ -90,11 +128,15 @@ export async function createItemFromPurchase(input: unknown): Promise<ActionResu
       unit: parsed.data.unit,
       current_stock: 0,
       min_stock: 0,
+      barcode: parsed.data.barcode || null,
     })
     .select("id")
     .single();
 
-  if (error) return { error: "No se pudo crear el insumo" };
+  if (error) {
+    if (error.code === "23505") return { error: "Ese código de barras ya existe" };
+    return { error: "No se pudo crear el insumo" };
+  }
 
   revalidatePath("/admin/produccion");
   revalidatePath("/admin/inventario");

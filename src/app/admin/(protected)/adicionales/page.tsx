@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { AddonManager } from "@/components/admin/addons/addon-manager";
+import { PageHeader } from "@/components/admin/page-header";
 
 export const metadata = {
   title: "Adicionales · TETSUBURGER Admin",
@@ -29,14 +30,11 @@ export default async function AddonsPage() {
   }));
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 p-6">
-      <header>
-        <h1 className="text-2xl font-bold">Adicionales</h1>
-        <p className="text-sm text-muted-foreground">
-          Extras que el cliente puede agregar a los productos. Configura cuánto
-          insumo descuenta cada adicional al entregar.
-        </p>
-      </header>
+    <div className="mx-auto max-w-4xl space-y-6 p-4 lg:p-6">
+      <PageHeader
+        title="Adicionales"
+        description="Extras que el cliente puede agregar a los productos. Configura cuánto insumo descuenta cada adicional al entregar."
+      />
 
       <AddonManager
         initial={addonsRes.data ?? []}

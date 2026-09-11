@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getCogsForOrders, sumCogs } from "@/features/finance/cogs";
 import { revalidatePath } from "next/cache";
 
 export interface ActionResult {
@@ -52,13 +53,23 @@ export async function closeDay(date: string): Promise<ActionResult> {
     .lte("created_at", `${date}T23:59:59-05:00`);
 
   const orders = ordersResult ?? [];
-  const validOrders = orders.filter((o) => o.status !== "CANCELADO");
-  const ordersCount = validOrders.length;
+  const allOrdersCount = orders.length;
+  const cancelledOrders = orders.filter((o) => o.status === "CANCELADO").length;
 
-  // Los ingresos por venta del cierre son SOLO el valor de los productos
-  // (subtotal). Los domicilios no se incluyen: ni retenidos ni externos.
-  const subtotalSales = validOrders.reduce((s, o) => s + Number(o.subtotal), 0);
+  // Las ventas del cierre son SOLO los pedidos ENTREGADO (máximo realismo).
+  // Los ingresos cuentan solo el valor de los productos (subtotal); los
+  // domicilios no se incluyen: ni retenidos ni externos.
+  const deliveredOrders = orders.filter((o) => o.status === "ENTREGADO");
+  const ordersCount = deliveredOrders.length;
+
+  const subtotalSales = deliveredOrders.reduce((s, o) => s + Number(o.subtotal), 0);
   const salesTotal = subtotalSales;
+
+  // Costo de lo vendido: Σ (products.cost × cantidad) de los pedidos ENTREGADO.
+  const { map: cogsByOrder, missingCostCount } = await getCogsForOrders(
+    deliveredOrders.map((o) => o.id)
+  );
+  const cogsTotal = sumCogs(cogsByOrder);
 
   const { data: expenses } = await admin
     .from("expenses")
@@ -67,7 +78,20 @@ export async function closeDay(date: string): Promise<ActionResult> {
 
   const expensesTotal = (expenses ?? []).reduce((s, e) => s + Number(e.amount), 0);
 
-  const byPayment = validOrders.reduce(
+  // Caja esperada del día: solo efectivo físico (el arqueo compara contra la
+  // plata contada en el cajón; las transferencias van al banco). Suma los
+  // movimientos de caja_movements del día en EFECTIVO.
+  const { data: cajaMovements } = await admin
+    .from("caja_movements")
+    .select("amount")
+    .eq("movement_date", date)
+    .eq("metodo", "EFECTIVO");
+  const cajaEsperada = (cajaMovements ?? []).reduce((s, m) => s + Number(m.amount), 0);
+
+  // Utilidad = ventas de productos entregados − costo de lo vendido − gastos.
+  const estimatedProfit = salesTotal - cogsTotal - expensesTotal;
+
+  const byPayment = deliveredOrders.reduce(
     (acc, o) => {
       const method = o.payment_method ?? "EFECTIVO";
       acc[method] = (acc[method] || 0) + Number(o.subtotal);
@@ -81,12 +105,16 @@ export async function closeDay(date: string): Promise<ActionResult> {
     orders_count: ordersCount,
     sales_total: salesTotal,
     expenses_total: expensesTotal,
-    estimated_profit: salesTotal - expensesTotal,
+    estimated_profit: estimatedProfit,
     details: {
       by_payment: byPayment,
-      total_orders: orders.length,
-      cancelled_orders: orders.length - ordersCount,
+      total_orders: allOrdersCount,
+      cancelled_orders: cancelledOrders,
       subtotal_sales: subtotalSales,
+      delivered_orders: ordersCount,
+      cogs_total: cogsTotal,
+      missing_cost_products: missingCostCount,
+      caja_esperada: cajaEsperada,
       includes_domicilios: false,
     },
   });

@@ -115,7 +115,7 @@ async function computeNeeded(
   if (itemIds.length > 0) {
     const { data: addonsData, error: addonsError } = await supabase
       .from("order_item_addons")
-      .select("order_item_id, addon_id, addon_name, quantity")
+      .select("order_item_id, addon_id, addon_name, quantity, target, components_qty")
       .in("order_item_id", itemIds);
 
     if (!addonsError) {
@@ -124,6 +124,8 @@ async function computeNeeded(
         addon_id: string | null;
         addon_name: string;
         quantity: number;
+        target: string | null;
+        components_qty: number | null;
       }>;
       const addonIds = [...new Set(addonRows.map((a) => a.addon_id).filter(Boolean))] as string[];
 
@@ -152,7 +154,10 @@ async function computeNeeded(
                 inv?.name ?? "Insumo",
                 inv?.unit ?? "unidad",
                 Number(inv?.current_stock ?? 0),
-                Number(c.quantity) * (row.quantity || 1) * itemQty,
+                Number(c.quantity) *
+                  (row.quantity || 1) *
+                  (row.target === "EACH" ? (row.components_qty || 1) : 1) *
+                  itemQty,
                 `+ ${row.addon_name}`
               );
             }

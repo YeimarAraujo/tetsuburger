@@ -6,7 +6,10 @@ import { useRouter } from "next/navigation";
 import { Banknote, Landmark, Loader2, Plus, Search, Truck, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import type { CartAddon } from "@/store/cart";
+import type { AddonTipo } from "@/types/db";
+import { itemKey } from "@/store/cart";
 import { createManualOrder } from "@/features/orders/manual-actions";
+import { addonCharged, addonLabel } from "@/lib/addons";
 import { formatCOP } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -40,7 +43,7 @@ export interface ManualProduct {
   price: number;
   image_url: string;
   is_available: boolean;
-  addons: (CartAddon & { available?: boolean })[];
+  addons: (CartAddon & { available?: boolean; tipo?: AddonTipo })[];
 }
 
 interface LineItem {
@@ -50,13 +53,14 @@ interface LineItem {
   addons: CartAddon[];
 }
 
-function lineKey(productId: string, addonIds: string[]) {
-  return `${productId}__${[...addonIds].sort().join(",")}`;
+function lineKey(productId: string, addons: CartAddon[]) {
+  return itemKey(productId, addons);
 }
 
 function lineTotal(line: LineItem): number {
   return (
-    (line.product.price + line.addons.reduce((s, a) => s + a.price, 0)) *
+    (line.product.price +
+      line.addons.reduce((s, a) => s + addonCharged(a), 0)) *
     line.quantity
   );
 }
@@ -76,7 +80,7 @@ export function ManualOrderForm({
   // Diálogo de item
   const [pickerProduct, setPickerProduct] = useState<ManualProduct | null>(null);
   const [pickerQty, setPickerQty] = useState(1);
-  const [pickerAddons, setPickerAddons] = useState<string[]>([]);
+  const [pickerAddons, setPickerAddons] = useState<Record<string, number>>({});
 
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
@@ -106,13 +110,20 @@ export function ManualOrderForm({
   function openPicker(product: ManualProduct) {
     setPickerProduct(product);
     setPickerQty(1);
-    setPickerAddons([]);
+    setPickerAddons({});
   }
 
   function confirmPicker() {
     if (!pickerProduct) return;
-    const addons = pickerProduct.addons.filter((a) => pickerAddons.includes(a.id));
-    const key = lineKey(pickerProduct.id, pickerAddons);
+    const addons = pickerProduct.addons
+      .map((a) => ({
+        id: a.id,
+        name: a.name,
+        price: a.price,
+        quantity: pickerAddons[a.id] ?? 0,
+      }))
+      .filter((a) => a.quantity > 0);
+    const key = lineKey(pickerProduct.id, addons);
 
     setLines((prev) => {
       const existing = prev.find((l) => l.key === key);
@@ -152,7 +163,10 @@ export function ManualOrderForm({
       lines.map((l) => ({
         product_id: l.product.id,
         quantity: l.quantity,
-        addon_ids: l.addons.map((a) => a.id),
+        addons: l.addons.map((a) => ({
+          addon_id: a.id,
+          quantity: a.quantity ?? 1,
+        })),
       }))
     );
 
@@ -246,7 +260,7 @@ export function ManualOrderForm({
                     <span className="font-semibold">{line.quantity}×</span> {line.product.name}
                     {line.addons.length > 0 ? (
                       <span className="block text-xs text-muted-foreground">
-                        + {line.addons.map((a) => a.name).join(", ")}
+                        + {line.addons.map((a) => addonLabel(a)).join(", ")}
                       </span>
                     ) : null}
                   </div>
@@ -421,36 +435,59 @@ export function ManualOrderForm({
           </div>
 
           {pickerProduct && pickerProduct.addons.length > 0 ? (
-            <div className="space-y-1.5">
-              <p className="text-sm font-medium">Adicionales</p>
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Adicionales · cantidad</p>
               {pickerProduct.addons.map((addon) => {
-                const checked = pickerAddons.includes(addon.id);
+                const qty = pickerAddons[addon.id] ?? 0;
                 const noStock = addon.available === false;
                 return (
-                  <label key={addon.id} className={
-                    noStock
-                      ? "flex items-center justify-between rounded-lg border border-dashed p-2.5 text-sm opacity-50"
-                      : "flex cursor-pointer items-center justify-between rounded-lg border p-2.5 text-sm hover:bg-muted/50"
-                  }>
-                    <span className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        disabled={noStock}
-                        onChange={() =>
-                          setPickerAddons((prev) =>
-                            checked ? prev.filter((id) => id !== addon.id) : [...prev, addon.id]
-                          )
-                        }
-                        className="size-4 accent-[var(--primary)]"
-                      />
-                      {addon.name}
+                  <div
+                    key={addon.id}
+                    className={cn(
+                      "flex items-center justify-between gap-2 rounded-lg border p-2.5 text-sm",
+                      noStock ? "border-dashed opacity-50" : "border"
+                    )}
+                  >
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="truncate font-medium">{addon.name}</span>·{" "}
+                      <span className="shrink-0 text-muted-foreground">+{formatCOP(addon.price)}</span>
                       {noStock ? (
                         <span className="text-[10px] font-semibold text-destructive">Sin stock</span>
                       ) : null}
                     </span>
-                    <span className="text-muted-foreground">+{formatCOP(addon.price)}</span>
-                  </label>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className="size-7"
+                        disabled={noStock || qty <= 0}
+                        onClick={() =>
+                          setPickerAddons((prev) => {
+                            const next = { ...prev };
+                            if (qty <= 1) delete next[addon.id];
+                            else next[addon.id] = qty - 1;
+                            return next;
+                          })
+                        }
+                      >
+                        −
+                      </Button>
+                      <span className="w-7 text-center font-semibold">{qty}</span>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className="size-7"
+                        disabled={noStock || qty >= 10}
+                        onClick={() =>
+                          setPickerAddons((prev) => ({ ...prev, [addon.id]: qty + 1 }))
+                        }
+                      >
+                        +
+                      </Button>
+                    </div>
+                  </div>
                 );
               })}
             </div>
@@ -461,7 +498,12 @@ export function ManualOrderForm({
             {pickerProduct
               ? `· ${formatCOP(
                   (pickerProduct.price +
-                    pickerProduct.addons.filter((a) => pickerAddons.includes(a.id)).reduce((s, a) => s + a.price, 0)) * pickerQty
+                    pickerProduct.addons.reduce(
+                      (s, a) =>
+                        s + addonCharged({ ...a, quantity: pickerAddons[a.id] ?? 0 }),
+                      0
+                    )) *
+                    pickerQty
                 )}`
               : ""}
           </Button>

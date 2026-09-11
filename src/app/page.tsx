@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase/server";
 import { computeOpenStatus } from "@/lib/business-hours";
 import { getAddonsAvailability } from "@/lib/consumption-availability";
 import { cn } from "@/lib/utils";
+import { Flame } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -21,11 +22,11 @@ export default async function HomePage() {
       supabase
         .from("products")
         .select(
-          "id, category_id, name, slug, description, price, image_url, is_available, is_featured"
+          "id, category_id, name, slug, description, price, image_url, is_available, is_featured, conteo_hamburguesas, conteo_perros"
         )
         .eq("is_active", true)
         .order("name"),
-      supabase.from("addons").select("id, name, price").eq("is_active", true),
+      supabase.from("addons").select("id, name, price, tipo").eq("is_active", true),
       supabase.from("product_addons").select("product_id, addon_id"),
       supabase.from("settings").select("key, value").eq("is_public", true),
       supabase.from("business_hours").select("*"),
@@ -61,8 +62,11 @@ export default async function HomePage() {
   function toCard(p: {
     id: string; name: string; description: string; price: number;
     image_url: string; is_available: boolean;
+    conteo_hamburguesas: number; conteo_perros: number;
   }): ProductCardData {
     const avail = availabilityByProduct.get(p.id) ?? new Map<string, boolean>();
+    const hamburguesas = Number(p.conteo_hamburguesas) || 0;
+    const perros = Number(p.conteo_perros) || 0;
     return {
       id: p.id,
       name: p.name,
@@ -70,6 +74,9 @@ export default async function HomePage() {
       price: Number(p.price),
       imageUrl: p.image_url,
       isAvailable: p.is_available,
+      isCombo: hamburguesas + perros >= 2,
+      hamburguesas,
+      perros,
       addons: (productAddonsMap.get(p.id) ?? [])
         .map((id) => addonMap.get(id))
         .filter((a): a is NonNullable<typeof a> => Boolean(a))
@@ -78,6 +85,7 @@ export default async function HomePage() {
           name: a.name,
           price: Number(a.price),
           available: avail.get(a.id),
+          tipo: a.tipo,
         })),
     };
   }
@@ -123,7 +131,7 @@ export default async function HomePage() {
             SAZÓN SOBRE LA PLANCHA
           </h1>
 
-          <p className="max-w-xl font-display text-[15px] leading-relaxed tracking-wide text-white sm:text-base lg:text-lg">
+          <p className="max-w-xl text-[15px] leading-relaxed text-white sm:text-base lg:text-lg">
             {status.message}
           </p>
         </div>
@@ -132,8 +140,9 @@ export default async function HomePage() {
       {/* Destacados */}
       {featured.length > 0 ? (
         <section className="mx-auto max-w-5xl px-4 pt-8">
-          <h2 className="mb-3 font-display text-2xl tracking-wide uppercase">
-            🔥 Destacados
+          <h2 className="mb-3 flex items-center gap-2 font-display text-2xl tracking-wide uppercase">
+            <Flame className="size-5 text-primary" />
+            Destacados
           </h2>
           <div className="grid gap-3 sm:grid-cols-2">
             {featured.map((p) => (

@@ -24,6 +24,9 @@ function parseProductForm(formData: FormData): ParseResult<z.infer<typeof produc
     description: formData.get("description") ?? "",
     price: formData.get("price"),
     cost: formData.get("cost") ?? "0",
+    packaging_cost: formData.get("packaging_cost") ?? "0",
+    conteo_hamburguesas: formData.get("conteo_hamburguesas") ?? "0",
+    conteo_perros: formData.get("conteo_perros") ?? "0",
     is_active: formData.get("is_active") === "on",
     is_available: formData.get("is_available") === "on",
     is_featured: formData.get("is_featured") === "on",
@@ -106,6 +109,9 @@ export async function createProduct(formData: FormData): Promise<ActionResult> {
       description: parsed.data.description,
       price: parsed.data.price,
       cost: parsed.data.cost,
+      packaging_cost: parsed.data.packaging_cost,
+      conteo_hamburguesas: parsed.data.conteo_hamburguesas,
+      conteo_perros: parsed.data.conteo_perros,
       is_active: parsed.data.is_active,
       is_available: parsed.data.is_available,
       is_featured: parsed.data.is_featured,
@@ -152,6 +158,9 @@ export async function updateProduct(id: string, formData: FormData): Promise<Act
       description: parsed.data.description,
       price: parsed.data.price,
       cost: parsed.data.cost,
+      packaging_cost: parsed.data.packaging_cost,
+      conteo_hamburguesas: parsed.data.conteo_hamburguesas,
+      conteo_perros: parsed.data.conteo_perros,
       is_active: parsed.data.is_active,
       is_available: parsed.data.is_available,
       is_featured: parsed.data.is_featured,
@@ -201,12 +210,42 @@ export async function setProductFeatured(id: string, value: boolean): Promise<Ac
   return toggleColumn(id, "is_featured", value);
 }
 
+// Actualiza solo el precio (usado por el simulador de Rentabilidad para aplicar
+// el precio sugerido sin tocar el resto del formulario).
+export async function updateProductPrice(id: string, price: number): Promise<ActionResult> {
+  if (!Number.isFinite(price) || price < 0) return { error: "Precio inválido" };
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("products").update({ price }).eq("id", id);
+  if (error) return { error: "No se pudo actualizar el precio" };
+
+  revalidatePath("/admin/rentabilidad");
+  revalidatePath("/admin/productos");
+  revalidatePath("/");
+  return {};
+}
+
+// Actualiza solo el costo (usado para aplicar el costo automático calculado
+// desde los consumos de insumos, manteniendo el control manual).
+export async function updateProductCost(id: string, cost: number): Promise<ActionResult> {
+  if (!Number.isFinite(cost) || cost < 0) return { error: "Costo inválido" };
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("products").update({ cost }).eq("id", id);
+  if (error) return { error: "No se pudo actualizar el costo" };
+
+  revalidatePath("/admin/rentabilidad");
+  revalidatePath("/admin/productos");
+  return {};
+}
+
 /* ---------------------------------- Adicionales -------------------------------- */
 
 function parseAddonForm(formData: FormData): ParseResult<z.infer<typeof addonSchema>> {
   const raw = {
     name: formData.get("name"),
     price: formData.get("price"),
+    tipo: formData.get("es_acompanamiento") === "on" ? "ACOMPAÑAMIENTO" : "ALIMENTO",
     is_active: formData.get("is_active") === "on",
   };
   const parsed = addonSchema.safeParse(raw);

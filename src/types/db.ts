@@ -13,6 +13,17 @@ export type OrderOrigin = "WEB" | "MANUAL";
 export type DeliveryType = "DOMICILIO" | "RECOGIDA" | "LOCAL";
 export type MovementType = "ENTRADA" | "SALIDA" | "AJUSTE" | "PRODUCCION";
 export type PaymentMethod = "EFECTIVO" | "TRANSFERENCIA";
+export type CajaTipo =
+  | "VENTA_EFECTIVO"
+  | "VENTA_TRANSFERENCIA"
+  | "COMPRA"
+  | "GASTO"
+  | "INGRESO_EXTRA"
+  | "RETIRO"
+  | "AJUSTE";
+
+/** Canal por el que entra/sale el dinero en un movimiento de caja. */
+export type CajaMetodo = "EFECTIVO" | "TRANSFERENCIA";
 
 export interface Role {
   id: number;
@@ -54,10 +65,14 @@ export interface Product {
   updated_at: string;
 }
 
+export type AddonTipo = "ALIMENTO" | "ACOMPAÑAMIENTO";
+
 export interface Addon {
   id: string;
   name: string;
   price: number;
+  /** ACOMPAÑAMIENTO (bebidas, papas, paquetes) = no se adjunta a un producto del combo. */
+  tipo: AddonTipo;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -111,6 +126,10 @@ export interface OrderItemAddon {
   addon_name: string;
   addon_price: number;
   quantity: number;
+  /** En combos: "EACH" (a cada producto), "HAMBURGUESA" o "PERRO". */
+  target: string | null;
+  /** Número de productos del combo cuando target === "EACH". */
+  components_qty: number | null;
 }
 
 export interface OrderStatusHistory {
@@ -202,6 +221,22 @@ export interface InventoryMovement {
   movement_type: MovementType;
   quantity: number;
   reference: string;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface CajaMovement {
+  id: string;
+  movement_date: string;
+  tipo: CajaTipo;
+  /** Canal por el que entra/sale el dinero: efectivo o transferencia. */
+  metodo: CajaMetodo;
+  /** Positivo = entra a caja, negativo = sale. */
+  amount: number;
+  description: string;
+  fuente: string;
+  ref_type: string | null;
+  ref_id: string | null;
   created_by: string | null;
   created_at: string;
 }

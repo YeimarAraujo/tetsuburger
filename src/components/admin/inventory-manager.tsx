@@ -1,10 +1,12 @@
-"use client";
+﻿"use client";
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, ArrowDownCircle, ArrowUpCircle, Loader2, Pencil, Plus, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { createInventoryItem, updateInventoryItem, registerMovement } from "@/features/inventory/actions";
+import { formatCOP } from "@/lib/format";
+import { BarcodeCameraButton } from "@/components/admin/barcode-camera";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -15,15 +17,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { UNITS } from "@/lib/units";
 
-interface ItemRow {
+export interface ItemRow {
   id: string;
   name: string;
   unit: string;
   current_stock: number;
   min_stock: number;
+  cost: number;
+  barcode: string | null;
 }
 
-interface MovementRow {
+export interface MovementRow {
   id: string;
   inventory_item_id: string;
   movement_type: string;
@@ -41,22 +45,25 @@ export function InventoryManager({
   movements: MovementRow[];
 }) {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
   const [itemDialog, setItemDialog] = useState(false);
   const [moveDialog, setMoveDialog] = useState(false);
   const [editing, setEditing] = useState<ItemRow | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [barcodeValue, setBarcodeValue] = useState("");
 
   function openCreateItem() {
     setEditing(null);
     setError(null);
+    setBarcodeValue("");
     setItemDialog(true);
   }
 
   function openEditItem(item: ItemRow) {
     setEditing(item);
     setError(null);
+    setBarcodeValue(item.barcode ?? "");
     setItemDialog(true);
   }
 
@@ -71,6 +78,8 @@ export function InventoryManager({
       unit: String(fd.get("unit") ?? "unidad"),
       current_stock: String(fd.get("current_stock") ?? "0"),
       min_stock: String(fd.get("min_stock") ?? "0"),
+      cost: String(fd.get("cost") ?? "0"),
+      barcode: String(fd.get("barcode") ?? ""),
     };
 
     const result = editing
@@ -136,6 +145,11 @@ export function InventoryManager({
                 <div>
                   <p className="font-bold">{item.name}</p>
                   <p className="text-xs text-muted-foreground">{item.unit}</p>
+                  {item.barcode ? (
+                    <Badge variant="secondary" className="mt-1 font-mono text-[10px]">
+                      {item.barcode}
+                    </Badge>
+                  ) : null}
                 </div>
                 <div className="flex items-center gap-2">
                   {low ? (
@@ -158,6 +172,10 @@ export function InventoryManager({
               <div className="flex items-center justify-between border-t px-4 py-2">
                 <span className="text-xs text-muted-foreground">Mínimo</span>
                 <span className="text-sm text-muted-foreground">{item.min_stock} {item.unit}</span>
+              </div>
+              <div className="flex items-center justify-between border-t px-4 py-2">
+                <span className="text-xs text-muted-foreground">Costo / unidad</span>
+                <span className="text-sm font-semibold text-primary">{formatCOP(item.cost)}</span>
               </div>
             </Card>
           );
@@ -243,6 +261,30 @@ export function InventoryManager({
             <div className="space-y-2">
               <Label>Stock actual</Label>
               <Input name="current_stock" type="number" min={0} step={0.1} defaultValue={editing?.current_stock ?? 0} />
+            </div>
+            <div className="space-y-2">
+              <Label>Costo / unidad (COP)</Label>
+              <Input name="cost" type="number" min={0} step={100} defaultValue={editing?.cost ?? 0} placeholder="0" />
+              <p className="text-xs text-muted-foreground">
+                Se actualiza solo al registrar compras. Se usa para calcular el costo
+                de los productos según sus consumos.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label>Código de barras</Label>
+              <div className="flex gap-2">
+                <Input
+                  name="barcode"
+                  value={barcodeValue}
+                  onChange={(e) => setBarcodeValue(e.target.value)}
+                  placeholder="Escanea o escribe (opcional)"
+                  className="font-mono"
+                />
+                <BarcodeCameraButton onDetected={(code) => setBarcodeValue(code)} />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Con el lector USB basta apuntar al campo. Con el teléfono usa «Escanear».
+              </p>
             </div>
             {error ? <p className="text-sm font-medium text-destructive">{error}</p> : null}
             <div className="flex justify-end gap-2">

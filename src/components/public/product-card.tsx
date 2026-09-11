@@ -2,12 +2,17 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { Check, Loader2, Plus, ShoppingCart, X } from "lucide-react";
+import { Loader2, Minus, Plus, ShoppingCart, X } from "lucide-react";
 import { toast } from "sonner";
 import type { CartAddon } from "@/store/cart";
 import { useCart } from "@/store/cart";
+import { addonCharged } from "@/lib/addons";
+import type { AddonTarget } from "@/lib/addons";
+import type { AddonTipo } from "@/types/db";
 import { formatCOP } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { InfoTip } from "@/components/ui/info-tip";
 import {
   Dialog,
   DialogContent,
@@ -22,17 +27,103 @@ export interface ProductCardData {
   price: number;
   imageUrl: string;
   isAvailable: boolean;
-  addons: (CartAddon & { available?: boolean })[];
+  /** Suma de conteos >= 2 ⇒ se trata como combo. */
+  isCombo: boolean;
+  hamburguesas: number;
+  perros: number;
+  addons: (CartAddon & { available?: boolean; tipo?: AddonTipo })[];
 }
+
+interface AddonSel {
+  qty: number;
+  /** "Añadir una adición a cada producto del combo" */
+  each: boolean;
+  slot: "HAMBURGUESA" | "PERRO";
+}
+
+const MAX_ADDON_QTY = 10;
 
 export function ProductCard({ product }: { product: ProductCardData }) {
   const { addItem } = useCart();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [imageOpen, setImageOpen] = useState(false);
-  const [selected, setSelected] = useState<string[]>([]);
+  const [sel, setSel] = useState<Record<string, AddonSel>>({});
   const [adding, setAdding] = useState(false);
 
   const soldOut = !product.isAvailable;
+  const hasMix = product.isCombo && product.hamburguesas > 0 && product.perros > 0;
+  const components = product.hamburguesas + product.perros;
+
+  function resetSel() {
+    setSel({});
+  }
+
+  function bump(id: string, delta: number) {
+    setSel((prev) => {
+      const cur = prev[id]?.qty ?? 0;
+      const qty = Math.min(MAX_ADDON_QTY, Math.max(0, cur + delta));
+      if (qty === 0) {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      }
+      return {
+        ...prev,
+        [id]: {
+          qty,
+          each: prev[id]?.each ?? false,
+          slot: prev[id]?.slot ?? "HAMBURGUESA",
+        },
+      };
+    });
+  }
+
+  function setEach(id: string, each: boolean) {
+    setSel((prev) =>
+      prev[id] && prev[id].qty > 0
+        ? { ...prev, [id]: { ...prev[id], each } }
+        : prev
+    );
+  }
+
+  function setSlot(id: string, slot: "HAMBURGUESA" | "PERRO") {
+    setSel((prev) =>
+      prev[id] && prev[id].qty > 0
+        ? { ...prev, [id]: { ...prev[id], slot, each: false } }
+        : prev
+    );
+  }
+
+  function selectionOn(addon: CartAddon): CartAddon | null {
+    const s = sel[addon.id];
+    if (!s || s.qty <= 0) return null;
+    const esAlimento = (addon as { tipo?: AddonTipo }).tipo !== "ACOMPAÑAMIENTO";
+    const target: AddonTarget | undefined = esAlimento
+      ? s.each
+        ? "EACH"
+        : product.isCombo && hasMix
+          ? (s.slot as AddonTarget)
+          : undefined
+      : undefined;
+    return {
+      id: addon.id,
+      name: addon.name,
+      price: addon.price,
+      quantity: s.qty,
+      target,
+      components: target === "EACH" ? components : undefined,
+    };
+  }
+
+  function addOnes(addons: CartAddon[]) {
+    return addons
+      .map((a) => selectionOn(a))
+      .filter((a): a is CartAddon => a !== null);
+  }
+
+  function addonsTotal(addons: CartAddon[]): number {
+    return addOnes(addons).reduce((s, a) => s + addonCharged(a), 0);
+  }
 
   function addDirect() {
     setAdding(true);
@@ -49,7 +140,7 @@ export function ProductCard({ product }: { product: ProductCardData }) {
   }
 
   function addWithAddons() {
-    const addons = product.addons.filter((a) => selected.includes(a.id));
+    const addons = addOnes(product.addons);
     addItem({
       productId: product.id,
       name: product.name,
@@ -60,7 +151,7 @@ export function ProductCard({ product }: { product: ProductCardData }) {
     });
     toast.success(`${product.name} agregado al carrito`);
     setDialogOpen(false);
-    setSelected([]);
+    resetSel();
   }
 
   return (
@@ -204,8 +295,14 @@ export function ProductCard({ product }: { product: ProductCardData }) {
       </Dialog>
 
       {/* Selector de adicionales */}
-      <Dialog open={dialogOpen} onOpenChange={(o) => { setDialogOpen(o); if (!o) setSelected([]); }}>
-        <DialogContent className="sm:max-w-md">
+      <Dialog
+        open={dialogOpen}
+        onOpenChange={(o) => {
+          setDialogOpen(o);
+          if (!o) resetSel();
+        }}
+      >
+        <DialogContent className="sm:max-w-md" onOpenAutoFocus={(e) => e.preventDefault()}>
           <DialogHeader>
             <DialogTitle>{product.name}</DialogTitle>
           </DialogHeader>
@@ -214,53 +311,153 @@ export function ProductCard({ product }: { product: ProductCardData }) {
             {formatCOP(product.price)}
           </p>
 
+          {product.isCombo ? (
+            <p className="-mt-2 flex items-center gap-1.5 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+              <span>
+                Combo: {product.hamburguesas} {product.hamburguesas === 1 ? "hamburguesa" : "hamburguesas"} ·{" "}
+                {product.perros} {product.perros === 1 ? "perro" : "perros"}
+              </span>
+              <InfoTip
+                content={{
+                  title: "Adiciones en combos",
+                  what: "Puedes añadir una adición a cada producto del combo, o elegir a la hamburguesa o al perro.",
+                  suggestion: `Cada unidad extra se cobra por separado. "A cada producto" aplica y cobra a los ${components} productos del combo.`,
+                }}
+              />
+            </p>
+          ) : null}
+
           {product.addons.length > 0 ? (
-            <div className="space-y-1.5">
+            <div className="space-y-3">
               <p className="text-sm font-medium">¿Quieres agregar algo más?</p>
               {product.addons.map((addon) => {
-                const checked = selected.includes(addon.id);
                 const noStock = addon.available === false;
+                const state = sel[addon.id];
+                const qty = state?.qty ?? 0;
+                const each = state?.each ?? false;
                 return (
-                  <label
+                  <div
                     key={addon.id}
-                    className={
+                    className={cn(
+                      "rounded-lg border p-3 text-sm transition-colors",
                       noStock
-                        ? "flex items-center justify-between rounded-lg border border-dashed p-3 text-sm opacity-50"
-                        : "flex cursor-pointer items-center justify-between rounded-lg border p-3 text-sm transition-colors has-[[data-state=checked]]:border-primary"
-                    }
+                        ? "border-dashed opacity-50"
+                        : qty > 0
+                          ? "border-primary bg-primary/5"
+                          : "border"
+                    )}
                   >
-                    <span className="flex items-center gap-3">
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        disabled={noStock}
-                        onChange={() =>
-                          setSelected((prev) =>
-                            checked
-                              ? prev.filter((id) => id !== addon.id)
-                              : [...prev, addon.id]
-                          )
-                        }
-                        className="sr-only"
-                        data-state={checked ? "checked" : "unchecked"}
-                      />
-                      <span
-                        className={`flex size-5 items-center justify-center rounded border ${checked ? "border-primary bg-primary text-primary-foreground" : ""
-                          }`}
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-medium">
+                          {addon.name}
+                          {noStock ? (
+                            <span className="ml-2 text-[10px] font-semibold text-destructive">
+                              Sin stock
+                            </span>
+                          ) : null}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          +{formatCOP(addon.price)} c/u
+                        </p>
+                      </div>
+
+                      {/* Stepper de cantidad */}
+                      <div
+                        className={cn(
+                          "flex items-center rounded-full border",
+                          noStock && "pointer-events-none opacity-40"
+                        )}
                       >
-                        {checked ? <Check className="size-3.5" /> : null}
-                      </span>
-                      {addon.name}
-                      {noStock ? (
-                        <span className="text-[10px] font-semibold text-destructive">
-                          Sin stock
+                        <button
+                          type="button"
+                          onClick={() => bump(addon.id, -1)}
+                          disabled={qty <= 0 || noStock}
+                          className="flex size-8 items-center justify-center rounded-l-full text-muted-foreground transition-colors hover:bg-muted disabled:opacity-30"
+                          aria-label={`Quitar ${addon.name}`}
+                        >
+                          <Minus className="size-4" />
+                        </button>
+                        <span className="min-w-8 text-center text-sm font-semibold">
+                          {qty}
                         </span>
-                      ) : null}
-                    </span>
-                    <span className="font-medium text-muted-foreground">
-                      +{formatCOP(addon.price)}
-                    </span>
-                  </label>
+                        <button
+                          type="button"
+                          onClick={() => bump(addon.id, 1)}
+                          disabled={noStock || qty >= MAX_ADDON_QTY}
+                          className="flex size-8 items-center justify-center rounded-r-full text-muted-foreground transition-colors hover:bg-muted disabled:opacity-30"
+                          aria-label={`Añadir ${addon.name}`}
+                        >
+                          <Plus className="size-4" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {product.isCombo && qty > 0 && addon.tipo !== "ACOMPAÑAMIENTO" ? (
+                      <div className="mt-3 space-y-2 border-t pt-3">
+                        <label className="flex cursor-pointer items-center gap-2 text-xs font-medium">
+                          <input
+                            type="checkbox"
+                            checked={each}
+                            onChange={(e) => setEach(addon.id, e.target.checked)}
+                            className="size-4"
+                          />
+                          Añadir una adición a cada producto del combo
+                        </label>
+
+                        {!each && hasMix ? (
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground">
+                              Destino:
+                            </span>
+                            <div className="flex overflow-hidden rounded-lg border">
+                              <button
+                                type="button"
+                                onClick={() => setSlot(addon.id, "HAMBURGUESA")}
+                                className={cn(
+                                  "px-3 py-1 text-xs font-semibold transition-colors",
+                                  state?.slot === "HAMBURGUESA"
+                                    ? "bg-primary text-primary-foreground"
+                                    : "hover:bg-muted"
+                                )}
+                              >
+                                La hamburguesa
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setSlot(addon.id, "PERRO")}
+                                className={cn(
+                                  "border-l px-3 py-1 text-xs font-semibold transition-colors",
+                                  state?.slot === "PERRO"
+                                    ? "bg-primary text-primary-foreground"
+                                    : "hover:bg-muted"
+                                )}
+                              >
+                                El perro
+                              </button>
+                            </div>
+                          </div>
+                        ) : null}
+
+                        {each ? (
+                          <p className="text-[11px] text-muted-foreground">
+                            {qty} {qty === 1 ? "unidad" : "unidades"} ×{" "}
+                            {components} productos ={" "}
+                            <span className="font-semibold text-foreground">
+                              {formatCOP(addon.price * qty * components)}
+                            </span>
+                          </p>
+                        ) : (
+                          <p className="text-[11px] text-muted-foreground">
+                            {qty} {qty === 1 ? "unidad" : "unidades"} ={" "}
+                            <span className="font-semibold text-foreground">
+                              {formatCOP(addon.price * qty)}
+                            </span>
+                          </p>
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
                 );
               })}
             </div>
@@ -268,13 +465,7 @@ export function ProductCard({ product }: { product: ProductCardData }) {
 
           <Button size="lg" onClick={addWithAddons}>
             <ShoppingCart className="size-4" />
-            Agregar ·{" "}
-            {formatCOP(
-              product.price +
-              product.addons
-                .filter((a) => selected.includes(a.id))
-                .reduce((s, a) => s + a.price, 0)
-            )}
+            Agregar · {formatCOP(product.price + addonsTotal(product.addons))}
           </Button>
         </DialogContent>
       </Dialog>

@@ -1,5 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
+import { getCogsForOrders, sumCogs } from "@/features/finance/cogs";
 import { FinanzasManager } from "@/components/admin/finanzas-manager";
+import { PageHeader } from "@/components/admin/page-header";
 
 export const dynamic = "force-dynamic";
 
@@ -49,7 +51,7 @@ export default async function FinanzasPage({
       .lte("record_date", to),
     supabase
       .from("daily_closings")
-      .select("id, closing_date, orders_count, sales_total, expenses_total, estimated_profit")
+      .select("id, closing_date, orders_count, sales_total, expenses_total, estimated_profit, details")
       .gte("closing_date", from)
       .lte("closing_date", to)
       .order("closing_date", { ascending: false }),
@@ -77,22 +79,29 @@ export default async function FinanzasPage({
     id: string; closing_date: string; orders_count: number;
     sales_total: string | number; expenses_total: string | number;
     estimated_profit: string | number;
+    details: Record<string, unknown> | null;
   }[];
+
+  // Costo de lo vendido de los pedidos entregados en el período (misma
+  // fórmula que cierre/dashboard): Σ products.cost × cantidad.
+  const deliveredIds = orders.filter((o) => o.status === "ENTREGADO").map((o) => o.id);
+  const { map: cogsByOrder, missingCostCount } = await getCogsForOrders(deliveredIds);
+  const cogsTotal = sumCogs(cogsByOrder);
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-4 lg:p-6">
-      <header>
-        <h1 className="font-display text-3xl tracking-wide">FINANZAS</h1>
-        <p className="text-sm text-muted-foreground">
-          Resumen financiero del período · ventas, gastos, costos de producción y utilidad
-        </p>
-      </header>
+      <PageHeader
+        title="Finanzas"
+        description="Resumen financiero del período · ventas entregadas, costo de lo vendido, gastos y utilidad"
+      />
 
       <FinanzasManager
         orders={orders}
         expenses={expenses}
         production={production}
         closings={closings}
+        cogsTotal={cogsTotal}
+        missingCostCount={missingCostCount}
         filters={{ from, to }}
       />
     </div>

@@ -1,12 +1,14 @@
-"use client";
+﻿"use client";
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Plus, PackagePlus } from "lucide-react";
+import { CircleCheck, Loader2, PackagePlus, Plus, Search } from "lucide-react";
 import { toast } from "sonner";
 import { createProductionRecord, createItemFromPurchase } from "@/features/production/actions";
+import { findInventoryItemByBarcode } from "@/features/inventory/actions";
 import { formatCOP, formatDate } from "@/lib/format";
 import { Button } from "@/components/ui/button";
+import { KpiCard } from "@/components/admin/kpi-card";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -14,12 +16,14 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { BarcodeCameraButton } from "@/components/admin/barcode-camera";
 import { UNITS } from "@/lib/units";
 
 interface InventoryItem {
   id: string;
   name: string;
   unit: string;
+  barcode: string | null;
 }
 
 interface ProdRow {
@@ -48,7 +52,7 @@ export function ProductionManager({
   inventoryItems: InventoryItem[];
 }) {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newItemDialog, setNewItemDialog] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -57,8 +61,29 @@ export function ProductionManager({
   const [quantity, setQuantity] = useState<string>("");
   const [unitCost, setUnitCost] = useState<string>("");
   const [items, setItems] = useState<InventoryItem[]>(inventoryItems);
+  const [barcodeInput, setBarcodeInput] = useState("");
+  const [scanning, setScanning] = useState(false);
+  const [scanMsg, setScanMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [newItemBarcode, setNewItemBarcode] = useState("");
 
   const totalCost = (Number(quantity) || 0) * (Number(unitCost) || 0);
+
+  async function doScan(codeOverride?: string) {
+    const code = (codeOverride ?? barcodeInput).trim();
+    if (!code) return;
+    setScanning(true);
+    setScanMsg(null);
+    const item = await findInventoryItemByBarcode(code);
+    setScanning(false);
+    if (item) {
+      setSelectedItem(item.id);
+      setScanMsg({ ok: true, text: `Encontrado: ${item.name}. Solo completa cantidad, costo y describe.` });
+    } else {
+      setNewItemBarcode(code);
+      setNewItemDialog(true);
+      setScanMsg({ ok: false, text: "Ese código no estaba en inventario: crea el insumo para guardarlo." });
+    }
+  }
 
   async function handleRecordSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -74,6 +99,8 @@ export function ProductionManager({
       unit: String(fd.get("unit") ?? "unidad"),
       unit_cost: String(fd.get("unit_cost") ?? "0"),
       notes: String(fd.get("notes") ?? ""),
+      from_caja: String(fd.get("from_caja") === "on"),
+      metodo: String(fd.get("metodo") ?? "EFECTIVO"),
     };
 
     const result = await createProductionRecord(payload);
@@ -97,6 +124,7 @@ export function ProductionManager({
     const payload = {
       name: String(fd.get("name") ?? ""),
       unit: String(fd.get("unit") ?? "unidad"),
+      barcode: String(fd.get("barcode") ?? ""),
     };
 
     const result = await createItemFromPurchase(payload);
@@ -104,12 +132,14 @@ export function ProductionManager({
     if (result.error) { setError(result.error); return; }
 
     if (result.id) {
-      setItems((prev) => [...prev, { id: result.id!, name: payload.name, unit: payload.unit }]);
+      setItems((prev) => [...prev, { id: result.id!, name: payload.name, unit: payload.unit, barcode: payload.barcode || null }]);
       setSelectedItem(result.id);
     }
 
     toast.success("Insumo creado");
     setNewItemDialog(false);
+    setBarcodeInput("");
+    setScanMsg(null);
   }
 
   // Agrupar por día
@@ -134,21 +164,22 @@ export function ProductionManager({
 
       {/* Resumen del día de hoy */}
       {records.filter((r) => r.record_date === bogotaToday()).length > 0 ? (
-        <Card className="border-primary/30 bg-primary/5">
-          <CardContent className="py-4">
-            <p className="text-sm font-medium text-primary">Compras de hoy</p>
-            <p className="text-2xl font-bold">
-              {formatCOP(
-                records
-                  .filter((r) => r.record_date === bogotaToday())
-                  .reduce((s, r) => s + Number(r.total_cost), 0)
-              )}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {records.filter((r) => r.record_date === bogotaToday()).length} registros
-            </p>
-          </CardContent>
-        </Card>
+        <KpiCard
+          icon={PackagePlus}
+          tileClassName="bg-primary/10"
+          iconClassName="text-primary"
+          label="Compras de hoy"
+          value={formatCOP(
+            records
+              .filter((r) => r.record_date === bogotaToday())
+              .reduce((s, r) => s + Number(r.total_cost), 0)
+          )}
+          caption={`${records.filter((r) => r.record_date === bogotaToday()).length} registros`}
+          help={{
+            what: "Total invertido hoy en materia prima registrado en Producción. El stock se actualiza automáticamente.",
+            formula: "Σ total_cost de las compras del día",
+          }}
+        />
       ) : null}
 
       {/* Lista por día */}
@@ -222,6 +253,34 @@ export function ProductionManager({
             <DialogTitle>Registrar compra del día</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleRecordSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label>Código de barras del empaque</Label>
+              <div className="flex gap-2">
+                <Input
+                  value={barcodeInput}
+                  onChange={(e) => setBarcodeInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); doScan(); } }}
+                  placeholder="Escanea con el lector o pega el código…"
+                  className="font-mono"
+                  autoFocus
+                />
+                <Button type="button" variant="outline" onClick={() => doScan()} disabled={scanning}>
+                  {scanning ? <Loader2 className="size-4 animate-spin" /> : <Search className="size-4" />}
+                  Buscar
+                </Button>
+                <BarcodeCameraButton onDetected={(code) => doScan(code)} />
+              </div>
+              {scanMsg ? (
+                <p className={`text-xs ${scanMsg.ok ? "text-emerald-600" : "text-amber-600"}`}>
+                  {scanMsg.text}
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Si el insumo ya existe en inventario se preselecciona abajo; si no, se crea con ese código.
+                </p>
+              )}
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Fecha</Label>
@@ -236,16 +295,22 @@ export function ProductionManager({
                     </SelectTrigger>
                     <SelectContent>
                       {items.map((i) => (
-                        <SelectItem key={i.id} value={i.id}>{i.name} ({i.unit})</SelectItem>
+                        <SelectItem key={i.id} value={i.id}>
+                          {i.name} ({i.unit})
+                          {i.barcode ? ` · ${i.barcode}` : ""}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                  <Button type="button" variant="outline" size="icon" onClick={() => setNewItemDialog(true)}>
+                  <Button type="button" variant="outline" size="icon" onClick={() => { setNewItemBarcode(""); setNewItemDialog(true); }}>
                     <Plus className="size-4" />
                   </Button>
                 </div>
                 {selectedItem && (
-                  <p className="text-xs text-emerald-600">✓ El stock se actualizará automáticamente</p>
+                  <p className="flex items-center gap-1.5 text-xs text-emerald-600">
+                    <CircleCheck className="size-3.5" />
+                    El stock se actualizará automáticamente
+                  </p>
                 )}
               </div>
             </div>
@@ -287,6 +352,30 @@ export function ProductionManager({
                 <p className="text-xl font-bold text-primary">{formatCOP(totalCost)}</p>
               </div>
             )}
+
+            <div className="space-y-1">
+              <label className="flex items-center gap-2 text-sm font-medium">
+                <input type="checkbox" name="from_caja" className="size-4" />
+                ¿Esta compra salió de la caja?
+              </label>
+              <p className="text-xs text-muted-foreground">
+                Marca si salió de la caja: se descuenta del saldo del módulo
+                Caja y Pagos.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Medio de pago (si sale de caja)</Label>
+              <Select name="metodo" defaultValue="EFECTIVO">
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="EFECTIVO">Efectivo</SelectItem>
+                  <SelectItem value="TRANSFERENCIA">Transferencia</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
             <div className="space-y-2">
               <Label>Notas</Label>
@@ -331,6 +420,18 @@ export function ProductionManager({
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Código de barras</Label>
+              <Input
+                name="barcode"
+                defaultValue={newItemBarcode}
+                placeholder="Escanea o escribe (opcional)"
+                className="font-mono"
+              />
+              <p className="text-xs text-muted-foreground">
+                Quedará guardado para que la próxima compra se identifique al escanear.
+              </p>
             </div>
             {error ? <p className="text-sm font-medium text-destructive">{error}</p> : null}
             <div className="flex justify-end gap-2">

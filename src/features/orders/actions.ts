@@ -4,8 +4,10 @@ import { headers } from "next/headers";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { computeOpenStatus } from "@/lib/business-hours";
-import { formatCOP, formatOrderNumber } from "@/lib/format";
+import { formatCOP } from "@/lib/format";
 import { rateLimit, RATE_LIMITS } from "@/lib/rate-limit";
+import { addonLabel } from "@/lib/addons";
+import { buildWhatsappMessage } from "@/lib/whatsapp";
 import {
   buildOrderFromItems,
   persistOrder,
@@ -16,6 +18,7 @@ export interface PlaceOrderResult {
   orderNumber?: number;
   total?: number;
   whatsappUrl?: string;
+  confirmationToken?: string;
 }
 
 const customerSchema = z.object({
@@ -34,53 +37,6 @@ const customerSchema = z.object({
     { message: "Ingresa una dirección válida para el domicilio", path: ["customer_address"] }
   );
 
-function paymentLabel(method: "EFECTIVO" | "TRANSFERENCIA"): string {
-  return method === "EFECTIVO" ? "Efectivo" : "Transferencia";
-}
-
-function buildWhatsappMessage(params: {
-  orderNumber: number;
-  lines: string[];
-  subtotal: number;
-  deliveryFee: number;
-  total: number;
-  paymentMethod: "EFECTIVO" | "TRANSFERENCIA";
-  name: string;
-  phone: string;
-  address: string;
-  notes: string;
-}): string {
-  const {
-    orderNumber, lines, subtotal, deliveryFee, total, paymentMethod,
-    name, phone, address, notes,
-  } = params;
-
-  const parts = [
-    `*Pedido ${formatOrderNumber(orderNumber)}* — TETSUBURGER`,
-    "",
-    ...lines,
-    "",
-    `Subtotal: ${formatCOP(subtotal)}`,
-    ...(deliveryFee > 0 ? [`Domicilio: ${formatCOP(deliveryFee)}`] : []),
-    `(El valor del domicilio puede variar dependiendo de la distancia y la hora. En breve te lo confirmamos.)`,
-    `*Total: ${formatCOP(total)}*`,
-    `Medio de pago: ${paymentLabel(paymentMethod)}`,
-    "",
-    `Nombre: ${name}`,
-    ...(address ? [`Dirección: ${address}`] : ["Modalidad: Recoger en el local"]),
-    `Teléfono: ${phone}`,
-    ...(notes ? ["", `Nota: ${notes}`] : []),
-  ];
-
-  return parts.join("\n");
-}
-
-/**
- * Pedido WEB. Reglas de oro:
- * - Los precios SIEMPRE se leen de la BD (nunca del cliente).
- * - Se valida estado del negocio y horario en el servidor.
- * - Escritura con service_role (orders no acepta INSERT anónimo).
- */
 export async function placeOrder(
   customerRaw: unknown,
   itemsRaw: unknown
@@ -167,6 +123,7 @@ export async function placeOrder(
     return {
       orderNumber: persisted.orderNumber,
       total,
+      confirmationToken: persisted.confirmationToken,
       error: "Pedido registrado, pero falta configurar el número de WhatsApp.",
     };
   }
@@ -174,8 +131,8 @@ export async function placeOrder(
   const lines = built.lines.map((line) => {
     const base = `${line.quantity}x ${line.productName}`;
     if (line.addons.length === 0) return `${base} (${formatCOP(line.unitPrice * line.quantity)})`;
-    const extras = line.addons.map((a) => `   + ${a.name}`).join("\n");
-    return `${base}\n${extras}`;
+    const extras = line.addons.map((a) => addonLabel(a)).join(", ");
+    return `${base} (${formatCOP(line.unitPrice * line.quantity)}) · + ${extras}`;
   });
 
   const message = buildWhatsappMessage({
@@ -193,5 +150,10 @@ export async function placeOrder(
 
   const whatsappUrl = `https://wa.me/${waNumber}?text=${encodeURIComponent(message)}`;
 
-  return { orderNumber: persisted.orderNumber, total, whatsappUrl };
+  return {
+    orderNumber: persisted.orderNumber,
+    total,
+    whatsappUrl,
+    confirmationToken: persisted.confirmationToken,
+  };
 }

@@ -2,15 +2,23 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import type { AddonTarget } from "@/lib/addons";
+import { addonCharged } from "@/lib/addons";
 
 export interface CartAddon {
   id: string;
   name: string;
   price: number;
+  /** Cuántas unidades de la adición (por ejemplo 2× tocineta). 1 si se omite. */
+  quantity?: number;
+  /** En combos: "EACH" (a cada producto), "HAMBURGUESA" o "PERRO". */
+  target?: AddonTarget;
+  /** Número de productos del combo cuando target === "EACH". */
+  components?: number;
 }
 
 export interface CartItem {
-  /** Identifica la combinación producto + adicionales */
+  /** Identifica la combinación producto + adicionales (cantidad, a dónde aplica). */
   key: string;
   productId: string;
   name: string;
@@ -28,13 +36,20 @@ interface CartState {
   clear: () => void;
 }
 
-export function itemKey(productId: string, addonIds: string[]): string {
-  return `${productId}__${[...addonIds].sort().join(",")}`;
+function addonSegment(a: CartAddon): string {
+  const qty = a.quantity ?? 1;
+  const target = a.target ? `:${a.target}` : "";
+  const components = a.target === "EACH" ? `:${a.components ?? 1}` : "";
+  return `${a.id}>${qty}${target}${components}`;
+}
+
+export function itemKey(productId: string, addons: CartAddon[]): string {
+  return `${productId}__${addons.map(addonSegment).sort().join(",")}`;
 }
 
 export function itemUnitPrice(item: CartItem): number {
   return (
-    item.price + item.addons.reduce((sum, a) => sum + a.price, 0)
+    item.price + item.addons.reduce((sum, a) => sum + addonCharged(a), 0)
   );
 }
 
@@ -53,7 +68,7 @@ export const useCart = create<CartState>()(
 
       addItem: (item) =>
         set((state) => {
-          const key = itemKey(item.productId, item.addons.map((a) => a.id));
+          const key = itemKey(item.productId, item.addons);
           const existing = state.items.find((i) => i.key === key);
 
           if (existing) {
@@ -80,6 +95,25 @@ export const useCart = create<CartState>()(
 
       clear: () => set({ items: [] }),
     }),
-    { name: "tetsuburger-cart" }
+    {
+      name: "tetsuburger-cart",
+      version: 2,
+      migrate: (persisted, version) => {
+        if (version < 2) {
+          const stale = persisted as { items?: CartItem[] };
+          const items = (stale.items ?? [])
+            .map((i) => ({
+              ...i,
+              addons: (i.addons ?? []).map((a) => ({ ...a, quantity: 1 })),
+            }))
+            .map((i) => ({
+              ...i,
+              key: itemKey(i.productId, i.addons),
+            }));
+          return { items };
+        }
+        return persisted as CartState;
+      },
+    }
   )
 );

@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
-import { AuditLogViewer } from "@/components/admin/audit-log-viewer";
+import { AuditLogViewer, type AuditRow } from "@/components/admin/audit-log-viewer";
+import { PageHeader } from "@/components/admin/page-header";
 
 export const dynamic = "force-dynamic";
 
@@ -35,17 +36,17 @@ export default async function AuditPage({
 
   const tables = [...new Set((data ?? []).map((r) => r.table_name))];
 
+  const rows = (data ?? []) as unknown as AuditRow[];
+
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-4 lg:p-6">
-      <header>
-        <h1 className="font-display text-3xl tracking-wide">AUDITORÍA</h1>
-        <p className="text-sm text-muted-foreground">
-          Registro de todas las modificaciones al sistema · solo lectura
-        </p>
-      </header>
+      <PageHeader
+        title="Auditoría"
+        description="Registro de todas las modificaciones al sistema · solo lectura"
+      />
 
       <AuditLogViewer
-        rows={(data as unknown as any[]) ?? []}
+        rows={rows}
         currentTable={table}
         currentAction={action}
         availableTables={tables}

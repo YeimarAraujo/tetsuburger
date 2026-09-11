@@ -4,8 +4,10 @@ import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { ShoppingCart } from "lucide-react";
-import { useCart, cartCount, cartSubtotal } from "@/store/cart";
+import { useCart, cartCount, cartSubtotal, itemUnitPrice } from "@/store/cart";
+import { addonLabel } from "@/lib/addons";
 import { formatCOP } from "@/lib/format";
+import { Logo } from "@/components/ui/logo";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -51,11 +53,11 @@ function CartLines() {
             <p className="truncate text-sm font-medium">{item.name}</p>
             {item.addons.length > 0 ? (
               <p className="truncate text-xs text-muted-foreground">
-                + {item.addons.map((a) => a.name).join(", ")}
+                + {item.addons.map((a) => addonLabel(a)).join(", ")}
               </p>
             ) : null}
             <p className="mt-0.5 text-sm font-semibold text-primary">
-              {formatCOP(item.price + item.addons.reduce((s, a) => s + a.price, 0))}
+              {formatCOP(itemUnitPrice(item))}
             </p>
 
             <div className="mt-2 flex items-center gap-2">
@@ -103,8 +105,8 @@ export function Header() {
     <Sheet open={open} onOpenChange={setOpen}>
       <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
-          <Link href="/" className="text-lg font-extrabold tracking-tight">
-            <img src="/images/logo.webp" alt="Logo" className="w-30 h-30" />
+          <Link href="/">
+            <Logo className="h-25 w-auto" />
           </Link>
 
           <SheetTrigger asChild>

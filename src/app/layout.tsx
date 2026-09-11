@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
-import { Geist_Mono, Bebas_Neue } from "next/font/google";
+import { Geist, Geist_Mono, Bebas_Neue } from "next/font/google";
 import { Toaster } from "sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 import "./globals.css";
 
@@ -11,6 +12,11 @@ const bebas = Bebas_Neue({
   display: "swap",
 });
 
+const geistSans = Geist({
+  variable: "--font-geist-sans",
+  subsets: ["latin"],
+});
+
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
@@ -19,7 +25,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "TETSUBURGER",
   description:
-    "Las mejores hamburguesas artesanales y perros calientes de la ciudad. Pide por WhatsApp.",
+    "Sazón sobre la plancha",
   icons: {
     icon: "/images/logo.webp",
   },
@@ -31,12 +37,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es">
-      <body
-        className={`${bebas.variable} ${geistMono.variable}`}
-      >
-        {children}
-        <Toaster richColors position="top-center" />
+    <html
+      lang="es"
+      className={`${geistSans.variable} ${bebas.variable} ${geistMono.variable}`}
+    >
+      <body>
+        <TooltipProvider delayDuration={150}>
+          {children}
+          <Toaster richColors position="top-center" />
+        </TooltipProvider>
       </body>
     </html>
   );

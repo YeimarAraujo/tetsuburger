@@ -113,7 +113,17 @@ export function HoursManager({
         <div className="mt-1 rounded-md border bg-muted/50 px-3 py-2 text-sm">
           Estado actual:{" "}
           <span className={cn("font-bold", isOpenNow ? "text-emerald-600" : "text-red-600")}>
-            {isOpenNow ? "🟢 ABIERTO" : "🔴 CERRADO"}
+            {isOpenNow ? (
+              <span className="inline-flex items-center gap-1.5">
+                <span className="size-2 rounded-full bg-emerald-500" />
+                ABIERTO
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5">
+                <span className="size-2 rounded-full bg-red-500" />
+                CERRADO
+              </span>
+            )}
           </span>{" "}
           — {statusMessage}
         </div>

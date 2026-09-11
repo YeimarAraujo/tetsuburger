@@ -4,9 +4,10 @@ import {
   type ManualProduct,
 } from "@/components/admin/orders/manual-order-form";
 import { getAddonsAvailability } from "@/lib/consumption-availability";
+import { PageHeader } from "@/components/admin/page-header";
 
 export const metadata = {
-  title: "Pedido manual · TETSUBURGER Admin",
+  title: "Nuevo pedido manual · TETSUBURGER Admin",
 };
 
 export const dynamic = "force-dynamic";
@@ -64,12 +65,10 @@ export default async function ManualOrderPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-4 lg:p-6">
-      <header>
-        <h1 className="text-2xl font-bold">Nuevo pedido manual</h1>
-        <p className="text-sm text-muted-foreground">
-          Registra pedidos tomados por llamada, en mesa o por WhatsApp
-        </p>
-      </header>
+      <PageHeader
+        title="Nuevo pedido manual"
+        description="Registra pedidos tomados por llamada, en mesa o por WhatsApp"
+      />
 
       <ManualOrderForm
         products={products}

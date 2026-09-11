@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { CategoryManager } from "@/components/admin/categories/category-manager";
+import { PageHeader } from "@/components/admin/page-header";
 
 export const metadata = {
   title: "Categorías · TETSUBURGER Admin",
@@ -15,13 +16,11 @@ export default async function CategoriesPage() {
     .order("name");
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 p-6">
-      <header>
-        <h1 className="text-2xl font-bold">Categorías</h1>
-        <p className="text-sm text-muted-foreground">
-          Secciones del menú que verá el cliente en el catálogo
-        </p>
-      </header>
+    <div className="mx-auto max-w-5xl space-y-6 p-4 lg:p-6">
+      <PageHeader
+        title="Categorías"
+        description="Secciones del menú que verá el cliente en el catálogo"
+      />
 
       <CategoryManager initial={data ?? []} />
     </div>

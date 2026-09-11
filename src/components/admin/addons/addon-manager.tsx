@@ -115,7 +115,7 @@ export function AddonManager({
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0">
           <div>
-            <CardTitle>Adicionales</CardTitle>
+            <CardTitle>Lista de adicionales</CardTitle>
             <CardDescription>
               Extras globales (+queso, +tocineta…) que luego asocias a cada
               producto. El precio queda guardado en el pedido histórico.
@@ -219,6 +219,25 @@ export function AddonManager({
                   {editing ? (editing.is_active ? "Sí" : "No") : "Sí"}
                 </span>
               </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-2 rounded-lg border p-3">
+              <div>
+                <Label htmlFor="addon-acompanamiento" className="text-sm font-medium">
+                  Es acompañamiento
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Gaseosas, porción de papas y paquetes: en la web no se asignan a un producto del
+                  combo (solo cantidad).
+                </p>
+              </div>
+              <input
+                id="addon-acompanamiento"
+                name="es_acompanamiento"
+                type="checkbox"
+                defaultChecked={editing?.tipo === "ACOMPAÑAMIENTO"}
+                className="size-4"
+              />
             </div>
 
             {error ? (

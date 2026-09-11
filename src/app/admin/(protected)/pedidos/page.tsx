@@ -1,9 +1,10 @@
+import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { Plus } from "lucide-react";
-import { createClient } from "@/lib/supabase/server";
 import { OrdersBoard, type BoardOrder } from "@/components/admin/orders/orders-board";
 import type { ManualProduct } from "@/components/admin/orders/manual-order-form";
 import { getAddonsAvailability } from "@/lib/consumption-availability";
+import { PageHeader } from "@/components/admin/page-header";
 import { Button } from "@/components/ui/button";
 
 export const metadata = {
@@ -15,7 +16,7 @@ export const dynamic = "force-dynamic";
 export default async function OrdersPage() {
   const supabase = await createClient();
 
-  const [orders, settings, productsRes, addonsRes, productAddonsRes] = await Promise.all([
+  const [orders, settings, productsRes, addonsRes, productAddonsRes, me] = await Promise.all([
     supabase
       .from("orders")
       .select("*, items:order_items(*, order_item_addons(*))")
@@ -37,11 +38,21 @@ export default async function OrdersPage() {
       .select("id, name, price, image_url, is_available")
       .eq("is_active", true)
       .order("name"),
-    supabase.from("addons").select("id, name, price").eq("is_active", true),
+    supabase.from("addons").select("id, name, price, tipo").eq("is_active", true),
     supabase.from("product_addons").select("product_id, addon_id"),
+    supabase.auth.getUser(),
   ]);
 
   const deliveryFeeBusiness = Number(settings.data?.value ?? 0);
+
+  const profileRes = me.data?.user
+    ? await supabase
+        .from("profiles")
+        .select("board_muted")
+        .eq("id", me.data.user.id)
+        .maybeSingle()
+    : { data: null };
+  const initialMuted = profileRes.data?.board_muted === true;
 
   const rawProducts = productsRes.data ?? [];
   const availabilityByProduct = await getAddonsAvailability(
@@ -49,7 +60,15 @@ export default async function OrdersPage() {
   );
 
   const addonMap = new Map(
-    (addonsRes.data ?? []).map((a) => [a.id, { id: a.id, name: a.name, price: Number(a.price) }])
+    (addonsRes.data ?? []).map((a) => [
+      a.id,
+      {
+        id: a.id,
+        name: a.name,
+        price: Number(a.price),
+        tipo: a.tipo,
+      },
+    ])
   );
 
   const productAddonsMap = new Map<string, string[]>();
@@ -77,26 +96,23 @@ export default async function OrdersPage() {
 
   return (
     <div className="mx-auto max-w-[1600px] space-y-6 p-4 lg:p-6">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">Pedidos en vivo</h1>
-          <p className="text-sm text-muted-foreground">
-            Los pedidos nuevos aparecen solos, con alerta sonora · orden por
-            llegada (los más antiguos arriba)
-          </p>
-        </div>
+      <PageHeader
+        title="Pedidos en vivo"
+        description="Los pedidos nuevos aparecen solos, con alerta sonora · orden por llegada (los más antiguos arriba)"
+      >
         <Link href="/admin/pedidos/nuevo">
           <Button>
             <Plus className="size-4" />
             Pedido manual
           </Button>
         </Link>
-      </header>
+      </PageHeader>
 
       <OrdersBoard
         initialOrders={(orders.data ?? []) as unknown as BoardOrder[]}
         deliveryFeeBusiness={deliveryFeeBusiness}
         products={products}
+        initialMuted={initialMuted}
       />
     </div>
   );

@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { signOutAction } from "@/features/auth/actions";
 import { SidebarNav } from "@/components/admin/sidebar-nav";
 import { MobileNav } from "@/components/admin/mobile-nav";
+import { Logo } from "@/components/ui/logo";
 import { Button } from "@/components/ui/button";
 
 export default async function AdminLayout({
@@ -25,9 +26,9 @@ export default async function AdminLayout({
     <div className="flex min-h-screen bg-muted/40">
       {/* Sidebar escritorio */}
       <aside className="sticky top-0 hidden h-screen w-60 flex-col border-r bg-background md:flex">
-        <div className="flex h-16 items-center border-b px-6">
-          <img src="/images/logo.webp" alt="Logo" className="w-1/2 h-1/2 object-cover" />
-          <span className="ml-2 rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase text-muted-foreground">
+        <div className="flex h-16 items-center gap-3 border-b px-6">
+          <Logo className="h-10 w-auto" />
+          <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase text-muted-foreground">
             Admin
           </span>
         </div>
@@ -52,7 +53,7 @@ export default async function AdminLayout({
       <div className="fixed inset-x-0 top-0 z-40 flex h-14 items-center justify-between border-b bg-background px-4 md:hidden">
         <div className="flex items-center gap-2">
           <MobileNav />
-          <img src="/images/logo.webp" alt="Logo" className="w-1/2 h-1/2 object-cover" />
+          <Logo className="h-9 w-auto" />
         </div>
         <form action={signOutAction}>
           <Button variant="ghost" size="icon" type="submit" aria-label="Cerrar sesión">

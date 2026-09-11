@@ -3,7 +3,6 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 
 export interface ActionResult {
   error?: string;
@@ -14,6 +13,13 @@ const inventoryItemSchema = z.object({
   unit: z.string().trim().max(30).default("unidad"),
   current_stock: z.coerce.number().min(0).default(0),
   min_stock: z.coerce.number().min(0).default(0),
+  cost: z.coerce.number().min(0).default(0),
+  barcode: z
+    .string()
+    .trim()
+    .max(30, "El código es muy largo")
+    .refine((v) => v === "" || /^[0-9A-Za-z-]+$/.test(v), "Solo números, letras o guiones")
+    .default(""),
 });
 
 const movementSchema = z.object({
@@ -35,9 +41,14 @@ export async function createInventoryItem(input: unknown): Promise<ActionResult>
     unit: parsed.data.unit,
     current_stock: parsed.data.current_stock,
     min_stock: parsed.data.min_stock,
+    cost: parsed.data.cost,
+    barcode: parsed.data.barcode || null,
   });
 
-  if (error) return { error: "No se pudo crear el item" };
+  if (error) {
+    if (error.code === "23505") return { error: "Ese código de barras ya existe" };
+    return { error: "No se pudo crear el item" };
+  }
   revalidatePath("/admin/inventario");
   return {};
 }
@@ -56,12 +67,34 @@ export async function updateInventoryItem(id: string, input: unknown): Promise<A
       unit: parsed.data.unit,
       current_stock: parsed.data.current_stock,
       min_stock: parsed.data.min_stock,
+      cost: parsed.data.cost,
+      barcode: parsed.data.barcode || null,
     })
     .eq("id", id);
 
-  if (error) return { error: "No se pudo actualizar" };
+  if (error) {
+    if (error.code === "23505") return { error: "Ese código de barras ya existe" };
+    return { error: "No se pudo actualizar" };
+  }
   revalidatePath("/admin/inventario");
   return {};
+}
+
+// Busca un insumo por código de barras (para el lector de Compras/Inventario).
+export async function findInventoryItemByBarcode(
+  barcode: string
+): Promise<{ id: string; name: string; cost: number } | null> {
+  const code = barcode.trim();
+  if (!code) return null;
+
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("inventory_items")
+    .select("id, name, cost")
+    .eq("barcode", code)
+    .maybeSingle();
+
+  return data ?? null;
 }
 
 export async function registerMovement(input: unknown): Promise<ActionResult> {

@@ -21,6 +21,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { KpiCard } from "@/components/admin/kpi-card";
 
 const STATUS_LABELS: Record<string, string> = {
   PENDIENTE: "Pendiente",
@@ -39,14 +40,16 @@ export function DashboardStats({
   lowStock,
 }: {
   status: OpenStatus;
-  today: {
+today: {
     ordersCount: number;
     totalSales: number;
     totalExpenses: number;
+    cogsTotal: number;
     profit: number;
+    missingCostCount: number;
     ordersByStatus: Record<string, number>;
     paymentsByMethod: Record<string, number>;
-  };
+};
   recentOrders: {
     id: string;
     order_number: number;
@@ -75,64 +78,85 @@ export function DashboardStats({
       </Card>
 
       {/* KPIs */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardContent className="py-4">
-            <div className="flex items-center gap-3">
-              <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10">
-                <ShoppingCart className="size-5 text-primary" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Pedidos hoy</p>
-                <p className="text-2xl font-bold">{today.ordersCount}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <KpiCard
+          icon={ShoppingCart}
+          label="Pedidos hoy"
+          value={today.ordersCount}
+          help={{
+            what: "Pedidos creados hoy. Los cancelados no cuentan.",
+          }}
+        />
 
-        <Card>
-          <CardContent className="py-4">
-            <div className="flex items-center gap-3">
-              <div className="flex size-10 items-center justify-center rounded-xl bg-emerald-500/10">
-                <TrendingUp className="size-5 text-emerald-600" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Ventas hoy</p>
-                <p className="text-2xl font-bold text-emerald-600">{formatCOP(today.totalSales)}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <KpiCard
+          icon={TrendingUp}
+          tileClassName="bg-emerald-500/10"
+          iconClassName="text-emerald-600"
+          label="Ventas hoy (entregados)"
+          value={formatCOP(today.totalSales)}
+          valueClassName="text-emerald-600"
+          caption="Subtotal de entregados · sin domis"
+          help={{
+            what: "Suma de los subtotales de los pedidos ENTREGADOS hoy. No incluye el cobro de domicilio.",
+            formula: "Σ subtotal · solo estado ENTREGADO",
+          }}
+        />
 
-        <Card>
-          <CardContent className="py-4">
-            <div className="flex items-center gap-3">
-              <div className="flex size-10 items-center justify-center rounded-xl bg-red-500/10">
-                <TrendingDown className="size-5 text-red-600" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Gastos hoy</p>
-                <p className="text-2xl font-bold text-red-600">{formatCOP(today.totalExpenses)}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <KpiCard
+          icon={DollarSign}
+          tileClassName="bg-amber-500/10"
+          iconClassName="text-amber-600"
+          label="Costo de lo vendido"
+          value={formatCOP(today.cogsTotal)}
+          valueClassName="text-amber-600"
+          caption={
+            today.missingCostCount > 0 ? (
+              <span className="inline-flex items-center gap-1 font-medium text-amber-700">
+                <AlertTriangle className="size-3.5" />
+                {today.missingCostCount} producto{today.missingCostCount > 1 ? "s" : ""} sin costo cargado
+              </span>
+            ) : undefined
+          }
+          help={{
+            what: "Valor de los insumos + empaque que ya se vendieron hoy (pedidos entregados), usando el costo configurado por producto.",
+            formula: "Σ (cantidad × costo del producto)",
+            suggestion: "Si ves el aviso de productos sin costo, cárgalos en Productos → Costo para que este número sea exacto.",
+          }}
+        />
 
-        <Card>
-          <CardContent className="py-4">
-            <div className="flex items-center gap-3">
-              <div className="flex size-10 items-center justify-center rounded-xl bg-blue-500/10">
-                <Wallet className="size-5 text-blue-600" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Utilidad estimada</p>
-                <p className={`text-2xl font-bold ${today.profit >= 0 ? "text-blue-600" : "text-red-600"}`}>
-                  {formatCOP(today.profit)}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <KpiCard
+          icon={TrendingDown}
+          tileClassName="bg-red-500/10"
+          iconClassName="text-red-600"
+          label="Gastos hoy"
+          value={formatCOP(today.totalExpenses)}
+          valueClassName="text-red-600"
+          help={{
+            what: "Suma de los gastos registrados con fecha de hoy.",
+            formula: "Σ monto · fecha = hoy",
+          }}
+        />
+
+        <KpiCard
+          icon={Wallet}
+          tileClassName={today.profit >= 0 ? "bg-blue-500/10" : "bg-red-500/10"}
+          iconClassName={today.profit >= 0 ? "text-blue-600" : "text-red-600"}
+          label="Utilidad hoy"
+          value={formatCOP(today.profit)}
+          valueClassName={today.profit >= 0 ? "text-blue-600" : "text-red-600"}
+          caption={
+            today.totalSales > 0
+              ? `Margen: ${((today.profit / today.totalSales) * 100).toFixed(1)}%`
+              : undefined
+          }
+          help={{
+            what: "Lo que queda del día después de pagar el costo de lo vendido y los gastos.",
+            formula: "Ventas entregadas − costo de lo vendido − gastos",
+            suggestion: today.profit < 0
+              ? "Estás en pérdida hoy: revisa el costo de lo vendido y los gastos para entender dónde se va el margen."
+              : "Monitorea el margen: si baja de ~30%, revisa precios o costos de los insumos.",
+          }}
+        />
       </div>
 
       {/* Desglose */}

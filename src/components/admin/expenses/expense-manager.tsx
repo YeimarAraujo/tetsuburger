@@ -2,14 +2,16 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Download, Loader2, Pencil, Plus, X } from "lucide-react";
+import { Calculator, Download, ListChecks, Loader2, Pencil, Plus, ReceiptText, Users, X, Zap } from "lucide-react";
 import { toast } from "sonner";
 import {
   createExpense,
   updateExpense,
 } from "@/features/expenses/actions";
 import { formatCOP, formatDate } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { KpiCard } from "@/components/admin/kpi-card";
 import {
   Card,
   CardContent,
@@ -33,6 +35,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 
 export interface ExpenseRow {
   id: string;
@@ -41,6 +44,8 @@ export interface ExpenseRow {
   concept: string;
   amount: number;
   description: string;
+  from_caja: boolean;
+  movimiento_metodo?: "EFECTIVO" | "TRANSFERENCIA" | null;
   category_name: string | null;
 }
 
@@ -83,6 +88,7 @@ export function ExpenseManager({
   const [isPending, startTransition] = useTransition();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<ExpenseRow | null>(null);
+  const [preset, setPreset] = useState<{ category_id: string; concept: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -90,6 +96,15 @@ export function ExpenseManager({
     () => rows.reduce((sum, r) => sum + Number(r.amount), 0),
     [rows]
   );
+
+  const byCategory = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const r of rows) {
+      const key = r.category_name ?? "Sin categoría";
+      map.set(key, (map.get(key) ?? 0) + Number(r.amount));
+    }
+    return [...map.entries()].sort((a, b) => b[1] - a[1]);
+  }, [rows]);
 
   function pushFilter(next: Partial<Filters>) {
     const merged = { ...filters, ...next };
@@ -108,12 +123,25 @@ export function ExpenseManager({
 
   function openCreate() {
     setEditing(null);
+    setPreset(null);
+    setError(null);
+    setDialogOpen(true);
+  }
+
+  function openQuick(categoryName: string, concept: string) {
+    const cat = categories.find((c) => c.name === categoryName);
+    setEditing(null);
+    setPreset({
+      category_id: cat ? String(cat.id) : "",
+      concept: concept || (cat ? `Gasto de ${cat.name.toLowerCase()}` : ""),
+    });
     setError(null);
     setDialogOpen(true);
   }
 
   function openEdit(row: ExpenseRow) {
     setEditing(row);
+    setPreset(null);
     setError(null);
     setDialogOpen(true);
   }
@@ -130,6 +158,8 @@ export function ExpenseManager({
       concept: String(formData.get("concept") ?? ""),
       amount: String(formData.get("amount") ?? ""),
       description: String(formData.get("description") ?? ""),
+      from_caja: String(formData.get("from_caja") === "on"),
+      metodo: String(formData.get("metodo") ?? "EFECTIVO"),
     };
 
     const result = editing
@@ -227,13 +257,21 @@ export function ExpenseManager({
             ) : null}
           </div>
 
-          <div className="ml-auto flex gap-2">
+          <div className="ml-auto flex flex-wrap items-center gap-2">
             <a href={exportHref}>
               <Button variant="outline" size="sm">
                 <Download className="size-4" />
                 Exportar CSV
               </Button>
             </a>
+            <Button variant="outline" size="sm" onClick={() => openQuick("Servicios públicos", "Energía / gas")}>
+              <Zap className="size-4" />
+              Luz / Gas
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => openQuick("Nómina", "Pago a trabajadores")}>
+              <Users className="size-4" />
+              Nómina
+            </Button>
             <Button size="sm" onClick={openCreate}>
               <Plus className="size-4" />
               Nuevo gasto
@@ -243,33 +281,66 @@ export function ExpenseManager({
       </Card>
 
       {/* Total */}
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Card>
-          <CardContent className="py-4">
-            <p className="text-sm text-muted-foreground">Total del período</p>
-            <p className="text-2xl font-bold text-destructive">{formatCOP(total)}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="py-4">
-            <p className="text-sm text-muted-foreground">Registros</p>
-            <p className="text-2xl font-bold">{rows.length}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="py-4">
-            <p className="text-sm text-muted-foreground">Promedio por registro</p>
-            <p className="text-2xl font-bold">
-              {formatCOP(rows.length > 0 ? Math.round(total / rows.length) : 0)}
-            </p>
-          </CardContent>
-        </Card>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <KpiCard
+          icon={ReceiptText}
+          tileClassName="bg-red-500/10"
+          iconClassName="text-red-600"
+          label="Total del período"
+          value={formatCOP(total)}
+          valueClassName="text-destructive"
+          help={{
+            what: "Suma de todos los gastos registrados en el rango de fechas filtrado.",
+            formula: "Σ monto · fecha en el filtro",
+          }}
+        />
+        <KpiCard
+          icon={ListChecks}
+          label="Registros"
+          value={rows.length}
+          help={{
+            what: "Número de gastos registrados en el período filtrado.",
+          }}
+        />
+        <KpiCard
+          icon={Calculator}
+          label="Promedio por registro"
+          value={formatCOP(rows.length > 0 ? Math.round(total / rows.length) : 0)}
+          help={{
+            what: "Cuánto sale en promedio cada registro de gasto dentro del período.",
+            formula: "total del período ÷ número de registros",
+          }}
+        />
       </div>
+
+      {/* Desglose por categoría */}
+      {byCategory.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Por categoría</CardTitle>
+            <CardDescription>
+              {filters.from} → {filters.to} · dónde se va la plata en el período
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-2">
+            {byCategory.map(([name, amount]) => (
+              <Badge
+                key={name}
+                variant="secondary"
+                className="gap-1 px-3 py-1 text-sm font-medium"
+              >
+                <span className="text-muted-foreground">{name}:</span>
+                {formatCOP(amount)}
+              </Badge>
+            ))}
+          </CardContent>
+        </Card>
+      ) : null}
 
       {/* Tabla */}
       <Card>
         <CardHeader>
-          <CardTitle>Gastos</CardTitle>
+          <CardTitle>Historial de gastos</CardTitle>
           <CardDescription>
             {filters.from} → {filters.to} · los gastos nunca se eliminan: se
             corrigen editándolos (queda auditoría)
@@ -304,7 +375,26 @@ export function ExpenseManager({
                           {row.category_name ?? "—"}
                         </span>
                       </td>
-                      <td className="py-3 pr-2 font-medium">{row.concept}</td>
+                      <td className="py-3 pr-2 font-medium">
+                        {row.concept}
+                        {row.from_caja ? (
+                          <>
+                            <span className="ml-2 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                              De caja
+                            </span>
+                            <span
+                              className={cn(
+                                "ml-1 rounded-full px-2 py-0.5 text-[10px] font-medium",
+                                row.movimiento_metodo === "TRANSFERENCIA"
+                                  ? "bg-blue-500/10 text-blue-600"
+                                  : "bg-emerald-500/10 text-emerald-600"
+                              )}
+                            >
+                              {row.movimiento_metodo === "TRANSFERENCIA" ? "Transferencia" : "Efectivo"}
+                            </span>
+                          </>
+                        ) : null}
+                      </td>
                       <td className="hidden max-w-[220px] truncate py-3 pr-2 text-muted-foreground md:table-cell">
                         {row.description || "—"}
                       </td>
@@ -347,7 +437,7 @@ export function ExpenseManager({
               </div>
               <div className="space-y-2">
                 <Label htmlFor="exp-cat">Categoría *</Label>
-                <Select name="expense_category_id" defaultValue={editing ? String(editing.expense_category_id) : undefined} required>
+                <Select name="expense_category_id" defaultValue={preset?.category_id || (editing ? String(editing.expense_category_id) : undefined)} required>
                   <SelectTrigger>
                     <SelectValue placeholder="Selecciona…" />
                   </SelectTrigger>
@@ -367,7 +457,7 @@ export function ExpenseManager({
               <Input
                 id="exp-concept"
                 name="concept"
-                defaultValue={editing?.concept ?? ""}
+                defaultValue={preset?.concept ?? editing?.concept ?? ""}
                 placeholder="Ej: Carne para 50 hamburguesas"
                 required
                 maxLength={120}
@@ -399,6 +489,35 @@ export function ExpenseManager({
                 maxLength={500}
                 placeholder="Detalle opcional"
               />
+            </div>
+
+            <div className="space-y-1">
+              <label className="flex items-center gap-2 text-sm font-medium">
+                <input
+                  type="checkbox"
+                  name="from_caja"
+                  defaultChecked={editing?.from_caja ?? false}
+                  className="size-4"
+                />
+                ¿Esta plata salió de la caja?
+              </label>
+              <p className="text-xs text-muted-foreground">
+                Si el gasto se pagó de la caja, descuenta del saldo del módulo
+                Caja y Pagos.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="exp-metodo">Medio de pago (si sale de caja)</Label>
+              <Select name="metodo" defaultValue={editing?.movimiento_metodo ?? "EFECTIVO"}>
+                <SelectTrigger id="exp-metodo" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="EFECTIVO">Efectivo</SelectItem>
+                  <SelectItem value="TRANSFERENCIA">Transferencia</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             {error ? (

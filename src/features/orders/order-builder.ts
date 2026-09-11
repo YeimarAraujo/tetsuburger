@@ -7,12 +7,24 @@ import type { CartAddon } from "@/store/cart";
  * valida los items contra la base de datos y recalcula todo server-side.
  */
 
+export const orderAddonsSchema = z
+  .array(
+    z.object({
+      addon_id: z.string().uuid(),
+      quantity: z.number().int().min(1).max(10).default(1),
+      target: z.enum(["EACH", "HAMBURGUESA", "PERRO"]).optional(),
+      components: z.number().int().min(1).optional(),
+    })
+  )
+  .max(15)
+  .default([]);
+
 export const orderItemsSchema = z
   .array(
     z.object({
       product_id: z.string().uuid(),
       quantity: z.number().int().min(1).max(50),
-      addon_ids: z.array(z.string().uuid()).max(15).default([]),
+      addons: orderAddonsSchema,
     })
   )
   .min(1, "El carrito está vacío")
@@ -41,19 +53,25 @@ export async function buildOrderFromItems(itemsRaw: unknown): Promise<BuildResul
   const supabase = createAdminClient();
 
   const productIds = [...new Set(parsed.data.map((i) => i.product_id))];
-  const allAddonIds = [...new Set(parsed.data.flatMap((i) => i.addon_ids))];
+  const allAddonIds = [
+    ...new Set(parsed.data.flatMap((i) => i.addons.map((a) => a.addon_id))),
+  ];
 
   const [{ data: products }, { data: addons }] = await Promise.all([
     supabase
       .from("products")
-      .select("id, name, price, is_active, is_available")
+      .select(
+        "id, name, price, is_active, is_available, conteo_hamburguesas, conteo_perros"
+      )
       .in("id", productIds),
     allAddonIds.length > 0
       ? supabase
           .from("addons")
           .select("id, name, price, is_active")
           .in("id", allAddonIds)
-      : Promise.resolve({ data: [] as { id: string; name: string; price: number; is_active: boolean }[] | null }),
+      : Promise.resolve({
+          data: [] as { id: string; name: string; price: number; is_active: boolean }[] | null,
+        }),
   ]);
 
   const productMap = new Map((products ?? []).map((p) => [p.id, p]));
@@ -70,16 +88,55 @@ export async function buildOrderFromItems(itemsRaw: unknown): Promise<BuildResul
     }
 
     const itemAddons: CartAddon[] = [];
-    for (const addonId of item.addon_ids) {
-      const addon = addonMap.get(addonId);
+    for (const entry of item.addons) {
+      const addon = addonMap.get(entry.addon_id);
       if (!addon || !addon.is_active) {
         return { error: "Un adicional ya no está disponible." };
       }
-      itemAddons.push({ id: addon.id, name: addon.name, price: Number(addon.price) });
+
+      const hamburguesas = Number(product.conteo_hamburguesas) || 0;
+      const perros = Number(product.conteo_perros) || 0;
+      const comboCount = hamburguesas + perros;
+      const isCombo = comboCount >= 2;
+
+      if (entry.target) {
+        if (!isCombo) {
+          return {
+            error: `"${addon.name}" tiene destinatario específico, pero ${product.name} no es un combo.`,
+          };
+        }
+        if (entry.target === "HAMBURGUESA" && hamburguesas <= 0) {
+          return {
+            error: `El combo ${product.name} no incluye hamburguesas para añadirle "${addon.name}".`,
+          };
+        }
+        if (entry.target === "PERRO" && perros <= 0) {
+          return {
+            error: `El combo ${product.name} no incluye perros para añadirle "${addon.name}".`,
+          };
+        }
+      }
+
+      itemAddons.push({
+        id: addon.id,
+        name: addon.name,
+        price: Number(addon.price),
+        quantity: entry.quantity,
+        target: entry.target,
+        components:
+          entry.target === "EACH"
+            ? Math.max(1, entry.components ?? comboCount)
+            : undefined,
+      });
     }
 
     subtotal += Number(product.price) * item.quantity;
-    subtotal += itemAddons.reduce((s, a) => s + a.price, 0) * item.quantity;
+    subtotal +=
+      itemAddons.reduce(
+        (s, a) =>
+          s + a.price * (a.quantity ?? 1) * (a.target === "EACH" ? (a.components ?? 1) : 1),
+        0
+      ) * item.quantity;
 
     lines.push({
       productId: product.id,
@@ -110,7 +167,12 @@ export async function persistOrder(params: {
   paymentMethod: "EFECTIVO" | "TRANSFERENCIA";
   createdBy: string | null;
   confirmedAt: string | null;
-}): Promise<{ error?: string; orderId?: string; orderNumber?: number }> {
+}): Promise<{
+  error?: string;
+  orderId?: string;
+  orderNumber?: number;
+  confirmationToken?: string;
+}> {
   const supabase = createAdminClient();
 
   const { data: order, error } = await supabase
@@ -131,7 +193,7 @@ export async function persistOrder(params: {
       created_by: params.createdBy,
       ...(params.confirmedAt ? { confirmed_at: params.confirmedAt } : {}),
     })
-    .select("id, order_number")
+    .select("id, order_number, confirmation_token")
     .single();
 
   if (error || !order) return { error: "No se pudo registrar el pedido" };
@@ -158,11 +220,17 @@ export async function persistOrder(params: {
           addon_id: a.id,
           addon_name: a.name,
           addon_price: a.price,
-          quantity: 1,
+          quantity: a.quantity ?? 1,
+          target: a.target ?? null,
+          components_qty: a.target === "EACH" ? (a.components ?? 1) : null,
         }))
       );
     }
   }
 
-  return { orderId: order.id, orderNumber: order.order_number };
+  return {
+    orderId: order.id,
+    orderNumber: order.order_number,
+    confirmationToken: order.confirmation_token,
+  };
 }

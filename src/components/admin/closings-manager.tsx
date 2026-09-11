@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
@@ -10,9 +10,6 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import {
   Dialog,
@@ -23,8 +20,9 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { InfoTip } from "@/components/ui/info-tip";
 
-interface ClosingRow {
+export interface ClosingRow {
   id: string;
   closing_date: string;
   orders_count: number;
@@ -45,7 +43,7 @@ function bogotaToday(): string {
 
 export function ClosingsManager({ rows }: { rows: ClosingRow[] }) {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [closingDate, setClosingDate] = useState(bogotaToday());
   const [saving, setSaving] = useState(false);
@@ -118,24 +116,67 @@ export function ClosingsManager({ rows }: { rows: ClosingRow[] }) {
                     <p className="text-xs text-muted-foreground">
                       {row.orders_count} pedidos
                     </p>
+                    {row.details?.caja_esperada !== undefined ? (
+                      <p className="text-xs text-muted-foreground">
+                        Efectivo esperado: {formatCOP(Number(row.details.caja_esperada))}
+                      </p>
+                    ) : null}
                   </div>
                 </div>
 
-                <div className="ml-auto grid grid-cols-3 gap-6 text-right">
+                <div className="ml-auto grid grid-cols-4 gap-6 text-right">
                   <div>
-                    <p className="text-xs text-muted-foreground">Ventas</p>
+                    <p className="flex items-center justify-end gap-1 text-xs text-muted-foreground">
+                      Ventas
+                      <InfoTip
+                        content={{
+                          what: "Subtotal de los pedidos asociados al cierre (sin contabilizar el domicilio retenido).",
+                          formula: "Σ subtotal de pedidos del día",
+                        }}
+                      />
+                    </p>
                     <p className="font-semibold text-emerald-600">
                       {formatCOP(Number(row.sales_total))}
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs text-muted-foreground">Gastos</p>
+                    <p className="flex items-center justify-end gap-1 text-xs text-muted-foreground">
+                      Costo vendido
+                      <InfoTip
+                        content={{
+                          what: "Valor de los insumos y empaques de lo vendido ese día, según el costo configurado por producto.",
+                          formula: "Σ (cantidad vendida × costo del producto)",
+                        }}
+                      />
+                    </p>
+                    <p className="font-semibold text-fuchsia-600">
+                      {formatCOP(Number(row.details?.cogs_total ?? 0))}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="flex items-center justify-end gap-1 text-xs text-muted-foreground">
+                      Gastos
+                      <InfoTip
+                        content={{
+                          what: "Suma de los gastos registrados con fecha de ese día.",
+                          formula: "Σ monto · fecha = día del cierre",
+                        }}
+                      />
+                    </p>
                     <p className="font-semibold text-red-600">
                       {formatCOP(Number(row.expenses_total))}
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs text-muted-foreground">Utilidad</p>
+                    <p className="flex items-center justify-end gap-1 text-xs text-muted-foreground">
+                      Utilidad
+                      <InfoTip
+                        content={{
+                          what: "Ganancia del día después de descontar el costo de lo vendido y los gastos.",
+                          formula: "ventas − costo de lo vendido − gastos",
+                        }}
+                      />
+                    </p>
                     <p className={`font-bold ${Number(row.estimated_profit) >= 0 ? "text-blue-600" : "text-red-600"}`}>
                       {formatCOP(Number(row.estimated_profit))}
                     </p>
@@ -169,7 +210,8 @@ export function ClosingsManager({ rows }: { rows: ClosingRow[] }) {
           </DialogHeader>
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Se congelarán los totales de pedidos y gastos de esa fecha. Esta
+              Se congelarán las ventas de pedidos entregados, el costo de lo
+              vendido, la caja neta del día y los gastos de esa fecha. Esta
               acción es irreversible.
             </p>
             <div className="space-y-2">

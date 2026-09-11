@@ -9,6 +9,9 @@ export const productSchema = z.object({
   description: z.string().trim().max(500, "Máximo 500 caracteres").default(""),
   price: z.coerce.number({ message: "Precio inválido" }).min(0, "El precio no puede ser negativo").max(99_999_999),
   cost: z.coerce.number({ message: "Costo inválido" }).min(0, "El costo no puede ser negativo").max(99_999_999).default(0),
+  packaging_cost: z.coerce.number({ message: "Costo de empaque inválido" }).min(0, "El costo de empaque no puede ser negativo").max(9_999_999).default(0),
+  conteo_hamburguesas: z.coerce.number({ message: "Conteo inválido" }).int().min(0, "El conteo no puede ser negativo").max(1_000).default(0),
+  conteo_perros: z.coerce.number({ message: "Conteo inválido" }).int().min(0, "El conteo no puede ser negativo").max(1_000).default(0),
   is_active: z.boolean().default(true),
   is_available: z.boolean().default(true),
   is_featured: z.boolean().default(false),
@@ -19,6 +22,7 @@ export type ProductInput = z.infer<typeof productSchema>;
 export const addonSchema = z.object({
   name: z.string().trim().min(2, "El nombre debe tener al menos 2 caracteres").max(60, "Máximo 60 caracteres"),
   price: z.coerce.number({ message: "Precio inválido" }).min(0, "El precio no puede ser negativo").max(9_999_999),
+  tipo: z.enum(["ALIMENTO", "ACOMPAÑAMIENTO"]).default("ALIMENTO"),
   is_active: z.boolean().default(true),
 });
 

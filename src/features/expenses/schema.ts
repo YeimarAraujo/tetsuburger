@@ -8,6 +8,9 @@ export const expenseSchema = z.object({
   concept: z.string().trim().min(2, "El concepto debe tener al menos 2 caracteres").max(120, "Máximo 120 caracteres"),
   amount: z.coerce.number({ message: "Valor inválido" }).min(0, "El valor no puede ser negativo").max(9_999_999_999),
   description: z.string().trim().max(500).default(""),
+  from_caja: z.string().transform((v) => v === "true").default(false),
+  /** Canal por el que salió la plata si el gasto salió de caja. */
+  metodo: z.enum(["EFECTIVO", "TRANSFERENCIA"]).default("EFECTIVO"),
 });
 
 export type ExpenseInput = z.infer<typeof expenseSchema>;

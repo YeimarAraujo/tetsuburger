@@ -12,6 +12,7 @@ const setConsumptionSchema = z.object({
   productId: z.string().uuid(),
   inventoryItemId: z.string().uuid("Selecciona un insumo válido"),
   quantity: z.coerce.number().positive("La cantidad debe ser mayor a 0"),
+  unitCost: z.coerce.number().min(0).max(1_000_000_000).default(0),
 });
 
 const idSchema = z.string().uuid("ID inválido");
@@ -27,12 +28,14 @@ const copySchema = z.object({
 export async function setProductConsumption(
   productId: string,
   inventoryItemId: string,
-  quantity: number
+  quantity: number,
+  unitCost = 0
 ): Promise<ActionResult> {
   const parsed = setConsumptionSchema.safeParse({
     productId,
     inventoryItemId,
     quantity,
+    unitCost,
   });
   if (!parsed.success) return { error: parsed.error.issues[0].message };
 
@@ -43,6 +46,7 @@ export async function setProductConsumption(
       product_id: parsed.data.productId,
       inventory_item_id: parsed.data.inventoryItemId,
       quantity: parsed.data.quantity,
+      unit_cost: parsed.data.unitCost || 0,
     },
     { onConflict: "product_id,inventory_item_id" }
   );
@@ -51,6 +55,45 @@ export async function setProductConsumption(
     return {
       error: `No se pudo agregar el insumo: ${error.message}. Verifica que la migración 0006 (tabla product_consumptions) esté aplicada.`,
     };
+  }
+
+  revalidatePath("/admin/productos");
+  return {};
+}
+
+/**
+ * Actualiza el valor unitario (COP) de un consumo ya asignado.
+ * Si el valor es mayor a 0, también actualiza el costo global del insumo
+ * para que los demás productos tomen el mismo precio.
+ */
+export async function updateProductConsumptionCost(
+  id: string,
+  unitCost: number,
+  inventoryItemId: string
+): Promise<ActionResult> {
+  const parsed = z
+    .object({
+      id: z.string().uuid("ID inválido"),
+      unitCost: z.coerce.number().min(0).max(1_000_000_000),
+      inventoryItemId: z.string().uuid("Insumo inválido"),
+    })
+    .safeParse({ id, unitCost, inventoryItemId });
+  if (!parsed.success) return { error: parsed.error.issues[0].message };
+
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("product_consumptions")
+    .update({ unit_cost: parsed.data.unitCost })
+    .eq("id", parsed.data.id);
+
+  if (error) return { error: "No se pudo actualizar el valor" };
+
+  if (parsed.data.unitCost > 0) {
+    await supabase
+      .from("inventory_items")
+      .update({ cost: parsed.data.unitCost })
+      .eq("id", parsed.data.inventoryItemId);
   }
 
   revalidatePath("/admin/productos");
@@ -94,7 +137,7 @@ export async function copyConsumptions(
 
   const { data: source } = await supabase
     .from("product_consumptions")
-    .select("inventory_item_id, quantity")
+    .select("inventory_item_id, quantity, unit_cost")
     .eq("product_id", parsed.data.fromProductId);
 
   if (!source || source.length === 0) {
@@ -112,6 +155,7 @@ export async function copyConsumptions(
       product_id: parsed.data.toProductId,
       inventory_item_id: c.inventory_item_id,
       quantity: c.quantity,
+      unit_cost: c.unit_cost || 0,
     }))
   );
 

@@ -5,6 +5,7 @@ import {
   Bell,
   BellOff,
   Banknote,
+  Check,
   CheckCheck,
   Clock,
   Landmark,
@@ -15,13 +16,14 @@ import {
   Search,
   SlidersHorizontal,
   Store,
+  TriangleAlert,
   Truck,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { playNewOrderSound } from "@/lib/sound";
-import { addOrderItem, updateOrderStatus } from "@/features/orders/board-actions";
+import { addOrderItem, setBoardMuted, updateOrderStatus } from "@/features/orders/board-actions";
 import {
   getOrderConsumptionBreakdown,
   saveOrderConsumptionOverrides,
@@ -29,10 +31,11 @@ import {
 } from "@/features/orders/consumption-actions";
 import {
   ACTIVE_STATUSES,
-  NEXT_STATUS,
   ORDER_STATUS_META,
+  nextStatusFor,
 } from "@/lib/order-status";
 import { formatCOP, formatOrderNumber } from "@/lib/format";
+import { addonCharged, addonLabel } from "@/lib/addons";
 import { cn } from "@/lib/utils";
 import type { OrderItemAddon, OrderStatus } from "@/types/db";
 import type { ManualProduct } from "@/components/admin/orders/manual-order-form";
@@ -102,16 +105,15 @@ export function OrdersBoard({
   initialOrders,
   deliveryFeeBusiness = 0,
   products = [],
+  initialMuted = false,
 }: {
   initialOrders: BoardOrder[];
   deliveryFeeBusiness?: number;
   products?: ManualProduct[];
+  initialMuted?: boolean;
 }) {
   const [orders, setOrders] = useState<BoardOrder[]>(initialOrders);
-  const [muted, setMuted] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return window.localStorage.getItem("tetsu-board-muted") === "true";
-  });
+  const [muted, setMuted] = useState(initialMuted);
   const [now, setNow] = useState(() => Date.now());
   const [refreshing, setRefreshing] = useState(false);
   const [cancelTarget, setCancelTarget] = useState<BoardOrder | null>(null);
@@ -125,13 +127,13 @@ export function OrdersBoard({
   const [addItemSearch, setAddItemSearch] = useState("");
   const [addItemProduct, setAddItemProduct] = useState<ManualProduct | null>(null);
   const [addItemQty, setAddItemQty] = useState(1);
-  const [addItemAddons, setAddItemAddons] = useState<string[]>([]);
+  const [addItemAddons, setAddItemAddons] = useState<Record<string, number>>({});
   const [addingItem, setAddingItem] = useState(false);
   const mutedRef = useRef(false);
 
   useEffect(() => {
     mutedRef.current = muted;
-    localStorage.setItem("tetsu-board-muted", String(muted));
+    void setBoardMuted(muted);
   }, [muted]);
 
   useEffect(() => {
@@ -167,7 +169,7 @@ export function OrdersBoard({
             if (detail.status === "PENDIENTE" && !mutedRef.current) {
               playNewOrderSound();
               toast.success(
-                `🔔 Nuevo pedido ${formatOrderNumber(detail.order_number)} · ${formatCOP(Number(detail.total))}`
+                `Nuevo pedido ${formatOrderNumber(detail.order_number)} · ${formatCOP(Number(detail.total))}`
               );
             }
           }
@@ -314,9 +316,10 @@ export function OrdersBoard({
 
   function addItemCost(): number {
     if (!addItemProduct) return 0;
-    const addonSum = addItemProduct.addons
-      .filter((a) => addItemAddons.includes(a.id))
-      .reduce((s, a) => s + Number(a.price), 0);
+    const addonSum = addItemProduct.addons.reduce(
+      (s, a) => s + addonCharged({ ...a, quantity: addItemAddons[a.id] ?? 0 }),
+      0
+    );
     return (Number(addItemProduct.price) + addonSum) * addItemQty;
   }
 
@@ -325,7 +328,7 @@ export function OrdersBoard({
     setAddItemSearch("");
     setAddItemProduct(null);
     setAddItemQty(1);
-    setAddItemAddons([]);
+    setAddItemAddons({});
   }
 
   async function confirmAddItem() {
@@ -338,7 +341,12 @@ export function OrdersBoard({
         {
           product_id: addItemProduct.id,
           quantity: addItemQty,
-          addon_ids: addItemAddons,
+          addons: addItemProduct.addons
+            .filter((a) => (addItemAddons[a.id] ?? 0) > 0)
+            .map((a) => ({
+              addon_id: a.id,
+              quantity: addItemAddons[a.id] ?? 1,
+            })),
         },
       ]
     );
@@ -353,7 +361,7 @@ export function OrdersBoard({
     toast.success("Producto agregado al pedido");
     setAddItemTarget(null);
     setAddItemProduct(null);
-    setAddItemAddons([]);
+    setAddItemAddons({});
     await refreshAll();
   }
 
@@ -415,7 +423,6 @@ export function OrdersBoard({
         {BOARD_COLUMNS.map((status) => {
           const colOrders = orders.filter((o) => o.status === status);
           const meta = ORDER_STATUS_META[status];
-          const next = NEXT_STATUS[status];
 
           return (
             <section key={status} className="min-w-0 space-y-2">
@@ -436,6 +443,7 @@ export function OrdersBoard({
                 colOrders.map((order) => {
                   const mins = elapsedMinutes(order.created_at, now);
                   const late = mins >= MINS_WARNING;
+                  const orderNext = nextStatusFor(order.status, order.delivery_type);
 
                   return (
                     <article
@@ -476,11 +484,11 @@ export function OrdersBoard({
                         </span>
                         <span className={cn("flex items-center gap-1 text-xs", late ? "font-bold text-red-500" : "text-muted-foreground")}>
                           <Clock className="size-3" />
-                          hace {mins} min{late ? " ⚠️" : ""}
+                          hace {mins} min{late ? <TriangleAlert className="size-3 text-red-500" /> : null}
                         </span>
                       </div>
 
-                      {order.delivery_type === "DOMICILIO" && order.delivery_fee > 0 ? (
+                      {order.delivery_type === "DOMICILIO" ? (
                         <div className="flex items-center gap-1">
                           {editingFeeId === order.id ? (
                             <div className="flex items-center gap-1">
@@ -502,17 +510,17 @@ export function OrdersBoard({
                                 onClick={() => saveDeliveryFee(order)}
                                 className="rounded bg-emerald-500 px-1.5 py-0.5 text-[10px] font-bold text-white hover:bg-emerald-600"
                               >
-                                ✓
+                                <Check className="size-3.5" />
                               </button>
                               <button
                                 type="button"
                                 onClick={() => setEditingFeeId(null)}
                                 className="rounded bg-zinc-300 px-1.5 py-0.5 text-[10px] font-bold text-zinc-700 hover:bg-zinc-400"
                               >
-                                ✕
+                                <X className="size-3.5" />
                               </button>
                             </div>
-                          ) : (
+                          ) : order.delivery_fee > 0 ? (
                             <>
                               <button
                                 type="button"
@@ -542,13 +550,26 @@ export function OrdersBoard({
                                 <Pencil className="size-3" />
                               </button>
                             </>
+                          ) : (
+                            <>
+                              <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold bg-zinc-100 text-zinc-500">
+                                <Truck className="size-3" />
+                                Sin cargo domicilio
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingFeeId(order.id);
+                                  setEditingFeeValue(String(order.delivery_fee));
+                                }}
+                                className="rounded p-0.5 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-600"
+                                title="Cobrar/editar el domicilio de este pedido"
+                              >
+                                <Pencil className="size-3" />
+                              </button>
+                            </>
                           )}
                         </div>
-                      ) : order.delivery_type === "DOMICILIO" ? (
-                        <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold bg-zinc-100 text-zinc-500">
-                          <Truck className="size-3" />
-                          Sin cargo domicilio
-                        </span>
                       ) : null}
 
                       <div className="space-y-0.5 rounded-md bg-muted/60 p-2">
@@ -568,7 +589,18 @@ export function OrdersBoard({
                             {item.product_name}
                             {item.order_item_addons?.length > 0 ? (
                               <span className="block pl-4 text-[11px] text-muted-foreground">
-                                + {item.order_item_addons.map((a) => a.addon_name).join(", ")}
+                                +{" "}
+                                {item.order_item_addons
+                                  .map((a) =>
+                                    addonLabel({
+                                      id: a.addon_id ?? a.addon_name,
+                                      name: a.addon_name,
+                                      price: a.addon_price,
+                                      quantity: a.quantity,
+                                      target: a.target as "EACH" | "HAMBURGUESA" | "PERRO" | undefined,
+                                    })
+                                  )
+                                  .join(", ")}
                               </span>
                             ) : null}
                           </li>
@@ -603,14 +635,14 @@ export function OrdersBoard({
                                 onClick={() => saveSubtotal(order)}
                                 className="rounded bg-emerald-500 px-1.5 py-0.5 text-[10px] font-bold text-white hover:bg-emerald-600"
                               >
-                                ✓
+                                <Check className="size-3.5" />
                               </button>
                               <button
                                 type="button"
                                 onClick={() => setEditingSubtotalId(null)}
                                 className="rounded bg-zinc-300 px-1.5 py-0.5 text-[10px] font-bold text-zinc-700 hover:bg-zinc-400"
                               >
-                                ✕
+                                <X className="size-3.5" />
                               </button>
                             </div>
                           ) : (
@@ -657,8 +689,8 @@ export function OrdersBoard({
                           >
                             <X className="size-3.5" />
                           </button>
-                          {next ? (
-                            <Button size="sm" onClick={() => handleAdvance(order, next)}>
+                          {orderNext ? (
+                            <Button size="sm" onClick={() => handleAdvance(order, orderNext)}>
                               <CheckCheck className="size-3.5" />
                             </Button>
                           ) : null}
@@ -713,7 +745,7 @@ export function OrdersBoard({
                       onClick={() => {
                         setAddItemProduct(p);
                         setAddItemQty(1);
-                        setAddItemAddons([]);
+setAddItemAddons({});
                       }}
                       className={cn(
                         "flex w-full items-center justify-between gap-2 rounded-lg border p-2 text-left transition-colors",
@@ -773,29 +805,55 @@ export function OrdersBoard({
 
               {addItemProduct.addons.length > 0 ? (
                 <div className="space-y-2">
-                  <Label>Adicionales</Label>
+                  <Label>Adicionales · cantidad</Label>
                   <div className="space-y-1">
-                    {addItemProduct.addons.map((a) => (
-                      <label key={a.id} className="flex items-center gap-2 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={addItemAddons.includes(a.id)}
-                          disabled={a.available === false}
-                          onChange={(e) => {
-                            setAddItemAddons((prev) =>
-                              e.target.checked
-                                ? [...prev, a.id]
-                                : prev.filter((id) => id !== a.id)
-                            );
-                          }}
-                          className="size-4"
-                        />
-                        <span className={cn(a.available === false && "opacity-50")}>
-                          {a.name} · {formatCOP(a.price)}
-                          {a.available === false ? " (agotado)" : ""}
-                        </span>
-                      </label>
-                    ))}
+                    {addItemProduct.addons.map((a) => {
+                      const qty = addItemAddons[a.id] ?? 0;
+                      return (
+                        <div
+                          key={a.id}
+                          className={cn(
+                            "flex items-center justify-between gap-2 rounded-lg border p-2 text-sm",
+                            a.available === false ? "opacity-50" : "border"
+                          )}
+                        >
+                          <span className={cn(a.available === false && "opacity-50")}>
+                            {a.name} · {formatCOP(a.price)}
+                            {a.available === false ? " (agotado)" : ""}
+                          </span>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon-sm"
+                              disabled={a.available === false || qty <= 0}
+                              onClick={() =>
+                                setAddItemAddons((prev) => {
+                                  const next = { ...prev };
+                                  if (qty <= 1) delete next[a.id];
+                                  else next[a.id] = qty - 1;
+                                  return next;
+                                })
+                              }
+                            >
+                              −
+                            </Button>
+                            <span className="w-7 text-center text-sm font-bold">{qty}</span>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon-sm"
+                              disabled={a.available === false || qty >= 10}
+                              onClick={() =>
+                                setAddItemAddons((prev) => ({ ...prev, [a.id]: qty + 1 }))
+                              }
+                            >
+                              +
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               ) : null}

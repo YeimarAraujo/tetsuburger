@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { bogotaToday } from "@/lib/bogota";
 import { consumeInventoryForOrder, validateStockForOrder } from "@/features/orders/consumption";
 import { buildOrderFromItems, orderItemsSchema } from "@/features/orders/order-builder";
 
@@ -24,6 +25,26 @@ async function assertStaff(): Promise<ActionResult | null> {
 
   if (!user) return { error: "Sesión expirada. Vuelve a iniciar sesión." };
   return null;
+}
+
+/** Guarda la preferencia de sonido del board para el usuario autenticado (profiles.board_muted). */
+export async function setBoardMuted(muted: boolean): Promise<ActionResult> {
+  const denied = await assertStaff();
+  if (denied) return denied;
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Sesión expirada" };
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({ board_muted: muted })
+    .eq("id", user.id);
+
+  if (error) return { error: "No se pudo guardar la preferencia" };
+  return {};
 }
 
 const statusValues = [
@@ -96,9 +117,47 @@ export async function updateOrderStatus(
     }
   }
 
+  // 3. Al entregar un pedido, la plata entra a la caja: en efectivo o por
+  //    transferencia según el medio de pago del pedido. Se cuenta solo el valor
+  //    de los productos (subtotal), igual que en las ventas de Finanzas; los
+  //    domicilios no pasan por la caja.
+  if (parsed.data.toStatus === "ENTREGADO") {
+    const { data: delivered } = await supabase
+      .from("orders")
+      .select("order_number, subtotal, payment_method")
+      .eq("id", parsed.data.orderId)
+      .single();
+
+    if (delivered && Number(delivered.subtotal) > 0) {
+      // Guard anti doble conteo: si el pedido ya tiene su movimiento de venta
+      // (p. ej. se reentregó), no insertar otro.
+      const { data: existingMovement } = await supabase
+        .from("caja_movements")
+        .select("id")
+        .eq("ref_type", "order")
+        .eq("ref_id", parsed.data.orderId)
+        .maybeSingle();
+
+      if (!existingMovement) {
+        const isTransfer = delivered.payment_method === "TRANSFERENCIA";
+        await supabase.from("caja_movements").insert({
+          movement_date: bogotaToday(),
+          tipo: isTransfer ? "VENTA_TRANSFERENCIA" : "VENTA_EFECTIVO",
+          metodo: isTransfer ? "TRANSFERENCIA" : "EFECTIVO",
+          amount: Number(delivered.subtotal),
+          description: `Venta #${delivered.order_number} ${isTransfer ? "por transferencia" : "en efectivo"}`,
+          fuente: `Pedido #${delivered.order_number}`,
+          ref_type: "order",
+          ref_id: parsed.data.orderId,
+        });
+      }
+    }
+  }
+
   // El trigger registra historial y timestamps automáticamente.
   revalidatePath("/admin/pedidos");
   revalidatePath("/admin");
+  revalidatePath("/admin/caja");
   return {};
 }
 
@@ -165,7 +224,9 @@ export async function addOrderItem(
           addon_id: a.id,
           addon_name: a.name,
           addon_price: a.price,
-          quantity: 1,
+          quantity: a.quantity ?? 1,
+          target: a.target ?? null,
+          components_qty: a.target === "EACH" ? (a.components ?? 1) : null,
         }))
       );
     }

@@ -46,6 +46,26 @@ export const NEXT_STATUS: Partial<Record<OrderStatus, OrderStatus>> = {
   EN_CAMINO: "ENTREGADO",
 };
 
+/**
+ * Tipo de entrega que implica transporte físico al cliente.
+ * Los pedidos que NO llevan domicilio (RECOGIDA/LOCAL) no deben pasar
+ * por la etapa "EN_CAMINO", van directo de LISTO a ENTREGADO.
+ */
+export function isDeliveryOrder(deliveryType?: string | null): boolean {
+  return deliveryType === "DOMICILIO";
+}
+
+/** Siguiente estado de un pedido según su tipo de entrega. */
+export function nextStatusFor(
+  status: OrderStatus,
+  deliveryType?: string | null
+): OrderStatus | undefined {
+  if (status === "LISTO" && !isDeliveryOrder(deliveryType)) {
+    return "ENTREGADO";
+  }
+  return NEXT_STATUS[status];
+}
+
 export const ACTIVE_STATUSES: OrderStatus[] = [
   "PENDIENTE",
   "CONFIRMADO",

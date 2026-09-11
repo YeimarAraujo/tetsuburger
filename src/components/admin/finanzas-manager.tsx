@@ -1,14 +1,15 @@
-"use client";
+﻿"use client";
 
 import { useMemo, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { DollarSign, Download, TrendingDown, TrendingUp, Wallet } from "lucide-react";
+import { AlertTriangle, DollarSign, Download, Package, TrendingDown, TrendingUp, Wallet } from "lucide-react";
 import { formatCOP, formatDate } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { KpiCard } from "@/components/admin/kpi-card";
 
 interface Filters {
   from: string;
@@ -34,30 +35,37 @@ export function FinanzasManager({
   expenses,
   production,
   closings,
+  cogsTotal,
+  missingCostCount,
   filters,
 }: {
   orders: { id: string; status: string; total: number | string; subtotal: number | string; delivery_fee: number | string; delivery_fee_retained: boolean; payment_method: string | null; origin: string; created_at: string }[];
   expenses: { id: string; expense_date: string; amount: number | string; concept: string; category?: { name: string } | null }[];
   production: { id: string; record_date: string; total_cost: number | string }[];
-  closings: { id: string; closing_date: string; orders_count: number; sales_total: number | string; expenses_total: number | string; estimated_profit: number | string }[];
+  closings: { id: string; closing_date: string; orders_count: number; sales_total: number | string; expenses_total: number | string; estimated_profit: number | string; details?: Record<string, unknown> | null }[];
+  cogsTotal: number;
+  missingCostCount: number;
   filters: Filters;
 }) {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
 
   const stats = useMemo(() => {
     const validOrders = orders.filter((o) => o.status !== "CANCELADO");
     const cancelled = orders.length - validOrders.length;
 
+    // Las ventas del período son SOLO los pedidos ENTREGADO (máximo realismo).
+    const deliveredOrders = orders.filter((o) => o.status === "ENTREGADO");
+
     // Ingresos por ventas = SOLO el valor de los productos (subtotal).
     // Los domicilios no se incluyen: ni retenidos ni externos.
-    const subtotalSales = validOrders.reduce((s, o) => s + Number(o.subtotal), 0);
+    const subtotalSales = deliveredOrders.reduce((s, o) => s + Number(o.subtotal), 0);
     const sales = subtotalSales;
     const expTotal = expenses.reduce((s, e) => s + Number(e.amount), 0);
     const prodCost = production.reduce((s, p) => s + Number(p.total_cost), 0);
 
     const byMethod: Record<string, { count: number; total: number }> = {};
-    validOrders.forEach((o) => {
+    deliveredOrders.forEach((o) => {
       const m = o.payment_method ?? "EFECTIVO";
       if (!byMethod[m]) byMethod[m] = { count: 0, total: 0 };
       byMethod[m].count++;
@@ -65,7 +73,7 @@ export function FinanzasManager({
     });
 
     const byOrigin: Record<string, number> = {};
-    validOrders.forEach((o) => {
+    deliveredOrders.forEach((o) => {
       byOrigin[o.origin] = (byOrigin[o.origin] || 0) + Number(o.subtotal);
     });
 
@@ -76,33 +84,41 @@ export function FinanzasManager({
       expByCategory[cat] = (expByCategory[cat] || 0) + Number(e.amount);
     });
 
-    // Utilidad neta = ventas - gastos operativos - costos producción
-    const netProfit = sales - expTotal - prodCost;
+    // Utilidad neta = ventas entregadas − costo de lo vendido − gastos.
+    // Las compras de materia prima están implícitas en el costo de lo vendido
+    // (no se restan por separado para evitar el doble conteo).
+    const netProfit = sales - cogsTotal - expTotal;
     const margin = sales > 0 ? ((netProfit / sales) * 100) : 0;
 
     return {
-      validOrdersCount: validOrders.length,
+      deliveredOrdersCount: deliveredOrders.length,
       cancelled,
       sales,
+      cogs: cogsTotal,
       expenses: expTotal,
       prodCost,
       netProfit,
       margin,
+      missingCostCount,
       byMethod,
       byOrigin,
       expByCategory,
-      totalDelivered: validOrders.length,
+      totalDelivered: deliveredOrders.length,
     };
-  }, [orders, expenses, production]);
+  }, [orders, expenses, production, cogsTotal, missingCostCount]);
 
   // Utilidad diaria (solo días con cierre)
+  // Los cierres creados antes de la fórmula con costo de lo vendido no traen
+  // cogs_total; se marcan para mostrar una nota (históricos inmutables).
   const dailyData = useMemo(() => {
     return closings.map((c) => ({
       date: c.closing_date,
       sales: Number(c.sales_total),
       expenses: Number(c.expenses_total),
+      cogs: Number((c.details as Record<string, unknown> | undefined)?.cogs_total ?? 0),
       profit: Number(c.estimated_profit),
       orders: c.orders_count,
+      hasCogs: Boolean((c.details as Record<string, unknown> | undefined)?.cogs_total !== undefined),
     }));
   }, [closings]);
 
@@ -161,69 +177,88 @@ export function FinanzasManager({
       </Card>
 
       {/* KPIs principales */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardContent className="py-4">
-            <div className="flex items-center gap-3">
-              <div className="flex size-10 items-center justify-center rounded-xl bg-emerald-500/10">
-                <TrendingUp className="size-5 text-emerald-600" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Ingresos por venta (productos)</p>
-                <p className="text-xl font-bold text-emerald-600">{formatCOP(stats.sales)}</p>
-                <p className="text-[10px] text-muted-foreground">
-                  Sin domicilios · {stats.validOrdersCount} pedidos
-                  {stats.cancelled > 0 ? ` · ${stats.cancelled} cancelados` : ""}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        <KpiCard
+          icon={TrendingUp}
+          tileClassName="bg-emerald-500/10"
+          iconClassName="text-emerald-600"
+          label="Ingresos por venta"
+          value={formatCOP(stats.sales)}
+          valueClassName="text-xl text-emerald-600"
+          caption={`Sin domicilios · ${stats.totalDelivered} pedidos entregados${stats.cancelled > 0 ? ` · ${stats.cancelled} cancelados` : ""}`}
+          help={{
+            what: "Suma del subtotal de los pedidos ENTREGADOS en el período. No incluye domicilios (ni retenidos ni externos).",
+            formula: "Σ subtotal · solo estado ENTREGADO",
+            suggestion: "Compara el número de pedidos entregados vs. creados para medir cuánto se pierde entre pedido y entrega.",
+          }}
+        />
 
-        <Card>
-          <CardContent className="py-4">
-            <div className="flex items-center gap-3">
-              <div className="flex size-10 items-center justify-center rounded-xl bg-red-500/10">
-                <TrendingDown className="size-5 text-red-600" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Gastos operativos</p>
-                <p className="text-xl font-bold text-red-600">{formatCOP(stats.expenses)}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <KpiCard
+          icon={DollarSign}
+          tileClassName="bg-fuchsia-500/10"
+          iconClassName="text-fuchsia-600"
+          label="Costo de lo vendido"
+          value={formatCOP(stats.cogs)}
+          valueClassName="text-xl text-fuchsia-600"
+          caption={stats.sales > 0 ? `${((stats.cogs / stats.sales) * 100).toFixed(1)}% de las ventas` : "—"}
+          help={{
+            what: "Valor de los insumos + empaque vendidos en el período, según el costo configurado por producto.",
+            formula: "Σ (cantidad vendida × costo del producto)",
+            suggestion: "Si el costo de lo vendido sube de ~35% de las ventas, revisa precios o costos de insumos.",
+          }}
+        />
 
-        <Card>
-          <CardContent className="py-4">
-            <div className="flex items-center gap-3">
-              <div className="flex size-10 items-center justify-center rounded-xl bg-amber-500/10">
-                <DollarSign className="size-5 text-amber-600" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Compras materia prima</p>
-                <p className="text-xl font-bold text-amber-600">{formatCOP(stats.prodCost)}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <KpiCard
+          icon={TrendingDown}
+          tileClassName="bg-red-500/10"
+          iconClassName="text-red-600"
+          label="Gastos operativos"
+          value={formatCOP(stats.expenses)}
+          valueClassName="text-xl text-red-600"
+          help={{
+            what: "Suma de los gastos registrados dentro del período de fechas.",
+            formula: "Σ monto · fecha en el filtro",
+          }}
+        />
 
-        <Card>
-          <CardContent className="py-4">
-            <div className="flex items-center gap-3">
-              <div className={`flex size-10 items-center justify-center rounded-xl ${stats.netProfit >= 0 ? "bg-blue-500/10" : "bg-red-500/10"}`}>
-                <Wallet className={`size-5 ${stats.netProfit >= 0 ? "text-blue-600" : "text-red-600"}`} />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Utilidad neta</p>
-                <p className={`text-xl font-bold ${stats.netProfit >= 0 ? "text-blue-600" : "text-red-600"}`}>
-                  {formatCOP(stats.netProfit)}
-                </p>
-                <p className="text-[10px] text-muted-foreground">Margen: {stats.margin.toFixed(1)}%</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <KpiCard
+          icon={Package}
+          tileClassName="bg-amber-500/10"
+          iconClassName="text-amber-600"
+          label="Compras materia prima"
+          value={formatCOP(stats.prodCost)}
+          valueClassName="text-xl text-amber-600"
+          caption="Ya incluidas en el costo de lo vendido"
+          help={{
+            what: "Valor de las compras registradas en Producción en el período. Es solo referencia: este costo vive dentro del costo de lo vendido y no se resta por separado para no contar dos veces.",
+          }}
+        />
+
+        <KpiCard
+          icon={Wallet}
+          tileClassName={stats.netProfit >= 0 ? "bg-blue-500/10" : "bg-red-500/10"}
+          iconClassName={stats.netProfit >= 0 ? "text-blue-600" : "text-red-600"}
+          label="Utilidad neta"
+          value={formatCOP(stats.netProfit)}
+          valueClassName={`text-xl ${stats.netProfit >= 0 ? "text-blue-600" : "text-red-600"}`}
+          caption={
+            stats.missingCostCount > 0 ? (
+              <span className="inline-flex items-center gap-1 font-medium text-amber-700">
+                <AlertTriangle className="size-3.5" />
+                {stats.missingCostCount} producto{stats.missingCostCount > 1 ? "s" : ""} sin costo · Margen {stats.margin.toFixed(1)}%
+              </span>
+            ) : (
+              `Margen: ${stats.margin.toFixed(1)}%`
+            )
+          }
+          help={{
+            what: "Lo que queda del período después de pagar el costo de lo vendido y los gastos operativos.",
+            formula: "Ingresos entregados − costo de lo vendido − gastos",
+            suggestion: stats.netProfit < 0
+              ? "Período en pérdida: revisa si las ventas alcanzan a cubrir costos + gastos fijos de la quincena."
+              : "Si el margen baja de ~30%, revisa precios, costos de insumos o gastos fijos.",
+          }}
+        />
       </div>
 
       {/* Desglose por método de pago */}
@@ -298,6 +333,7 @@ export function FinanzasManager({
                     <th className="pb-2 pr-4 font-medium">Fecha</th>
                     <th className="pb-2 pr-4 text-right font-medium">Pedidos</th>
                     <th className="pb-2 pr-4 text-right font-medium">Ventas</th>
+                    <th className="pb-2 pr-4 text-right font-medium">Costo vendido</th>
                     <th className="pb-2 pr-4 text-right font-medium">Gastos</th>
                     <th className="pb-2 text-right font-medium">Utilidad</th>
                   </tr>
@@ -308,6 +344,9 @@ export function FinanzasManager({
                       <td className="py-2 pr-4 font-medium">{formatDate(`${d.date}T12:00:00Z`)}</td>
                       <td className="py-2 pr-4 text-right text-muted-foreground">{d.orders}</td>
                       <td className="py-2 pr-4 text-right text-emerald-600">{formatCOP(d.sales)}</td>
+                      <td className="py-2 pr-4 text-right text-fuchsia-600">
+                        {d.hasCogs ? formatCOP(d.cogs) : <span className="text-muted-foreground">—</span>}
+                      </td>
                       <td className="py-2 pr-4 text-right text-red-600">{formatCOP(d.expenses)}</td>
                       <td className={`py-2 text-right font-bold ${d.profit >= 0 ? "text-blue-600" : "text-red-600"}`}>
                         {formatCOP(d.profit)}
@@ -316,6 +355,10 @@ export function FinanzasManager({
                   ))}
                 </tbody>
               </table>
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                Los cierres anteriores al cambio de fórmula (sin costo de lo vendido) muestran &ldquo;—&rdquo; y conservan su
+                histórico inmutable.
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -369,10 +412,14 @@ export function FinanzasManager({
         <CardContent className="py-4 text-center text-sm text-muted-foreground">
           <p className="font-medium">Fórmula de utilidad neta</p>
           <p className="mt-1">
-            <span className="text-emerald-600">Ventas de productos (sin domis)</span> −{" "}
-            <span className="text-red-600">Gastos operativos</span> −{" "}
-            <span className="text-amber-600">Compras de materia prima</span> ={" "}
+            <span className="text-emerald-600">Ventas de productos entregados (sin domis)</span> −{" "}
+            <span className="text-fuchsia-600">Costo de lo vendido</span> −{" "}
+            <span className="text-red-600">Gastos operativos</span> ={" "}
             <span className="font-bold text-blue-600">Utilidad neta</span>
+          </p>
+          <p className="mt-1 text-[11px]">
+            Las compras de materia prima ya están dentro del costo de lo vendido
+            (no se restan por separado).
           </p>
         </CardContent>
       </Card>

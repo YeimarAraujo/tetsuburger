@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Download, Package, ReceiptText, Search, ShoppingCart } from "lucide-react";
+import { Download, Drumstick, Flame, Hamburger, Package, ReceiptText, Search, ShoppingCart, Trophy } from "lucide-react";
 import { formatCOP, formatDate } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -10,6 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import type { SalesStats } from "@/lib/sales-counting";
+import { KpiCard } from "@/components/admin/kpi-card";
 
 interface OrderRow {
   id: string;
@@ -76,16 +78,30 @@ export function ReportsManager({
   production,
   filters,
   categories,
+  sales,
 }: {
   orders: OrderRow[];
   expenses: ExpenseRow[];
   production: ProductionRow[];
   filters: Filters;
   categories: { id: number; name: string }[];
+  sales: SalesStats;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [search, setSearch] = useState("");
+  const [ventasTipo, setVentasTipo] = useState<"todos" | "hamburguesas" | "perros">("todos");
+
+  const ranking = useMemo(() => {
+    const hits = [...sales.byProduct];
+    if (ventasTipo === "hamburguesas") {
+      return hits.filter((h) => h.hamburguesas > 0).sort((a, b) => b.hamburguesas - a.hamburguesas);
+    }
+    if (ventasTipo === "perros") {
+      return hits.filter((h) => h.perros > 0).sort((a, b) => b.perros - a.perros);
+    }
+    return hits;
+  }, [sales.byProduct, ventasTipo]);
 
   const stats = useMemo(() => {
     const validOrders = orders.filter((o) => o.status !== "CANCELADO");
@@ -179,51 +195,69 @@ export function ReportsManager({
       </Card>
 
       {/* KPIs: sumas de cada historial */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Card>
-          <CardContent className="py-4">
-            <div className="flex items-center gap-3">
-              <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10">
-                <ShoppingCart className="size-5 text-primary" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Ventas (productos, sin domis)</p>
-                <p className="text-xl font-bold text-emerald-600">{formatCOP(stats.sales)}</p>
-                <p className="text-[10px] text-muted-foreground">
-                  {stats.validOrdersCount} pedidos
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="py-4">
-            <div className="flex items-center gap-3">
-              <div className="flex size-10 items-center justify-center rounded-xl bg-red-500/10">
-                <ReceiptText className="size-5 text-red-600" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Gastos (suma)</p>
-                <p className="text-xl font-bold text-red-600">{formatCOP(stats.expenses)}</p>
-                <p className="text-[10px] text-muted-foreground">{expenses.length} registros</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="py-4">
-            <div className="flex items-center gap-3">
-              <div className="flex size-10 items-center justify-center rounded-xl bg-amber-500/10">
-                <Package className="size-5 text-amber-600" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Compras materia prima (suma)</p>
-                <p className="text-xl font-bold text-amber-600">{formatCOP(stats.production)}</p>
-                <p className="text-[10px] text-muted-foreground">{production.length} registros</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard
+          icon={ShoppingCart}
+          label="Ventas (productos, sin domis)"
+          value={formatCOP(stats.sales)}
+          valueClassName="text-xl text-emerald-600"
+          caption={`${stats.validOrdersCount} pedidos`}
+          help={{
+            what: "Subtotal de los pedidos no cancelados del período. Excluye el valor de los domicilios.",
+            formula: "Σ subtotal · pedidos ≠ CANCELADO",
+          }}
+        />
+        <KpiCard
+          icon={ReceiptText}
+          tileClassName="bg-red-500/10"
+          iconClassName="text-red-600"
+          label="Gastos (suma)"
+          value={formatCOP(stats.expenses)}
+          valueClassName="text-xl text-red-600"
+          caption={`${expenses.length} registros`}
+          help={{
+            what: "Suma de todos los gastos registrados en el período, sin importar la categoría.",
+            formula: "Σ monto · fecha en el filtro",
+          }}
+        />
+        <KpiCard
+          icon={Package}
+          tileClassName="bg-amber-500/10"
+          iconClassName="text-amber-600"
+          label="Compras materia prima (suma)"
+          value={formatCOP(stats.production)}
+          valueClassName="text-xl text-amber-600"
+          caption={`${production.length} registros`}
+          help={{
+            what: "Suma de las compras de materia prima registradas en Producción dentro del período.",
+            formula: "Σ total_cost · fecha en el filtro",
+          }}
+        />
+        <KpiCard
+          icon={Flame}
+          tileClassName="bg-orange-500/10"
+          iconClassName="text-orange-600"
+          label="Unidades vendidas"
+          value={
+            <>
+              <span className="text-orange-600">{sales.totals.pedidos}</span>
+              <span className="text-sm font-normal text-muted-foreground"> pedidos</span>
+            </>
+          }
+          valueClassName="text-xl"
+          caption={
+            <span className="inline-flex items-center gap-1.5">
+              🍔 {sales.totals.hamburguesas}
+              <hr />
+              🌭 {sales.totals.perros}
+            </span>
+          }
+          help={{
+            what: "Conteos registrados en los productos (ingresados al confirmar el pedido o manualmente en Productos).",
+            formula: "Σ conteo_hamburguesas + conteo_perros",
+            suggestion: "El conteo se registra automáticamente al confirmar el pedido; también puedes ajustarlo en la columna de conteo de cada producto.",
+          }}
+        />
       </div>
 
       {/* Historial de pedidos */}
@@ -271,6 +305,7 @@ export function ReportsManager({
                     <th className="pb-2 pr-2 font-medium">Cliente</th>
                     <th className="pb-2 pr-2 font-medium">Estado</th>
                     <th className="pb-2 pr-2 font-medium">Pago</th>
+                    <th className="pb-2 pr-2 font-medium">🍔/🌭</th>
                     <th className="pb-2 pr-2 text-right font-medium">Subtotal</th>
                     <th className="pb-2 text-right font-medium">Total (sin domis)</th>
                   </tr>
@@ -283,6 +318,13 @@ export function ReportsManager({
                       <td className="py-2 pr-2">{o.customer_name || "—"}</td>
                       <td className="py-2 pr-2"><Badge variant="outline" className="text-[10px]">{o.status}</Badge></td>
                       <td className="py-2 pr-2 text-xs">{o.payment_method ?? "EFECTIVO"}</td>
+                      <td className="py-2 pr-2 text-xs whitespace-nowrap">
+                        {(() => {
+                          const c = sales.perOrder[o.id];
+                          if (!c) return "—";
+                          return `${c.hamburguesas} 🍔 · ${c.perros} 🌭`;
+                        })()}
+                      </td>
                       <td className="py-2 pr-2 text-right">{formatCOP(Number(o.subtotal))}</td>
                       <td className="py-2 text-right font-semibold">{formatCOP(Number(o.subtotal))}</td>
                     </tr>
@@ -292,7 +334,7 @@ export function ReportsManager({
               <table className="mt-2 w-full text-sm">
                 <tfoot>
                   <tr className="border-t font-bold">
-                    <td colSpan={6} className="py-2 text-right">Total</td>
+                    <td colSpan={7} className="py-2 text-right">Total</td>
                     <td className="py-2 text-right">{formatCOP(stats.sales)}</td>
                   </tr>
                 </tfoot>
@@ -391,6 +433,63 @@ export function ReportsManager({
                   <td className="py-2 text-right text-amber-600">{formatCOP(stats.production)}</td>
                 </tr>
               </tfoot>
+            </table>
+          )}
+        </CardContent>
+      </Card>
+      {/* Más vendidos */}
+      <Card>
+        <CardContent className="overflow-x-auto py-4">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Trophy className="size-4 text-amber-500" />
+              <p className="text-sm font-medium">Más vendidos</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Select value={ventasTipo} onValueChange={(v) => setVentasTipo(v as typeof ventasTipo)}>
+                <SelectTrigger className="w-40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos</SelectItem>
+                  <SelectItem value="hamburguesas">Hamburguesas</SelectItem>
+                  <SelectItem value="perros">Perros</SelectItem>
+                </SelectContent>
+              </Select>
+              <a href={`/admin/export/mas-vendidos?${exportParams}&tipo=${ventasTipo}`}>
+                <Button variant="outline" size="sm">
+                  <Download className="size-4" />
+                  CSV
+                </Button>
+              </a>
+            </div>
+          </div>
+          {ranking.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Sin ventas en este período</p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left text-muted-foreground">
+                  <th className="pb-2 pr-2 font-medium">#</th>
+                  <th className="pb-2 pr-2 font-medium">Producto</th>
+                  <th className="pb-2 pr-2 text-right font-medium">Unidades</th>
+                  <th className="pb-2 pr-2 text-right font-medium">🍔</th>
+                  <th className="pb-2 pr-2 text-right font-medium">🌭</th>
+                  <th className="pb-2 text-right font-medium">Ingresos</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ranking.slice(0, 15).map((h, i) => (
+                  <tr key={h.name} className="border-b last:border-0">
+                    <td className="py-2 pr-2 text-muted-foreground">{i + 1}</td>
+                    <td className="py-2 pr-2 font-medium">{h.name}</td>
+                    <td className="py-2 pr-2 text-right">{h.units}</td>
+                    <td className="py-2 pr-2 text-right">{h.hamburguesas || "—"}</td>
+                    <td className="py-2 pr-2 text-right">{h.perros || "—"}</td>
+                    <td className="py-2 text-right font-semibold">{formatCOP(h.ingresos)}</td>
+                  </tr>
+                ))}
+              </tbody>
             </table>
           )}
         </CardContent>

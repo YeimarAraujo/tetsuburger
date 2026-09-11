@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { ProductionManager } from "@/components/admin/production-manager";
+import { PageHeader } from "@/components/admin/page-header";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +20,7 @@ export default async function ProductionPage() {
       .limit(50),
     supabase
       .from("inventory_items")
-      .select("id, name, unit")
+      .select("id, name, unit, barcode")
       .eq("is_active", true)
       .order("name"),
   ]);
@@ -39,18 +40,26 @@ export default async function ProductionPage() {
     item: r.item && !Array.isArray(r.item) ? r.item : null,
   }));
 
+  const inventoryItems = ((itemsRes.data ?? []) as unknown as {
+    id: string;
+    name: string;
+    unit: string;
+    barcode: string | null;
+  }[]).map((i) => ({
+    ...i,
+    barcode: i.barcode ?? null,
+  }));
+
   return (
     <div className="mx-auto max-w-5xl space-y-6 p-4 lg:p-6">
-      <header>
-        <h1 className="font-display text-3xl tracking-wide">COMPRAS DEL DÍA</h1>
-        <p className="text-sm text-muted-foreground">
-          Registra la materia prima que compraste para cocinar cada día
-        </p>
-      </header>
+      <PageHeader
+        title="Compras del día"
+        description="Registra la materia prima que compraste para cocinar cada día"
+      />
 
       <ProductionManager
         records={records}
-        inventoryItems={(itemsRes.data as unknown as any[]) ?? []}
+        inventoryItems={inventoryItems}
       />
     </div>
   );

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Store, Clock } from "lucide-react";
+import { Store } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 function getTimeRemaining(targetMs: number) {
@@ -20,7 +20,10 @@ function getTimeRemaining(targetMs: number) {
 function Unit({ value, label }: { value: number; label: string }) {
   return (
     <div className="flex flex-col items-center gap-1.5">
-      <span className="flex size-16 items-center justify-center rounded-2xl bg-primary text-3xl font-bold tabular-nums text-primary-foreground">
+      <span
+        suppressHydrationWarning
+        className="flex size-16 items-center justify-center rounded-2xl bg-primary text-3xl font-bold tabular-nums text-primary-foreground"
+      >
         {String(value).padStart(2, "0")}
       </span>
       <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">

@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { ExpenseManager, type ExpenseRow } from "@/components/admin/expenses/expense-manager";
+import { PageHeader } from "@/components/admin/page-header";
 
 export const metadata = {
   title: "Gastos · TETSUBURGER Admin",
@@ -34,7 +35,7 @@ export default async function ExpensesPage({
 
   let query = supabase
     .from("expenses")
-    .select("id, expense_date, expense_category_id, concept, amount, description, category:expense_categories(name)")
+    .select("id, expense_date, expense_category_id, concept, amount, description, from_caja, category:expense_categories(name)")
     .gte("expense_date", from)
     .lte("expense_date", to)
     .order("expense_date", { ascending: false })
@@ -44,14 +45,22 @@ export default async function ExpensesPage({
     query = query.eq("expense_category_id", Number(category));
   }
 
-  const [expensesRes, categoriesRes] = await Promise.all([
+  const [expensesRes, categoriesRes, movementsRes] = await Promise.all([
     query,
     supabase
       .from("expense_categories")
       .select("id, name")
       .eq("is_active", true)
       .order("name"),
+    supabase
+      .from("caja_movements")
+      .select("ref_id, metodo")
+      .eq("ref_type", "expense"),
   ]);
+
+  const metodoByExpense = new Map<string, "EFECTIVO" | "TRANSFERENCIA">(
+    (movementsRes.data ?? []).map((m) => [m.ref_id, m.metodo])
+  );
 
   const rows: ExpenseRow[] = ((expensesRes.data ?? []) as unknown as {
     id: string;
@@ -60,6 +69,7 @@ export default async function ExpensesPage({
     concept: string;
     amount: string | number;
     description: string;
+    from_caja: boolean;
     category?: { name: string } | null;
   }[]).map((r) => ({
     id: r.id,
@@ -68,18 +78,17 @@ export default async function ExpensesPage({
     concept: r.concept,
     amount: Number(r.amount),
     description: r.description,
+    from_caja: Boolean(r.from_caja),
+    movimiento_metodo: metodoByExpense.get(r.id) ?? null,
     category_name: r.category?.name ?? null,
   }));
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-4 lg:p-6">
-      <header>
-        <h1 className="text-2xl font-bold">Gastos</h1>
-        <p className="text-sm text-muted-foreground">
-          Control de egresos del negocio · alimenta el cierre diario y las
-          finanzas
-        </p>
-      </header>
+      <PageHeader
+        title="Gastos"
+        description="Control de egresos del negocio · alimenta el cierre diario y las finanzas"
+      />
 
       <ExpenseManager
         rows={rows}

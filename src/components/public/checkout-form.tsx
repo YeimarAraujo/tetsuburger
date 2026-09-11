@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Loader2, Banknote, Landmark, Truck, Store, Info } from "lucide-react";
 import { toast } from "sonner";
-import { cartSubtotal, cartCount, useCart } from "@/store/cart";
+import { cartSubtotal, useCart } from "@/store/cart";
 import { placeOrder } from "@/features/orders/actions";
 import { formatCOP } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -28,7 +28,6 @@ export function CheckoutForm({ deliveryFee }: { deliveryFee: number }) {
   const subtotal = cartSubtotal(items);
   const fee = deliveryType === "DOMICILIO" ? deliveryFee : 0;
   const total = subtotal + fee;
-  const count = cartCount(items);
 
   if (items.length === 0 && !submitting) {
     return (
@@ -58,7 +57,12 @@ export function CheckoutForm({ deliveryFee }: { deliveryFee: number }) {
     const payloadItems = items.map((item) => ({
       product_id: item.productId,
       quantity: item.quantity,
-      addon_ids: item.addons.map((a) => a.id),
+      addons: item.addons.map((a) => ({
+        addon_id: a.id,
+        quantity: a.quantity ?? 1,
+        ...(a.target ? { target: a.target } : {}),
+        ...(a.target === "EACH" ? { components: a.components ?? 1 } : {}),
+      })),
     }));
 
     // Honeypot anti-spam
@@ -67,23 +71,22 @@ export function CheckoutForm({ deliveryFee }: { deliveryFee: number }) {
 
     const result = await placeOrder(customer, payloadItems);
 
-    if (result.error || !result.orderNumber) {
+    if (result.error && !result.orderNumber) {
       setSubmitting(false);
-      toast.error(result.error ?? "No se pudo registrar el pedido");
-      if (!result.orderNumber) return;
+      toast.error(result.error);
+      return;
     }
 
-    sessionStorage.setItem(
-      "tetsuburger-last-order",
-      JSON.stringify({
-        orderNumber: result.orderNumber,
-        total: result.total ?? total,
-        whatsappUrl: result.whatsappUrl ?? "",
-      })
-    );
+    if (!result.confirmationToken) {
+      setSubmitting(false);
+      toast.error(result.error ?? "No se pudo registrar el pedido");
+      return;
+    }
 
+    // El detalle viaja por token en la URL; la página de confirmación lo lee
+    // del servidor (ya no se usa sessionStorage).
     clear();
-    startTransition(() => router.push("/pedido/confirmado"));
+    startTransition(() => router.push(`/pedido/confirmado?t=${result.confirmationToken}`));
   }
 
   return (
@@ -95,6 +98,9 @@ export function CheckoutForm({ deliveryFee }: { deliveryFee: number }) {
           <CardTitle>Datos de entrega</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          <Link href="/resumen" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-primary">
+            <ArrowLeft className="size-4" /> Volver al resumen
+          </Link>
           <input
             type="text"
             name="website"
