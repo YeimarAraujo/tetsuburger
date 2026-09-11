@@ -206,7 +206,8 @@ export function AddonManager({
                   name="price"
                   type="number"
                   min={0}
-                  step={100}
+                  step="any"
+                  inputMode="decimal"
                   defaultValue={editing?.price ?? ""}
                   placeholder="3000"
                   required

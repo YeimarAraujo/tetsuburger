@@ -286,7 +286,7 @@ export function CajaManager({ rows }: { rows: CajaRow[] }) {
             <Input
               type="number"
               min={0}
-              step="0.01"
+              step="any"
               inputMode="decimal"
               value={contado}
               onChange={(e) => setContado(e.target.value)}
@@ -516,7 +516,7 @@ export function CajaManager({ rows }: { rows: CajaRow[] }) {
                   ({manTipo === "INGRESO_EXTRA" || (manTipo === "AJUSTE" && manIngreso) ? "entra" : "sale"})
                 </span>
               </Label>
-              <Input name="amount" type="number" min={0.01} step="0.01" inputMode="decimal" placeholder="50000" required />
+              <Input name="amount" type="number" min={0.01} step="any" inputMode="decimal" placeholder="50000" required />
             </div>
 
             <div className="space-y-2">

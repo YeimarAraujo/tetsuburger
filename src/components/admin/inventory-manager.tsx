@@ -255,16 +255,16 @@ export function InventoryManager({
               </div>
               <div className="space-y-2">
                 <Label>Stock mínimo</Label>
-                <Input name="min_stock" type="number" min={0} step={0.1} defaultValue={editing?.min_stock ?? 5} />
+                <Input name="min_stock" type="number" min={0} step="any" defaultValue={editing?.min_stock ?? 5} />
               </div>
             </div>
             <div className="space-y-2">
               <Label>Stock actual</Label>
-              <Input name="current_stock" type="number" min={0} step={0.1} defaultValue={editing?.current_stock ?? 0} />
+              <Input name="current_stock" type="number" min={0} step="any" defaultValue={editing?.current_stock ?? 0} />
             </div>
             <div className="space-y-2">
               <Label>Costo / unidad (COP)</Label>
-              <Input name="cost" type="number" min={0} step={100} defaultValue={editing?.cost ?? 0} placeholder="0" />
+              <Input name="cost" type="number" min={0} step="any" inputMode="decimal" defaultValue={editing?.cost ?? 0} placeholder="0" />
               <p className="text-xs text-muted-foreground">
                 Se actualiza solo al registrar compras. Se usa para calcular el costo
                 de los productos según sus consumos.
@@ -334,7 +334,7 @@ export function InventoryManager({
               </div>
               <div className="space-y-2">
                 <Label>Cantidad *</Label>
-                <Input name="quantity" type="number" min={0.1} step={0.1} required placeholder="0" />
+                <Input name="quantity" type="number" min={0.1} step="any" required placeholder="0" />
               </div>
             </div>
             <div className="space-y-2">

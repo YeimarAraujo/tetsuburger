@@ -177,6 +177,7 @@ export function RentabilidadManager({
               <Input
                 type="number"
                 min={1}
+                step="any"
                 value={config.unidadesMes}
                 onChange={(e) => update("unidadesMes", num(e.target.value) || 1)}
               />
@@ -187,7 +188,7 @@ export function RentabilidadManager({
                 type="number"
                 min={0}
                 max={90}
-                step={1}
+                step="any"
                 value={config.utilidadPct}
                 onChange={(e) => update("utilidadPct", num(e.target.value))}
               />
@@ -220,7 +221,8 @@ export function RentabilidadManager({
               <Input
                 type="number"
                 min={0}
-                step={1000}
+                step="any"
+                inputMode="decimal"
                 value={config.nomina}
                 onChange={(e) => update("nomina", num(e.target.value))}
               />
@@ -232,7 +234,8 @@ export function RentabilidadManager({
               <Input
                 type="number"
                 min={0}
-                step={1000}
+                step="any"
+                inputMode="decimal"
                 value={config.arriendo}
                 onChange={(e) => update("arriendo", num(e.target.value))}
               />
@@ -244,7 +247,8 @@ export function RentabilidadManager({
               <Input
                 type="number"
                 min={0}
-                step={1000}
+                step="any"
+                inputMode="decimal"
                 value={config.servicios}
                 onChange={(e) => update("servicios", num(e.target.value))}
               />
@@ -254,7 +258,8 @@ export function RentabilidadManager({
               <Input
                 type="number"
                 min={0}
-                step={1000}
+                step="any"
+                inputMode="decimal"
                 value={config.otrosFijos}
                 onChange={(e) => update("otrosFijos", num(e.target.value))}
               />

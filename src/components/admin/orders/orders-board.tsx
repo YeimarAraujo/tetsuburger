@@ -503,7 +503,8 @@ export function OrdersBoard({
                                 className="h-6 w-20 rounded border px-1.5 text-[11px] font-semibold"
                                 autoFocus
                                 min={0}
-                                step={500}
+                                step="any"
+                                inputMode="decimal"
                               />
                               <button
                                 type="button"
@@ -628,7 +629,7 @@ export function OrdersBoard({
                                 className="h-6 w-24 rounded border px-1.5 text-[11px] font-bold"
                                 autoFocus
                                 min={0}
-                                step="0.01"
+                                step="any"
                               />
                               <button
                                 type="button"

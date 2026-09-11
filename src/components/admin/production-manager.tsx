@@ -323,7 +323,7 @@ export function ProductionManager({
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label>Cantidad *</Label>
-                <Input name="quantity" type="number" min={0.1} step={0.1} required defaultValue={1} onChange={(e) => setQuantity(e.target.value)} />
+                <Input name="quantity" type="number" min={0.1} step="any" required defaultValue={1} onChange={(e) => setQuantity(e.target.value)} />
               </div>
               <div className="space-y-2">
                 <Label>Unidad</Label>
@@ -342,7 +342,7 @@ export function ProductionManager({
               </div>
               <div className="space-y-2">
                 <Label>Costo unitario (COP)</Label>
-                <Input name="unit_cost" type="number" min={0} step="0.01" inputMode="decimal" placeholder="3250" onChange={(e) => setUnitCost(e.target.value)} />
+                <Input name="unit_cost" type="number" min={0} step="any" inputMode="decimal" placeholder="3250" onChange={(e) => setUnitCost(e.target.value)} />
               </div>
             </div>
 

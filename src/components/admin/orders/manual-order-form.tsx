@@ -304,7 +304,8 @@ export function ManualOrderForm({
                 <Input
                   type="number"
                   min={0}
-                  step={100}
+                  step="any"
+                  inputMode="decimal"
                   value={deliveryType === "DOMICILIO" && chargeDeliveryFee ? deliveryFee : 0}
                   disabled={deliveryType !== "DOMICILIO" || !chargeDeliveryFee}
                   onChange={(e) => setDeliveryFee(e.target.value)}

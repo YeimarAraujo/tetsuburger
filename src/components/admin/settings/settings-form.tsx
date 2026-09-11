@@ -124,7 +124,8 @@ export function SettingsForm({
                   id={field.key}
                   type="number"
                   min={0}
-                  step={100}
+                  step="any"
+                  inputMode="decimal"
                   value={texts[field.key] ?? ""}
                   onChange={(e) => setTexts({ ...texts, [field.key]: e.target.value })}
                 />

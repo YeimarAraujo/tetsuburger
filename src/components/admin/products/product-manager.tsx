@@ -642,7 +642,8 @@ function ConsumptionDialog({
                 <Input
                   type="number"
                   min={0}
-                  step={100}
+                  step="any"
+                  inputMode="decimal"
                   value={costInput}
                   onChange={(e) => setCostInput(e.target.value)}
                   placeholder="0"
@@ -706,7 +707,8 @@ function ConsumptionDialog({
                         className="h-7 w-24 rounded border px-1.5 text-[11px] font-semibold"
                         autoFocus
                         min={0}
-                        step={100}
+                        step="any"
+                        inputMode="decimal"
                       />
                       <button
                         type="button"
@@ -895,7 +897,8 @@ function ProductDialog({
                 name="price"
                 type="number"
                 min={0}
-                step={100}
+                step="any"
+                inputMode="decimal"
                 defaultValue={editing?.price ?? ""}
                 placeholder="25000"
                 onChange={(e) => setPriceInput(e.target.value)}
@@ -909,7 +912,8 @@ function ProductDialog({
                 name="cost"
                 type="number"
                 min={0}
-                step={100}
+                step="any"
+                inputMode="decimal"
                 value={costInput}
                 placeholder="0"
                 onChange={(e) => setCostInput(e.target.value)}
@@ -942,7 +946,8 @@ function ProductDialog({
                 name="packaging_cost"
                 type="number"
                 min={0}
-                step={100}
+                step="any"
+                inputMode="decimal"
                 defaultValue={editing?.packaging_cost ?? 0}
                 placeholder="0"
               />
