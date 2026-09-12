@@ -196,7 +196,11 @@ export async function persistOrder(params: {
     .select("id, order_number, confirmation_token")
     .single();
 
-  if (error || !order) return { error: "No se pudo registrar el pedido" };
+  if (error || !order) {
+    return {
+      error: `No se pudo registrar el pedido: ${error?.message ?? "error desconocido"}`,
+    };
+  }
 
   for (const line of params.lines ?? []) {
     const { data: insertedItem, error: itemError } = await supabase
@@ -211,10 +215,15 @@ export async function persistOrder(params: {
       .select("id")
       .single();
 
-    if (itemError || !insertedItem) continue;
+    if (itemError || !insertedItem) {
+      await supabase.from("orders").delete().eq("id", order.id);
+      return {
+        error: `No se pudo registrar el pedido: ${itemError?.message ?? "no se pudo insertar el ítem"}`,
+      };
+    }
 
     if (line.addons.length > 0) {
-      await supabase.from("order_item_addons").insert(
+      const { error: addonsError } = await supabase.from("order_item_addons").insert(
         line.addons.map((a) => ({
           order_item_id: insertedItem.id,
           addon_id: a.id,
@@ -225,6 +234,11 @@ export async function persistOrder(params: {
           components_qty: a.target === "EACH" ? (a.components ?? 1) : null,
         }))
       );
+
+      if (addonsError) {
+        await supabase.from("orders").delete().eq("id", order.id);
+        return { error: `No se pudo registrar el pedido: ${addonsError.message}` };
+      }
     }
   }
 

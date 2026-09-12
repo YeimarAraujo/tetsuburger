@@ -215,10 +215,14 @@ export async function addOrderItem(
       .select("id")
       .single();
 
-    if (itemError || !insertedItem) continue;
+    if (itemError || !insertedItem) {
+      return {
+        error: `No se pudo agregar el producto: ${itemError?.message ?? "no se pudo insertar el ítem"}`,
+      };
+    }
 
     if (line.addons.length > 0) {
-      await supabase.from("order_item_addons").insert(
+      const { error: addonsError } = await supabase.from("order_item_addons").insert(
         line.addons.map((a) => ({
           order_item_id: insertedItem.id,
           addon_id: a.id,
@@ -229,6 +233,11 @@ export async function addOrderItem(
           components_qty: a.target === "EACH" ? (a.components ?? 1) : null,
         }))
       );
+
+      if (addonsError) {
+        await supabase.from("order_items").delete().eq("id", insertedItem.id);
+        return { error: `No se pudo agregar el producto: ${addonsError.message}` };
+      }
     }
   }
 
