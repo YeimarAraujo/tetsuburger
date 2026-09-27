@@ -11,6 +11,8 @@ export interface ActionResult {
   error?: string;
 }
 
+const BASE_KEY = "caja_base";
+
 const MANUAL_LABEL: Record<string, string> = {
   INGRESO_EXTRA: "Ingreso adicional",
   RETIRO: "Retiro",
@@ -102,5 +104,51 @@ export async function deleteCajaMovement(id: string): Promise<ActionResult> {
 
   revalidatePath("/admin/caja");
   revalidatePath("/admin");
+  return {};
+}
+
+/** Lee la base de caja (dinero que no se toca) desde settings. */
+export async function getCajaBase(): Promise<number> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("settings")
+    .select("value")
+    .eq("key", BASE_KEY)
+    .maybeSingle();
+
+  const n = Number(data?.value ?? 0);
+  return Number.isFinite(n) && n >= 0 ? n : 0;
+}
+
+/** Persiste la base de caja en settings (valor único y no público). */
+export async function saveCajaBase(input: unknown): Promise<ActionResult> {
+  const authError = await assertAuth();
+  if (authError) return { error: authError };
+
+  const raw = (input as { base?: unknown } | null)?.base;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0 || n > 1_000_000_000_000) {
+    return { error: "Base inválida: debe ser un monto mayor o igual a 0" };
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Sesión expirada" };
+
+  const { error } = await supabase.from("settings").upsert(
+    {
+      key: BASE_KEY,
+      value: n,
+      is_public: false,
+      updated_by: user.id,
+    },
+    { onConflict: "key" }
+  );
+
+  if (error) return { error: "No se pudo guardar la base de caja" };
+
+  revalidatePath("/admin/caja");
   return {};
 }

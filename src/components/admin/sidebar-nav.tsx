@@ -38,7 +38,7 @@ const NAV_ITEMS = [
   { href: "/admin/reportes", label: "Reportes", icon: BarChart3 },
   { href: "/admin/rentabilidad", label: "Rentabilidad", icon: BadgePercent },
   { href: "/admin/configuracion", label: "Configuración", icon: Settings },
-  { href: "/admin/auditoria", label: "Auditoría", icon: ShieldCheck },
+  // { href: "/admin/auditoria", label: "Auditoría", icon: ShieldCheck },
 ];
 
 export function SidebarNav() {

@@ -2,9 +2,9 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowDownLeft, ArrowUpRight, CircleDollarSign, Coins, CreditCard, Loader2, Plus, Scale, Trash2, TrendingDown, TrendingUp, Wallet } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, CalendarDays, CircleDollarSign, Coins, CreditCard, Landmark, Loader2, PiggyBank, Plus, Save, Scale, Trash2, TrendingDown, TrendingUp, Wallet } from "lucide-react";
 import { toast } from "sonner";
-import { createCajaMovement, deleteCajaMovement } from "@/features/caja/actions";
+import { createCajaMovement, deleteCajaMovement, saveCajaBase } from "@/features/caja/actions";
 import { formatCOP, formatDate } from "@/lib/format";
 import { bogotaToday } from "@/lib/bogota";
 import type { CajaMetodo, CajaTipo } from "@/types/db";
@@ -63,7 +63,47 @@ function moveMonth(days: number, from: string): string {
   return d.toISOString().slice(0, 10);
 }
 
-export function CajaManager({ rows }: { rows: CajaRow[] }) {
+function addDays(dateStr: string, delta: number): string {
+  const d = new Date(`${dateStr}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + delta);
+  return d.toISOString().slice(0, 10);
+}
+
+function startOfWeekMonday(dateStr: string): string {
+  const d = new Date(`${dateStr}T12:00:00Z`);
+  const offset = (d.getUTCDay() + 6) % 7; // lunes = 0, domingo = 6
+  d.setUTCDate(d.getUTCDate() - offset);
+  return d.toISOString().slice(0, 10);
+}
+
+function lastMovementDate(rows: CajaRow[], cutoff: string): string | null {
+  let max: string | null = null;
+  for (const r of rows) {
+    if (r.movement_date <= cutoff && (max === null || r.movement_date > max)) {
+      max = r.movement_date;
+    }
+  }
+  return max;
+}
+
+interface SaldoCuenta {
+  efectivo: number;
+  transferencia: number;
+  total: number;
+}
+
+function saldoAtDate(rows: CajaRow[], date: string): SaldoCuenta {
+  let efectivo = 0;
+  let transferencia = 0;
+  for (const r of rows) {
+    if (r.movement_date > date) continue;
+    if (r.metodo === "TRANSFERENCIA") transferencia += Number(r.amount);
+    else efectivo += Number(r.amount);
+  }
+  return { efectivo, transferencia, total: efectivo + transferencia };
+}
+
+export function CajaManager({ rows, base }: { rows: CajaRow[]; base: number }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -78,6 +118,10 @@ export function CajaManager({ rows }: { rows: CajaRow[] }) {
   const [manTipo, setManTipo] = useState<"INGRESO_EXTRA" | "RETIRO" | "AJUSTE">("INGRESO_EXTRA");
   const [manIngreso, setManIngreso] = useState(false);
   const [manMetodo, setManMetodo] = useState<CajaMetodo>("EFECTIVO");
+
+  const [baseInput, setBaseInput] = useState(() => String(base));
+  const [corteDate, setCorteDate] = useState(() => lastMovementDate(rows, bogotaToday()) ?? bogotaToday());
+  const [weekIdx, setWeekIdx] = useState(0);
 
   const saldo = useMemo(() => rows.reduce((s, r) => s + Number(r.amount), 0), [rows]);
   const saldoEfectivo = useMemo(
@@ -105,6 +149,42 @@ export function CajaManager({ rows }: { rows: CajaRow[] }) {
     .filter((r) => r.metodo === "EFECTIVO")
     .reduce((s, r) => s + Number(r.amount), 0);
   const diff = (Number(contado) || 0) - esperado;
+
+  // Saldo acumulado hasta la fecha de corte (día puntual).
+  const corteData = useMemo(() => {
+    const ultimoDia = lastMovementDate(rows, corteDate) ?? corteDate;
+    return { corte: corteDate, ultimoDia, saldos: saldoAtDate(rows, ultimoDia) };
+  }, [rows, corteDate]);
+
+  // Ganancia por semana: comparación del saldo final de cada semana.
+  const weeks = useMemo(() => {
+    const startThis = startOfWeekMonday(bogotaToday());
+    return [
+      { label: "Esta semana", start: startThis },
+      { label: "Semana pasada", start: addDays(startThis, -7) },
+      { label: "Hace 2 semanas", start: addDays(startThis, -14) },
+    ];
+  }, []);
+
+  const weekData = useMemo(() => {
+    const week = weeks[weekIdx];
+    const weekEnd = addDays(week.start, 6);
+    const finSemana = lastMovementDate(rows, weekEnd);
+    const cutoffPrevio = addDays(week.start, -1);
+    const finAnterior = lastMovementDate(rows, cutoffPrevio) ?? cutoffPrevio;
+    const saldoFin = saldoAtDate(rows, finSemana ?? weekEnd);
+    const saldoPrev = saldoAtDate(rows, finAnterior);
+    return {
+      start: week.start,
+      end: weekEnd,
+      finSemana,
+      finAnterior: cutoffPrevio,
+      saldoFin,
+      saldoPrev,
+      gananciaSemana: saldoFin.total - saldoPrev.total,
+      acumuladoBase: saldoFin.total - base,
+    };
+  }, [rows, weekIdx, weeks, base]);
 
   async function handleCreate(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -154,6 +234,21 @@ export function CajaManager({ rows }: { rows: CajaRow[] }) {
 
     toast.success("Ajuste de arqueo guardado");
     setContado("");
+    startTransition(() => router.refresh());
+  }
+
+  async function handleSaveBase(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setSaving(true);
+    const result = await saveCajaBase({ base: Number(baseInput || 0) });
+    setSaving(false);
+
+    if (result.error) {
+      toast.error(result.error);
+      return;
+    }
+
+    toast.success("Base de caja guardada");
     startTransition(() => router.refresh());
   }
 
@@ -310,6 +405,166 @@ export function CajaManager({ rows }: { rows: CajaRow[] }) {
             {saving ? <Loader2 className="size-4 animate-spin" /> : <Coins className="size-4" />}
             Registrar ajuste
           </Button>
+        </CardContent>
+      </Card>
+
+      {/* Base de caja */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-sm">
+            <Landmark className="size-4 text-primary" />
+            Base de caja
+          </CardTitle>
+          <CardDescription>
+            Plata que no se toca (para cambio del cajón). La ganancia es todo lo
+            que la caja acumule por encima de este valor.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap items-end gap-4">
+          <div className="space-y-1.5">
+            <Label>Base actual</Label>
+            <div className="rounded-lg bg-muted px-4 py-2 font-bold">{formatCOP(base)}</div>
+          </div>
+          <form onSubmit={handleSaveBase} className="flex flex-wrap items-end gap-3">
+            <div className="space-y-1.5">
+              <Label>Nueva base (COP)</Label>
+              <Input
+                type="number"
+                min={0}
+                step="any"
+                inputMode="decimal"
+                value={baseInput}
+                onChange={(e) => setBaseInput(e.target.value)}
+                placeholder="0"
+                className="w-40"
+              />
+            </div>
+            <Button type="submit" size="sm" disabled={saving}>
+              {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+              Guardar
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+
+      {/* Saldo a una fecha */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-sm">
+            <CalendarDays className="size-4 text-primary" />
+            Saldo a una fecha
+          </CardTitle>
+          <CardDescription>
+            Cuánto hay acumulado en caja (efectivo + transferencia) hasta el día
+            de corte y la ganancia por encima de la base.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="space-y-1.5">
+              <Label>Fecha de corte</Label>
+              <Input
+                type="date"
+                value={corteDate}
+                onChange={(e) => setCorteDate(e.target.value)}
+                className="w-40"
+              />
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              <Button variant="outline" size="sm" onClick={() => setCorteDate(bogotaToday())}>Hoy</Button>
+              <Button variant="outline" size="sm" onClick={() => setCorteDate(addDays(bogotaToday(), -1))}>Ayer</Button>
+              <Button variant="outline" size="sm" onClick={() => setCorteDate(lastMovementDate(rows, bogotaToday()) ?? bogotaToday())}>
+                Últ. día de trabajo
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setCorteDate(lastMovementDate(rows, addDays(weeks[1].start, 6)) ?? addDays(weeks[1].start, 6))}>
+                Fin semana pasada
+              </Button>
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Último día con movimientos ≤ al corte:{" "}
+            <span className="font-semibold text-foreground">
+              {formatDate(`${corteData.ultimoDia}T12:00:00Z`)}
+            </span>
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-lg border p-3">
+              <p className="text-xs text-muted-foreground">Efectivo</p>
+              <p className="text-lg font-bold text-emerald-600">{formatCOP(corteData.saldos.efectivo)}</p>
+            </div>
+            <div className="rounded-lg border p-3">
+              <p className="text-xs text-muted-foreground">Transferencia</p>
+              <p className="text-lg font-bold text-blue-600">{formatCOP(corteData.saldos.transferencia)}</p>
+            </div>
+            <div className="rounded-lg border p-3">
+              <p className="text-xs text-muted-foreground">Saldo total</p>
+              <p className="text-lg font-bold">{formatCOP(corteData.saldos.total)}</p>
+            </div>
+            <div className="rounded-lg border p-3">
+              <p className="text-xs text-muted-foreground">Base</p>
+              <p className="text-lg font-bold text-muted-foreground">{formatCOP(base)}</p>
+            </div>
+          </div>
+          <div className="rounded-lg bg-primary/5 px-4 py-3">
+            <p className="text-xs text-muted-foreground">Ganancia acumulada (saldo total − base)</p>
+            <p className={`text-xl font-bold ${corteData.saldos.total - base >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+              {formatCOP(corteData.saldos.total - base)}
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Ganancia por semana */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-sm">
+            <PiggyBank className="size-4 text-primary" />
+            Ganancia por semana
+          </CardTitle>
+          <CardDescription>
+            Cuánto creció la caja en la semana (saldo final vs saldo de la semana
+            anterior) y cuánto hay por encima de la base.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap gap-1.5">
+            {weeks.map((w, i) => (
+              <Button
+                key={w.label}
+                variant={weekIdx === i ? "default" : "outline"}
+                size="sm"
+                onClick={() => setWeekIdx(i)}
+              >
+                {w.label}
+              </Button>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Semana {formatDate(`${weekData.start}T12:00:00Z`)} → {formatDate(`${weekData.end}T12:00:00Z`)} ·{" "}
+            {weekData.finSemana ? `último día trabajado: ${formatDate(`${weekData.finSemana}T12:00:00Z`)}` : "sin movimientos en la semana"}
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-lg border p-3">
+              <p className="text-xs text-muted-foreground">Saldo fin de semana</p>
+              <p className="text-lg font-bold">{formatCOP(weekData.saldoFin.total)}</p>
+            </div>
+            <div className="rounded-lg border p-3">
+              <p className="text-xs text-muted-foreground">Saldo fin semana anterior</p>
+              <p className="text-lg font-bold text-muted-foreground">{formatCOP(weekData.saldoPrev.total)}</p>
+            </div>
+            <div className="rounded-lg border p-3">
+              <p className="text-xs text-muted-foreground">Ganancia de la semana</p>
+              <p className={`text-lg font-bold ${weekData.gananciaSemana >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                {formatCOP(weekData.gananciaSemana)}
+              </p>
+            </div>
+            <div className="rounded-lg border p-3">
+              <p className="text-xs text-muted-foreground">Por encima de la base</p>
+              <p className={`text-lg font-bold ${weekData.acumuladoBase >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                {formatCOP(weekData.acumuladoBase)}
+              </p>
+            </div>
+          </div>
         </CardContent>
       </Card>
 

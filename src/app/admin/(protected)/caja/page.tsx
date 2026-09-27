@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { CajaManager, type CajaRow } from "@/components/admin/caja-manager";
+import { getCajaBase } from "@/features/caja/actions";
 import { PageHeader } from "@/components/admin/page-header";
 
 export const metadata = {
@@ -37,6 +38,8 @@ export default async function CajaPage() {
     created_at: r.created_at,
   }));
 
+  const base = await getCajaBase();
+
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-4 lg:p-6">
       <PageHeader
@@ -44,7 +47,7 @@ export default async function CajaPage() {
         description="Saldos por medio de pago (efectivo y transferencia), arqueo diario y movimientos. Las ventas entregadas entran solas al saldo; las compras y gastos marcadas “sale de caja” se descuentan según el medio elegido."
       />
 
-      <CajaManager rows={rows} />
+      <CajaManager rows={rows} base={base} />
     </div>
   );
 }
