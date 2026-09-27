@@ -348,7 +348,7 @@ export function CajaManager({ rows, base }: { rows: CajaRow[]; base: number }) {
       </div>
 
       {/* Arqueo del día */}
-      <Card className="border-primary/30 bg-primary/5">
+      {/* <Card className="border-primary/30 bg-primary/5">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-sm">
             <Coins className="size-4 text-primary" />
@@ -406,7 +406,7 @@ export function CajaManager({ rows, base }: { rows: CajaRow[]; base: number }) {
             Registrar ajuste
           </Button>
         </CardContent>
-      </Card>
+      </Card> */}
 
       {/* Base de caja */}
       <Card>
