@@ -57,6 +57,11 @@ export const metadata: Metadata = {
     icon: "/images/logo.webp",
     apple: "/apple-touch-icon.png",
   },
+  appleWebApp: {
+    capable: true,
+    title: "TETSU BURGER",
+    statusBarStyle: "default",
+  },
 };
 
 export const viewport: Viewport = {
