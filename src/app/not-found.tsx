@@ -15,7 +15,7 @@ export default function NotFound() {
     <main className="flex min-h-screen items-center justify-center bg-background px-4 py-10">
       <h1 className="sr-only">Página no encontrada (error 404)</h1>
 
-      <div className="relative w-full max-w-4xl overflow-hidden rounded-2xl border bg-muted">
+      <div className="relative w-full max-w-3xl">
         <Image
           src="/images/tetsu_404.webp"
           alt="Ilustración de página no encontrada de TETSU BURGER"
@@ -27,7 +27,7 @@ export default function NotFound() {
         />
 
         <div className="absolute inset-x-0 bottom-3 flex justify-center px-3 sm:bottom-5">
-          <div className="flex w-full max-w-md gap-2 rounded-2xl border bg-background/90 p-2 shadow-lg backdrop-blur sm:w-auto">
+          <div className="flex w-full max-w-md gap-2 rounded-2xl bg-background/85 p-2 shadow-lg backdrop-blur-md sm:w-auto">
             <Button asChild size="lg" className="h-11 flex-1 gap-2 sm:flex-none">
               <Link href="/#menu">
                 <Home aria-hidden="true" className="size-4" />
