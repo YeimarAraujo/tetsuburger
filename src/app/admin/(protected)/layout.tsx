@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import type { Metadata } from "next";
 import { LogOut } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { signOutAction } from "@/features/auth/actions";
@@ -6,6 +7,10 @@ import { SidebarNav } from "@/components/admin/sidebar-nav";
 import { MobileNav } from "@/components/admin/mobile-nav";
 import { Logo } from "@/components/ui/logo";
 import { Button } from "@/components/ui/button";
+
+export const metadata: Metadata = {
+  robots: { index: false, follow: false },
+};
 
 export default async function AdminLayout({
   children,
@@ -19,6 +24,18 @@ export default async function AdminLayout({
 
   // Defensa en profundidad: el middleware ya protege, esto refuerza.
   if (!user) {
+    redirect("/admin/login");
+  }
+
+  // Exige perfil de staff (fila en profiles). Un usuario de Auth sin perfil no
+  // puede entrar al panel ni invocar sus server actions.
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (!profile) {
     redirect("/admin/login");
   }
 

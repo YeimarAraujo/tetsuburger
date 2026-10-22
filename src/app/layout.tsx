@@ -1,20 +1,26 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono, Bebas_Neue } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Plus_Jakarta_Sans, Anton, Geist_Mono } from "next/font/google";
 import { Toaster } from "sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { isProductionDeployment, getSiteUrl } from "@/lib/site-url";
 
 import "./globals.css";
 
-const bebas = Bebas_Neue({
-  weight: "400",
+const siteUrl = getSiteUrl();
+const description =
+  "Hamburguesas, perros calientes y papas a domicilio en Valledupar. Pide por WhatsApp y paga en efectivo o por transferencia.";
+
+const jakarta = Plus_Jakarta_Sans({
+  variable: "--font-jakarta",
   subsets: ["latin"],
-  variable: "--font-bebas",
   display: "swap",
 });
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const anton = Anton({
+  weight: "400",
   subsets: ["latin"],
+  variable: "--font-anton",
+  display: "swap",
 });
 
 const geistMono = Geist_Mono({
@@ -23,12 +29,40 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "TETSUBURGER",
-  description:
-    "Sazón sobre la plancha",
+  metadataBase: new URL(siteUrl),
+  title: {
+    default: "TETSU BURGER | Hamburguesas a domicilio en Valledupar",
+    template: "%s | TETSU BURGER",
+  },
+  description,
+  applicationName: "TETSU BURGER",
+  alternates: { canonical: "/" },
+  openGraph: {
+    type: "website",
+    locale: "es_CO",
+    url: "/",
+    siteName: "TETSU BURGER",
+    title: "TETSU BURGER | Hamburguesas a domicilio en Valledupar",
+    description,
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "TETSU BURGER | Hamburguesas a domicilio en Valledupar",
+    description,
+  },
+  robots: isProductionDeployment()
+    ? undefined
+    : { index: false, follow: false },
   icons: {
     icon: "/images/logo.webp",
+    apple: "/apple-touch-icon.png",
   },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: "#ff6633",
 };
 
 export default function RootLayout({
@@ -38,8 +72,8 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="es"
-      className={`${geistSans.variable} ${bebas.variable} ${geistMono.variable}`}
+      lang="es-CO"
+      className={`${jakarta.variable} ${anton.variable} ${geistMono.variable}`}
     >
       <body>
         <TooltipProvider delayDuration={150}>

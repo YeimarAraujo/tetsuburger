@@ -6,7 +6,7 @@ import { PqrForm } from "@/components/public/pqr-form";
 export const metadata: Metadata = {
   title: "PQR y derechos del titular",
   description:
-    "Envía una petición, queja o reclamo a TETSUBURGER o ejerce tus derechos sobre datos personales.",
+    "Envía una petición, queja o reclamo a TETSU BURGER o ejerce tus derechos sobre datos personales.",
   alternates: { canonical: "/pqr" },
 };
 

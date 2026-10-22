@@ -5,7 +5,7 @@ import { LegalPage } from "@/components/public/legal-page";
 export const metadata: Metadata = {
   title: "Términos y condiciones",
   description:
-    "Condiciones de pedido, entrega, pagos, cambios y alérgenos de TETSUBURGER, cocina oculta con domicilios en Valledupar.",
+    "Condiciones de pedido, entrega, pagos, cambios y alérgenos de TETSU BURGER, cocina oculta con domicilios en Valledupar.",
   alternates: { canonical: "/terminos" },
   ...(isLegalDraft() ? { robots: { index: false, follow: false } } : {}),
 };

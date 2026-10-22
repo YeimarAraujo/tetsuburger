@@ -1,8 +1,10 @@
 import { Logo } from "@/components/ui/logo";
 import { LoginForm } from "@/components/admin/login-form";
+import type { Metadata } from "next";
 
-export const metadata = {
-  title: "Iniciar sesión · TETSUBURGER Admin",
+export const metadata: Metadata = {
+  title: "Iniciar sesión · TETSU BURGER Admin",
+  robots: { index: false, follow: false },
 };
 
 export default function LoginPage() {

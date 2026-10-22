@@ -12,6 +12,10 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { computeOpenStatus } from "@/lib/business-hours";
 import { getAddonsAvailability } from "@/lib/consumption-availability";
+import {
+  buildRestaurantJsonLd,
+  serializeJsonLd,
+} from "@/lib/structured-data";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -218,6 +222,14 @@ export default async function HomePage() {
 
   return (
     <div className="min-h-screen bg-background">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: serializeJsonLd(
+            buildRestaurantJsonLd(hoursRes.data ?? [])
+          ),
+        }}
+      />
       <Header />
       <FloatingCartButton />
 

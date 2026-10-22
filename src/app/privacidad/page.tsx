@@ -5,7 +5,7 @@ import { LegalPage } from "@/components/public/legal-page";
 export const metadata: Metadata = {
   title: "Política de tratamiento de datos personales",
   description:
-    "Cómo TETSUBURGER trata los datos personales de sus clientes en Valledupar: finalidades, derechos, canales y plazos.",
+    "Cómo TETSU BURGER trata los datos personales de sus clientes en Valledupar: finalidades, derechos, canales y plazos.",
   alternates: { canonical: "/privacidad" },
   ...(isLegalDraft() ? { robots: { index: false, follow: false } } : {}),
 };
