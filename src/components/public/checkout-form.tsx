@@ -3,8 +3,9 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Loader2, Banknote, Landmark, Truck, Store, Info } from "lucide-react";
+import { ArrowLeft, Loader2, Banknote, Landmark, Truck, Info } from "lucide-react";
 import { toast } from "sonner";
+import { site } from "@/config/site";
 import { cartSubtotal, useCart } from "@/store/cart";
 import { placeOrder } from "@/features/orders/actions";
 import { formatCOP } from "@/lib/format";
@@ -15,6 +16,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  isTurnstileEnabled,
+  TurnstileWidget,
+} from "@/components/public/turnstile-widget";
 
 export function CheckoutForm({ deliveryFee }: { deliveryFee: number }) {
   const router = useRouter();
@@ -23,10 +28,13 @@ export function CheckoutForm({ deliveryFee }: { deliveryFee: number }) {
   const [isPending, startTransition] = useTransition();
   const [submitting, setSubmitting] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<"EFECTIVO" | "TRANSFERENCIA">("EFECTIVO");
-  const [deliveryType, setDeliveryType] = useState<"DOMICILIO" | "RECOGIDA">("DOMICILIO");
+  const [accepted, setAccepted] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [turnstileResetKey, setTurnstileResetKey] = useState(0);
+  const turnstileEnabled = isTurnstileEnabled();
 
   const subtotal = cartSubtotal(items);
-  const fee = deliveryType === "DOMICILIO" ? deliveryFee : 0;
+  const fee = deliveryFee;
   const total = subtotal + fee;
 
   if (items.length === 0 && !submitting) {
@@ -42,16 +50,32 @@ export function CheckoutForm({ deliveryFee }: { deliveryFee: number }) {
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setSubmitting(true);
+    if (submitting) return;
 
     const formData = new FormData(e.currentTarget);
+
+    // Honeypot anti-spam: si un bot lo llenó, se descarta en silencio sin
+    // bloquear el botón (el server también lo valida).
+    const honeypot = String(formData.get("website") ?? "");
+    if (honeypot) return;
+
+    if (turnstileEnabled && !turnstileToken) {
+      toast.error("Completa la verificación de seguridad antes de continuar.");
+      return;
+    }
+
+    setSubmitting(true);
+
     const customer = {
       customer_name: String(formData.get("customer_name") ?? ""),
       customer_phone: String(formData.get("customer_phone") ?? ""),
       customer_address: String(formData.get("customer_address") ?? ""),
-      delivery_type: deliveryType,
+      delivery_type: "DOMICILIO",
       notes: String(formData.get("notes") ?? ""),
       payment_method: paymentMethod,
+      accepted_terms: accepted,
+      turnstile_token: turnstileToken ?? "",
+      website: honeypot,
     };
 
     const payloadItems = items.map((item) => ({
@@ -65,26 +89,27 @@ export function CheckoutForm({ deliveryFee }: { deliveryFee: number }) {
       })),
     }));
 
-    // Honeypot anti-spam
-    const honeypot = String(formData.get("website") ?? "");
-    if (honeypot) return;
-
     const result = await placeOrder(customer, payloadItems);
 
     if (result.error && !result.orderNumber) {
       setSubmitting(false);
+      setTurnstileToken(null);
+      setTurnstileResetKey((key) => key + 1);
       toast.error(result.error);
       return;
     }
 
     if (!result.confirmationToken) {
       setSubmitting(false);
+      setTurnstileToken(null);
+      setTurnstileResetKey((key) => key + 1);
       toast.error(result.error ?? "No se pudo registrar el pedido");
       return;
     }
 
-    // El detalle viaja por token en la URL; la página de confirmación lo lee
-    // del servidor (ya no se usa sessionStorage).
+    // El pedido queda registrado. Siempre llevamos a la página de
+    // confirmación (que conserva el token para poder reseñar) y desde ahí se
+    // ofrece el envío por WhatsApp en un clic.
     clear();
     startTransition(() => router.push(`/pedido/confirmado?t=${result.confirmationToken}`));
   }
@@ -131,14 +156,12 @@ export function CheckoutForm({ deliveryFee }: { deliveryFee: number }) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="customer_address">
-              {deliveryType === "DOMICILIO" ? "Dirección de domicilio *" : "Dirección (opcional, para referencia)"}
-            </Label>
+            <Label htmlFor="customer_address">Dirección de domicilio *</Label>
             <Input
               id="customer_address"
               name="customer_address"
-              placeholder={deliveryType === "DOMICILIO" ? "Calle 00 #00-00, Barrio, Apto/Torre" : "Referencia (opcional)"}
-              required={deliveryType === "DOMICILIO"}
+              placeholder="Calle 00 #00-00, Barrio, Apto/Torre"
+              required
               maxLength={200}
             />
           </div>
@@ -156,8 +179,8 @@ export function CheckoutForm({ deliveryFee }: { deliveryFee: number }) {
 
 
           <div className="space-y-2">
-            <Label>Medio de pago *</Label>
-            <div className="grid grid-cols-2 gap-3">
+            <Label id="payment-label">Medio de pago *</Label>
+            <div role="radiogroup" aria-labelledby="payment-label" className="grid grid-cols-2 gap-3">
               {([
                 { value: "EFECTIVO", label: "Efectivo", hint: "Al recibir tu pedido", Icon: Banknote },
                 { value: "TRANSFERENCIA", label: "Transferencia", hint: "Te enviamos los datos", Icon: Landmark },
@@ -165,6 +188,8 @@ export function CheckoutForm({ deliveryFee }: { deliveryFee: number }) {
                 <button
                   key={value}
                   type="button"
+                  role="radio"
+                  aria-checked={paymentMethod === value}
                   onClick={() => setPaymentMethod(value)}
                   className={cn(
                     "flex flex-col items-center gap-1 rounded-xl border px-4 py-3 text-sm font-medium transition-colors",
@@ -180,52 +205,86 @@ export function CheckoutForm({ deliveryFee }: { deliveryFee: number }) {
               ))}
             </div>
           </div>
-          <div className="space-y-2">
-            <Label>¿Cómo deseas recibir tu pedido? *</Label>
-            <div className="grid grid-cols-2 gap-3">
-              {([
-                { value: "DOMICILIO", label: "Domicilio", hint: "Te lo llevamos", Icon: Truck },
-                { value: "RECOGIDA", label: "Pasar a recoger", hint: "Lo retiras en el local", Icon: Store },
-              ] as const).map(({ value, label, hint, Icon }) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setDeliveryType(value)}
-                  className={cn(
-                    "flex flex-col items-center gap-1 rounded-xl border px-4 py-3 text-sm font-medium transition-colors",
-                    deliveryType === value
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "text-muted-foreground hover:border-foreground/30"
-                  )}
-                >
-                  <Icon className="size-5" />
-                  {label}
-                  <span className="text-[11px] font-normal">{hint}</span>
-                </button>
-              ))}
-            </div>
+          <div className="space-y-2 rounded-lg border bg-muted/40 p-3 text-sm">
+            <p className="flex items-start gap-2">
+              <Truck className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+              <span>
+                <strong>Modalidad:</strong> solo domicilio en {site.city}, {site.region}.
+              </span>
+            </p>
+            <p className="flex items-start gap-2">
+              <Info className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+              <span>
+                <strong>Domicilio:</strong> {formatCOP(deliveryFee)} de referencia.
+                Puede variar por distancia y hora; te lo confirmamos por WhatsApp.
+              </span>
+            </p>
+            <p>
+              <strong>Tiempo estimado:</strong>{" "}
+              {site.estimatedDeliveryTime ??
+                "te lo confirmamos por WhatsApp al aceptar el pedido"}
+              .
+            </p>
+            <p>
+              <strong>Medios de pago:</strong> efectivo contra entrega y
+              transferencia.
+            </p>
           </div>
 
-          {deliveryType === "DOMICILIO" ? (
-            <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-              <Info className="mt-0.5 size-4 shrink-0" />
-              <p>
-                El valor del domicilio puede variar dependiendo de la distancia y la hora.
-                El valor que aparece es una referencia; te lo confirmamos en WhatsApp.
-              </p>
-            </div>
+          {turnstileEnabled ? (
+            <TurnstileWidget
+              onToken={setTurnstileToken}
+              resetKey={turnstileResetKey}
+            />
           ) : null}
+
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={accepted}
+              onChange={(e) => setAccepted(e.target.checked)}
+              required
+              className="mt-0.5 size-4 shrink-0 rounded border-input"
+            />
+            <span className="text-muted-foreground">
+              Acepto los{" "}
+              <Link
+                href="/terminos"
+                className="font-medium text-foreground underline underline-offset-2"
+              >
+                términos y condiciones
+              </Link>{" "}
+              y autorizo el tratamiento de mis datos según la{" "}
+              <Link
+                href="/privacidad"
+                className="font-medium text-foreground underline underline-offset-2"
+              >
+                política de privacidad
+              </Link>
+              .
+            </span>
+          </label>
 
           <Separator />
 
-          <Button type="submit" size="lg" className="w-full" disabled={submitting || isPending}>
+          <Button
+            type="submit"
+            size="lg"
+            className="w-full"
+            disabled={
+              submitting ||
+              isPending ||
+              !accepted ||
+              (turnstileEnabled && !turnstileToken)
+            }
+          >
             {submitting || isPending ? (
               <>
                 <Loader2 className="size-4 animate-spin" />
                 Registrando pedido…
               </>
             ) : (
-              `Enviar por whatsapp · ${formatCOP(total)}`
+              `Enviar y confirmar · ${formatCOP(total)}`
             )}
           </Button>
 

@@ -29,7 +29,7 @@ export async function submitPqr(raw: unknown): Promise<PqrResult> {
     hdrs.get("x-forwarded-for")?.split(",")[0]?.trim() ??
     hdrs.get("x-real-ip") ??
     "anonymous";
-  const { allowed } = rateLimit(`pqr:${ip}`, RATE_LIMITS.pqr);
+  const { allowed } = await rateLimit(`pqr:${ip}`, RATE_LIMITS.pqr);
   if (!allowed) {
     return { error: "Has enviado varias solicitudes. Intenta de nuevo más tarde." };
   }
