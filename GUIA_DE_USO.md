@@ -18,7 +18,7 @@ ALTER TABLE public.production_records ADD COLUMN total_cost numeric(12,2) not nu
 
 ---
 
-## CATÁLOGO PÚBLICO (`tudominio.com`)
+## CATÁLOGO PÚBLICO (`<dominio-de-producción>`)
 
 La página principal es el menú público. Los clientes:
 

@@ -26,7 +26,7 @@ export function formatDateTime(date: string | Date): string {
   }).format(new Date(date));
 }
 
-/** Solo fecha: "24/08/2026" */
+/** Solo fecha: "24/08/26" */
 export function formatDate(date: string | Date): string {
   return new Intl.DateTimeFormat("es-CO", {
     dateStyle: "short",
