@@ -70,7 +70,7 @@ export function ClosedOverlay({
 
         {/* Texto */}
         <div className="space-y-2">
-          <h2 className="font-display text-3xl tracking-wide text-white">
+          <h2 className="text-2xl font-semibold tracking-tight text-white sm:text-3xl">
             ESTAMOS CERRADOS
           </h2>
           <p className="text-sm leading-relaxed text-zinc-400">{message}</p>

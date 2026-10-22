@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { ChevronLeft, Minus, Pencil, Plus, Trash2 } from "lucide-react";
+import { ArrowRight, ChevronLeft, Minus, Plus, Trash2 } from "lucide-react";
 import { useCart, cartSubtotal, cartCount, itemUnitPrice } from "@/store/cart";
 import { addonLabel } from "@/lib/addons";
 import { formatCOP } from "@/lib/format";
@@ -16,12 +16,12 @@ export function ResumenContent({ deliveryFee }: { deliveryFee: number }) {
   const setQuantity = useCart((s) => s.setQuantity);
   const subtotal = cartSubtotal(items);
   const count = cartCount(items);
-  const total = subtotal; //+ deliveryFee;
+  const total = subtotal;
 
   if (items.length === 0) {
     return (
       <main className="mx-auto max-w-2xl px-4 py-16 text-center">
-        <p className="text-lg font-medium">Tu carrito está vacío</p>
+        <h1 className="text-2xl font-bold">Tu carrito está vacío</h1>
         <Link href="/" className="mt-4 inline-block">
           <Button variant="outline">Volver al menú</Button>
         </Link>
@@ -32,7 +32,11 @@ export function ResumenContent({ deliveryFee }: { deliveryFee: number }) {
   return (
     <main className="mx-auto max-w-2xl space-y-6 px-4 py-8">
       <div className="flex items-center gap-3">
-        <Link href="/" className="rounded-lg border p-2 transition-colors hover:bg-muted">
+        <Link
+          href="/"
+          aria-label="Volver al menú"
+          className="rounded-lg border p-2 transition-colors hover:bg-muted"
+        >
           <ChevronLeft className="size-4" />
         </Link>
         <div>
@@ -124,8 +128,8 @@ export function ResumenContent({ deliveryFee }: { deliveryFee: number }) {
           </div>
           {deliveryFee > 0 ? (
             <div className="flex justify-between text-muted-foreground">
-              <span>Domicilio</span>
-              <span>Se confirma al pagar</span>
+              <span>Domicilio (si aplica)</span>
+              <span>{formatCOP(deliveryFee)}</span>
             </div>
           ) : null}
 
@@ -135,20 +139,26 @@ export function ResumenContent({ deliveryFee }: { deliveryFee: number }) {
             <span>Total</span>
             <span className="text-primary">{formatCOP(total)}</span>
           </div>
+          {deliveryFee > 0 ? (
+            <p className="text-xs text-muted-foreground">
+              El domicilio se suma solo si eliges entrega a domicilio en el
+              siguiente paso.
+            </p>
+          ) : null}
 
-          <Link href="/checkout" className="block pt-2">
-            <Button size="lg" className="w-full gap-2">
-              <Pencil className="size-4" />
+          <Button asChild size="lg" className="w-full gap-2">
+            <Link href="/checkout">
+              <ArrowRight className="size-4" />
               Continuar con el pedido
-            </Button>
-          </Link>
+            </Link>
+          </Button>
 
-          <Link href="/" className="block">
-            <Button variant="outline" size="lg" className="w-full gap-2">
+          <Button asChild variant="outline" size="lg" className="w-full gap-2">
+            <Link href="/">
               <Plus className="size-4" />
               Agregar más productos
-            </Button>
-          </Link>
+            </Link>
+          </Button>
         </CardContent>
       </Card>
     </main>

@@ -1,5 +1,11 @@
 const TIMEZONE = "America/Bogota";
 
+/** Convierte cualquier valor a número finito (0 si no lo es). */
+export function toFiniteNumber(value: unknown): number {
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
 /** Formatea montos en COP sin decimales: 68000 -> "$68.000" */
 export function formatCOP(amount: number | string): string {
   const value = typeof amount === "string" ? parseFloat(amount) : amount;
@@ -8,7 +14,7 @@ export function formatCOP(amount: number | string): string {
     currency: "COP",
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
-  }).format(value ?? 0);
+  }).format(Number.isFinite(value) ? value : 0);
 }
 
 /** Fecha legible en hora de Colombia: "24/08/2026, 8:45 p.m." */

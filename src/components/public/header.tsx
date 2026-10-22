@@ -105,13 +105,13 @@ export function Header() {
     <Sheet open={open} onOpenChange={setOpen}>
       <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
-          <Link href="/">
+          <Link href="/" aria-label="Ir al inicio">
             <Logo className="h-25 w-auto" />
           </Link>
 
           <SheetTrigger asChild>
             <Button variant="outline" size="lg" className="relative gap-2">
-              <ShoppingCart className="size-5  " />
+              <ShoppingCart className="size-5" />
               <span className="hidden sm:inline">Carrito</span>
               {count > 0 ? (
                 <>
@@ -140,11 +140,11 @@ export function Header() {
               <p className="-mt-1 text-xs text-muted-foreground">
                 El costo de domicilio se suma en el siguiente paso.
               </p>
-              <Link href="/resumen" onClick={() => setOpen(false)} className="block">
-                <Button className="w-full" size="lg">
+              <Button asChild className="w-full" size="lg">
+                <Link href="/resumen" onClick={() => setOpen(false)}>
                   Ver pedido · {formatCOP(subtotal)}
-                </Button>
-              </Link>
+                </Link>
+              </Button>
             </div>
           </SheetFooter>
         ) : null}

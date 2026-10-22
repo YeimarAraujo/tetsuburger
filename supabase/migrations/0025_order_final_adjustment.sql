@@ -1,0 +1,77 @@
+-- Valor final editable del pedido: ajuste con signo aplicado sobre el total.
+--   total = subtotal + delivery_fee - final_adjustment
+-- Un valor final MAYOR al original se guarda como final_adjustment negativo.
+-- El ajuste es solo web: el mensaje de WhatsApp usa siempre los valores
+-- originales (subtotal + domicilio) sin línea de ajuste.
+
+begin;
+
+alter table public.orders
+  add column final_adjustment numeric(12,2) not null default 0,
+  add constraint orders_final_adjustment_check
+    check (final_adjustment <= subtotal + delivery_fee);
+
+comment on column public.orders.final_adjustment is
+  'Ajuste con signo del valor final. Positivo baja el total, negativo lo sube. No se envía a WhatsApp.';
+
+-- Re-crea la confirmación incluyendo el ajuste y product_id por ítem
+-- (product_id es necesario para invitar a calificar desde la confirmación).
+create or replace function public.get_order_confirmation(p_token uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_result jsonb;
+begin
+  select jsonb_build_object(
+    'id', o.id,
+    'order_number', o.order_number,
+    'subtotal', o.subtotal,
+    'delivery_fee', o.delivery_fee,
+    'total', o.total,
+    'final_adjustment', o.final_adjustment,
+    'payment_method', o.payment_method,
+    'customer_name', o.customer_name,
+    'customer_phone', o.customer_phone,
+    'customer_address', o.customer_address,
+    'delivery_type', o.delivery_type,
+    'notes', o.notes,
+    'items', q.items
+  )
+  into v_result
+  from public.orders o
+  left join lateral (
+    select coalesce(jsonb_agg(
+      jsonb_build_object(
+        'product_id', oi.product_id,
+        'product_name', oi.product_name,
+        'quantity', oi.quantity,
+        'unit_price', oi.unit_price,
+        'addons', coalesce((
+          select jsonb_agg(jsonb_build_object(
+            'name', a.addon_name,
+            'price', a.addon_price,
+            'quantity', coalesce(a.quantity, 1),
+            'target', a.target,
+            'components', a.components_qty
+          ))
+          from public.order_item_addons a
+          where a.order_item_id = oi.id
+        ), '[]'::jsonb)
+      )
+    ), '[]'::jsonb) as items
+    from public.order_items oi
+    where oi.order_id = o.id
+  ) q on true
+  where o.confirmation_token = p_token;
+
+  return coalesce(v_result, '{}'::jsonb);
+end;
+$$;
+
+revoke all on function public.get_order_confirmation(uuid) from public, anon, authenticated;
+grant execute on function public.get_order_confirmation(uuid) to anon, authenticated;
+
+commit;

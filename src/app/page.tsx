@@ -1,17 +1,24 @@
 import { Header } from "@/components/public/header";
+import Image from "next/image";
 import { ClosedOverlay } from "@/components/public/closed-overlay";
 import { FloatingCartButton } from "@/components/public/floating-cart-button";
+import { type ProductCardData } from "@/components/public/product-card";
 import {
-  ProductCard,
-  type ProductCardData,
-} from "@/components/public/product-card";
+  MenuSections,
+  type MenuSection,
+} from "@/components/public/menu-sections";
+import { SiteFooter } from "@/components/public/site-footer";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { computeOpenStatus } from "@/lib/business-hours";
 import { getAddonsAvailability } from "@/lib/consumption-availability";
 import { cn } from "@/lib/utils";
-import { Flame } from "lucide-react";
 
 export const dynamic = "force-dynamic";
+
+function isoDaysAgo(days: number): string {
+  return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+}
 
 export default async function HomePage() {
   const supabase = await createClient();
@@ -59,6 +66,70 @@ export default async function HomePage() {
     products.map((p) => p.id)
   );
 
+  // Ranking: pedidos entregados (últimos 90 días) + promedio de reseñas aprobadas.
+  interface RatingInfo {
+    avg: number;
+    count: number;
+  }
+  const ratingMap = new Map<string, RatingInfo>();
+  const qtyMap = new Map<string, number>();
+
+  const activeIds = new Set(products.map((p) => p.id));
+  const ninetyDaysAgo = isoDaysAgo(90);
+
+  await Promise.all([
+    (async () => {
+      const admin = createAdminClient();
+      const { data: rows } = await admin
+        .from("order_items")
+        .select("product_id, quantity, orders!inner(status, created_at)")
+        .eq("orders.status", "ENTREGADO")
+        .gte("orders.created_at", ninetyDaysAgo)
+        .not("product_id", "is", null)
+        .limit(5000);
+      for (const row of rows ?? []) {
+        if (!row.product_id || !activeIds.has(row.product_id)) continue;
+        qtyMap.set(
+          row.product_id,
+          (qtyMap.get(row.product_id) ?? 0) + (Number(row.quantity) || 0)
+        );
+      }
+    })(),
+    (async () => {
+      const { data: reviews } = await supabase
+        .from("product_reviews")
+        .select("product_id, rating")
+        .eq("status", "APROBADO")
+        .limit(5000);
+      const acc = new Map<string, { sum: number; count: number }>();
+      for (const r of reviews ?? []) {
+        if (!activeIds.has(r.product_id)) continue;
+        const cur = acc.get(r.product_id) ?? { sum: 0, count: 0 };
+        cur.sum += Number(r.rating) || 0;
+        cur.count += 1;
+        acc.set(r.product_id, cur);
+      }
+      for (const [pid, { sum, count }] of acc) {
+        ratingMap.set(pid, { avg: sum / count, count });
+      }
+    })(),
+  ]);
+
+  const bestSellers = products
+    .filter((p) => p.is_available && (qtyMap.get(p.id) ?? 0) > 0)
+    .sort((a, b) => (qtyMap.get(b.id) ?? 0) - (qtyMap.get(a.id) ?? 0))
+    .slice(0, 3);
+
+  const topRated = products
+    .filter((p) => p.is_available && ratingMap.has(p.id))
+    .sort((a, b) => {
+      const ra = ratingMap.get(a.id)!;
+      const rb = ratingMap.get(b.id)!;
+      if (rb.avg !== ra.avg) return rb.avg - ra.avg;
+      return rb.count - ra.count;
+    })
+    .slice(0, 6);
+
   function toCard(p: {
     id: string; name: string; description: string; price: number;
     image_url: string; is_available: boolean;
@@ -71,12 +142,13 @@ export default async function HomePage() {
       id: p.id,
       name: p.name,
       description: p.description,
-      price: Number(p.price),
+      price: Number(p.price) || 0,
       imageUrl: p.image_url,
       isAvailable: p.is_available,
       isCombo: hamburguesas + perros >= 2,
       hamburguesas,
       perros,
+      rating: ratingMap.get(p.id) ?? null,
       addons: (productAddonsMap.get(p.id) ?? [])
         .map((id) => addonMap.get(id))
         .filter((a): a is NonNullable<typeof a> => Boolean(a))
@@ -93,6 +165,57 @@ export default async function HomePage() {
   const featured = products.filter((p) => p.is_featured && p.is_available);
   const heroImage = "/images/bannerTetsu.webp";
 
+  const categoryOptions = categoriesRes.data ?? [];
+  const sections: MenuSection[] = [];
+
+  if (featured.length > 0) {
+    sections.push({
+      key: "destacados",
+      label: "Destacados",
+      icon: "flame",
+      tagline: "Nuestras recomendaciones de la casa",
+      items: featured.map(toCard),
+      default: true,
+      special: true,
+    });
+  }
+
+  if (bestSellers.length > 0) {
+    sections.push({
+      key: "mas-pedidos",
+      label: "Los más pedidos",
+      icon: "trending",
+      tagline: "Lo que más se ha pedido en los últimos 90 días",
+      items: bestSellers.map(toCard),
+      default: sections.length === 0,
+      special: true,
+    });
+  }
+
+  if (topRated.length > 0) {
+    sections.push({
+      key: "mejor-valorados",
+      label: "Mejor valorados",
+      icon: "star",
+      tagline: "Promedio de estrellas de nuestras clientas y clientes",
+      items: topRated.map(toCard),
+      default: sections.length === 0,
+      special: true,
+    });
+  }
+
+  for (const category of categoryOptions) {
+    const items = products.filter((p) => p.category_id === category.id);
+    if (items.length === 0) continue;
+    sections.push({
+      key: `cat-${category.slug}`,
+      label: category.name,
+      tagline: category.description || undefined,
+      items: items.map(toCard),
+      default: sections.length === 0,
+    });
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
@@ -105,10 +228,13 @@ export default async function HomePage() {
       {/* Hero */}
       <section className="relative border-b overflow-hidden">
         {heroImage ? (
-          <img
+          <Image
             src={heroImage}
-            alt="imagen del heroe de Tetsuburger"
-            className="absolute inset-0 h-full w-full object-cover"
+            alt="Imagen de TETSU BURGER"
+            fill
+            priority
+            sizes="100vw"
+            className="object-cover"
           />
         ) : (
           <div className="absolute inset-0 bg-gradient-to-br from-primary via-orange-600 to-red-700" />
@@ -119,15 +245,15 @@ export default async function HomePage() {
             className={cn(
               "inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wide",
               status.isOpen
-                ? "bg-emerald-500 text-white"
-                : "bg-red-500 text-white"
+                ? "bg-emerald-600 text-white"
+                : "bg-red-600 text-white"
             )}
           >
             <span className={cn("size-2 rounded-full", status.isOpen ? "animate-pulse bg-white" : "bg-white")} />
             {status.isOpen ? "Abierto" : "Cerrado"}
           </span>
 
-          <h1 className="max-w-60 font-display text-3xl leading-tight tracking-wider text-white sm:max-w-md sm:text-5xl lg:max-w-xl lg:text-5xl">
+          <h1 className="max-w-60 font-display text-4xl leading-tight tracking-wide text-white sm:max-w-md sm:text-5xl lg:max-w-xl lg:text-6xl">
             SAZÓN SOBRE LA PLANCHA
           </h1>
 
@@ -137,82 +263,10 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* Destacados */}
-      {featured.length > 0 ? (
-        <section className="mx-auto max-w-5xl px-4 pt-8">
-          <h2 className="mb-3 flex items-center gap-2 font-display text-2xl tracking-wide uppercase">
-            <Flame className="size-5 text-primary" />
-            Destacados
-          </h2>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {featured.map((p) => (
-              <ProductCard key={p.id} product={toCard(p)} />
-            ))}
-          </div>
-        </section>
-      ) : null}
+      {/* Filtros + menú */}
+      <MenuSections sections={sections} />
 
-      {/* Navegación de categorías */}
-      {(categoriesRes.data ?? []).length > 0 ? (
-        <nav className="sticky top-14 z-30 mt-8 border-y bg-background/95 backdrop-blur">
-          <div className="mx-auto flex max-w-5xl gap-2 overflow-x-auto px-4 py-2">
-            {(categoriesRes.data ?? []).map((c) => (
-              <a
-                key={c.id}
-                href={`#cat-${c.slug}`}
-                className="whitespace-nowrap rounded-full border px-4 py-1.5 text-sm font-medium transition-colors hover:border-primary hover:text-primary"
-              >
-                {c.name}
-              </a>
-            ))}
-          </div>
-        </nav>
-      ) : null}
-
-      {/* Menú por categorías */}
-      <main className="mx-auto max-w-5xl space-y-10 px-4 py-8">
-        {(categoriesRes.data ?? []).map((category) => {
-          const items = products.filter((p) => p.category_id === category.id);
-          if (items.length === 0) return null;
-
-          return (
-            <section key={category.id} id={`cat-${category.slug}`} className="scroll-mt-28">
-              <h2 className="mb-1 font-display text-2xl tracking-wide uppercase">
-                {category.name}
-              </h2>
-              {category.description ? (
-                <p className="mb-4 text-sm text-muted-foreground">{category.description}</p>
-              ) : (
-                <p className="mb-4 text-xs text-muted-foreground">
-                  {items.length} opciones
-                </p>
-              )}
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                {items.map((p) => (
-                  <ProductCard key={p.id} product={toCard(p)} />
-                ))}
-              </div>
-            </section>
-          );
-        })}
-
-        {products.length === 0 ? (
-          <div className="rounded-xl border border-dashed p-12 text-center text-muted-foreground">
-            El menú se está preparando, vuelve en un momento.
-          </div>
-        ) : null}
-      </main>
-
-      {/* Footer */}
-      <footer className="border-t py-8">
-        <div className="mx-auto max-w-5xl space-y-2 px-4 text-center text-sm text-muted-foreground">
-          {typeof settings.address === "string" && settings.address ? (
-            <p>{settings.address}</p>
-          ) : null}
-          <p>© {new Date().getFullYear()} TETSUBURGER · Todos los derechos reservados</p>
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }
