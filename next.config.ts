@@ -5,7 +5,6 @@ const securityHeaders = [
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
-  { key: "X-XSS-Protection", value: "1; mode=block" },
   {
     key: "Strict-Transport-Security",
     value: "max-age=63072000; includeSubDomains; preload",
@@ -13,9 +12,12 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  poweredByHeader: false,
   experimental: {
+    // La única action que recibe archivos es createProduct/updateProduct:
+    // acepta imágenes de hasta 1 MB + campos del formulario.
     serverActions: {
-      bodySizeLimit: "10mb",
+      bodySizeLimit: "2mb",
     },
   },
   images: {
