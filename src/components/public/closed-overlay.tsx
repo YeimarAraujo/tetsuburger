@@ -93,7 +93,7 @@ export function ClosedOverlay({
         <Button
           variant="outline"
           size="lg"
-          className="w-full border-primary/40 bg-primary/10 font-bold text-primary hover:text-white/70 hover:bg-primary/20"
+          className="h-11 w-full border-primary/40 bg-primary/10 font-bold text-price hover:bg-primary/20"
           onClick={() => setVisible(false)}
         >
           Explorar catálogo

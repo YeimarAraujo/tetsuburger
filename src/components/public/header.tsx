@@ -56,7 +56,7 @@ function CartLines() {
                 + {item.addons.map((a) => addonLabel(a)).join(", ")}
               </p>
             ) : null}
-            <p className="mt-0.5 text-sm font-semibold text-primary">
+            <p className="mt-0.5 text-sm font-semibold text-price">
               {formatCOP(itemUnitPrice(item))}
             </p>
 
@@ -64,7 +64,7 @@ function CartLines() {
               <Button
                 variant="outline"
                 size="icon"
-                className="size-7"
+                className="size-10"
                 onClick={() => setQuantity(item.key, item.quantity - 1)}
                 aria-label="Quitar uno"
               >
@@ -74,7 +74,7 @@ function CartLines() {
               <Button
                 variant="outline"
                 size="icon"
-                className="size-7"
+                className="size-10"
                 onClick={() => setQuantity(item.key, item.quantity + 1)}
                 aria-label="Agregar uno"
               >
@@ -110,7 +110,16 @@ export function Header() {
           </Link>
 
           <SheetTrigger asChild>
-            <Button variant="outline" size="lg" className="relative gap-2">
+            <Button
+              variant="outline"
+              size="lg"
+              className="relative h-10 gap-2 px-3"
+              aria-label={
+                count > 0
+                  ? `Abrir carrito, ${count} ${count === 1 ? "producto" : "productos"}`
+                  : "Abrir carrito"
+              }
+            >
               <ShoppingCart className="size-5" />
               <span className="hidden sm:inline">Carrito</span>
               {count > 0 ? (

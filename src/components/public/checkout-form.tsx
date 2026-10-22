@@ -194,7 +194,7 @@ export function CheckoutForm({ deliveryFee }: { deliveryFee: number }) {
                   className={cn(
                     "flex flex-col items-center gap-1 rounded-xl border px-4 py-3 text-sm font-medium transition-colors",
                     paymentMethod === value
-                      ? "border-primary bg-primary/10 text-primary"
+                      ? "border-primary bg-primary/10 text-price"
                       : "text-muted-foreground hover:border-foreground/30"
                   )}
                 >

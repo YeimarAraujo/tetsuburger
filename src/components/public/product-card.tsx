@@ -217,7 +217,7 @@ export function ProductCard({ product }: { product: ProductCardData }) {
           />
 
           <div className="mt-auto flex items-end justify-between gap-2 pt-3">
-            <span className="text-lg font-bold text-primary sm:text-xl">
+            <span className="text-lg font-bold text-price sm:text-xl">
               {formatCOP(product.price)}
             </span>
 
@@ -233,7 +233,7 @@ export function ProductCard({ product }: { product: ProductCardData }) {
                   onClick={() =>
                     product.addons.length > 0 ? setDialogOpen(true) : addDirect()
                   }
-                  className="gap-1.5"
+                  className="h-10 gap-1.5"
                 >
                   {adding ? (
                     <Loader2 className="size-4 animate-spin" />
@@ -277,7 +277,7 @@ export function ProductCard({ product }: { product: ProductCardData }) {
             </div>
 
             <div className="flex items-center justify-between gap-3">
-              <span className="text-xl font-bold text-primary">
+              <span className="text-xl font-bold text-price">
                 {formatCOP(product.price)}
               </span>
 
@@ -286,7 +286,7 @@ export function ProductCard({ product }: { product: ProductCardData }) {
                   variant="outline"
                   size="lg"
                   onClick={() => setReviewsOpen(true)}
-                  className="gap-1.5"
+                  className="h-10 gap-1.5"
                   aria-label={`Calificar ${product.name}`}
                 >
                   <Star className="size-4 fill-amber-400 text-amber-400" />
@@ -308,7 +308,7 @@ export function ProductCard({ product }: { product: ProductCardData }) {
                         addDirect();
                       }
                     }}
-                    className="gap-1.5"
+                    className="h-10 gap-1.5"
                   >
                     {adding ? (
                       <Loader2 className="size-4 animate-spin" />
@@ -352,7 +352,7 @@ export function ProductCard({ product }: { product: ProductCardData }) {
         >
           <DialogHeader className="space-y-1">
             <DialogTitle className="pr-6">{product.name}</DialogTitle>
-            <p className="text-sm font-semibold text-primary">
+            <p className="text-sm font-semibold text-price">
               {formatCOP(product.price)}
             </p>
           </DialogHeader>
@@ -421,7 +421,7 @@ export function ProductCard({ product }: { product: ProductCardData }) {
                             type="button"
                             onClick={() => bump(addon.id, -1)}
                             disabled={qty <= 0 || noStock}
-                            className="flex size-8 items-center justify-center rounded-l-full text-muted-foreground transition-colors hover:bg-muted disabled:opacity-30"
+                            className="flex size-10 items-center justify-center rounded-l-full text-muted-foreground transition-colors hover:bg-muted disabled:opacity-30"
                             aria-label={`Quitar ${addon.name}`}
                           >
                             <Minus className="size-4" />
@@ -433,7 +433,7 @@ export function ProductCard({ product }: { product: ProductCardData }) {
                             type="button"
                             onClick={() => bump(addon.id, 1)}
                             disabled={noStock || qty >= MAX_ADDON_QTY}
-                            className="flex size-8 items-center justify-center rounded-r-full text-muted-foreground transition-colors hover:bg-muted disabled:opacity-30"
+                            className="flex size-10 items-center justify-center rounded-r-full text-muted-foreground transition-colors hover:bg-muted disabled:opacity-30"
                             aria-label={`Añadir ${addon.name}`}
                           >
                             <Plus className="size-4" />
@@ -512,7 +512,7 @@ export function ProductCard({ product }: { product: ProductCardData }) {
             </div>
           ) : null}
 
-          <Button size="lg" className="w-full" onClick={addWithAddons}>
+          <Button size="lg" className="h-11 w-full" onClick={addWithAddons}>
             <ShoppingCart className="size-4" />
             Agregar · {formatCOP(product.price + addonsTotal(product.addons))}
           </Button>

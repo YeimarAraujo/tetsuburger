@@ -250,7 +250,7 @@ export default async function ProductPage({ params }: PageProps) {
           ) : null}
           <Link
             href="/#menu"
-            className="inline-block text-sm font-semibold text-primary underline-offset-4 hover:underline"
+            className="inline-block text-sm font-semibold text-price underline-offset-4 hover:underline"
           >
             Volver al menú completo
           </Link>

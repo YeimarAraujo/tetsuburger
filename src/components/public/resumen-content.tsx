@@ -75,7 +75,7 @@ export function ResumenContent({ deliveryFee }: { deliveryFee: number }) {
                   <button
                     type="button"
                     onClick={() => removeItem(item.key)}
-                    className="text-destructive transition-opacity hover:opacity-70"
+                    className="grid size-9 place-items-center rounded-md text-destructive transition-opacity hover:opacity-70"
                     aria-label={`Eliminar ${item.name}`}
                     title="Eliminar"
                   >
@@ -91,7 +91,7 @@ export function ResumenContent({ deliveryFee }: { deliveryFee: number }) {
                       <button
                         type="button"
                         onClick={() => setQuantity(item.key, item.quantity - 1)}
-                        className="flex size-8 items-center justify-center rounded-l-full text-muted-foreground transition-colors hover:bg-muted disabled:opacity-30"
+                        className="flex size-10 items-center justify-center rounded-l-full text-muted-foreground transition-colors hover:bg-muted disabled:opacity-30"
                         disabled={item.quantity <= 1}
                         aria-label="Reducir cantidad"
                       >
@@ -103,7 +103,7 @@ export function ResumenContent({ deliveryFee }: { deliveryFee: number }) {
                       <button
                         type="button"
                         onClick={() => setQuantity(item.key, item.quantity + 1)}
-                        className="flex size-8 items-center justify-center rounded-r-full text-muted-foreground transition-colors hover:bg-muted"
+                        className="flex size-10 items-center justify-center rounded-r-full text-muted-foreground transition-colors hover:bg-muted"
                         aria-label="Aumentar cantidad"
                       >
                         <Plus className="size-4" />
@@ -137,7 +137,7 @@ export function ResumenContent({ deliveryFee }: { deliveryFee: number }) {
 
           <div className="flex justify-between text-base font-bold">
             <span>Total</span>
-            <span className="text-primary">{formatCOP(total)}</span>
+            <span className="text-price">{formatCOP(total)}</span>
           </div>
           {deliveryFee > 0 ? (
             <p className="text-xs text-muted-foreground">

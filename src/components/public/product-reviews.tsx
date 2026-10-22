@@ -311,7 +311,9 @@ export function ReviewsTrigger({
           aria-label={
             variant === "cta"
               ? `Calificar ${productName}`
-              : `Ver reseñas de ${productName}`
+              : hasRating
+                ? `Ver reseñas de ${productName}: ${rating!.avg.toFixed(1)} de 5, ${count} ${count === 1 ? "reseña" : "reseñas"}`
+                : `Ver reseñas de ${productName}: sé el primero en calificar`
           }
         >
           {variant === "cta" ? (

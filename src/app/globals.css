@@ -36,6 +36,7 @@
   --color-secondary: var(--secondary);
   --color-primary-foreground: var(--primary-foreground);
   --color-primary: var(--primary);
+  --color-price: var(--price);
   --color-popover-foreground: var(--popover-foreground);
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
@@ -58,11 +59,14 @@
   --popover-foreground: oklch(0.145 0 0);
   /* Marca TETSU BURGER: naranja parrilla */
   --primary: oklch(0.698 0.197 38);
-  --primary-foreground: oklch(0.985 0 0);
+  /* Texto oscuro sobre naranja: 7:1 (AA). */
+  --primary-foreground: oklch(0.145 0.1 10);
+  /* Naranja oscurecido solo para textos de precio: 6:1 sobre blanco. */
+  --price: oklch(0.505 0.16 38);
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
+  --muted-foreground: oklch(0.5 0 0);
   --accent: oklch(0.97 0 0);
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
@@ -95,6 +99,7 @@
   /* Marca TETSU BURGER en modo oscuro — naranja brillante */
   --primary: oklch(0.72 0.197 38);
   --primary-foreground: oklch(0.145 0.1 10);
+  --price: oklch(0.78 0.15 45);
   --secondary: oklch(0.269 0 0);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.269 0 0);
@@ -151,5 +156,16 @@
 
   html {
     font-family: var(--font-sans);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

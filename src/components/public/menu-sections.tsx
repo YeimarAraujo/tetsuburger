@@ -182,19 +182,19 @@ export function MenuSections({ sections: allSections }: { sections: MenuSection[
         onClick={() => goTo(s.key)}
         aria-current={isActive ? "true" : undefined}
         className={cn(
-          "group flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-4 py-1.5 text-sm font-medium",
+          "group flex min-h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-4 py-2 text-sm font-medium",
           "transition-all duration-200 active:scale-95",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
           isActive
-            ? "border-primary bg-primary text-white shadow-sm shadow-primary/30"
-            : "bg-background hover:-translate-y-px hover:border-primary hover:text-primary"
+            ? "border-primary bg-primary text-primary-foreground shadow-sm shadow-primary/30"
+            : "bg-background hover:-translate-y-px hover:border-primary hover:text-price"
         )}
       >
         {Icon ? (
           <Icon
             className={cn(
               "size-3.5 transition-transform group-hover:scale-110",
-              isActive ? "text-white" : "text-primary"
+              isActive ? "text-primary-foreground" : "text-price"
             )}
           />
         ) : null}
@@ -351,7 +351,7 @@ export function MenuSections({ sections: allSections }: { sections: MenuSection[
         onClick={() => window.scrollTo({ top: 0, behavior: smoothBehavior() })}
         aria-label="Volver arriba"
         className={cn(
-          "fixed bottom-5 right-5 z-40 grid size-11 place-items-center rounded-full bg-primary text-white shadow-lg shadow-primary/30",
+          "fixed bottom-5 right-5 z-40 grid size-11 place-items-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30",
           "transition-all duration-300 hover:-translate-y-0.5 active:scale-95",
           showTop
             ? "translate-y-0 opacity-100"
