@@ -8,7 +8,7 @@ import {
   type MenuSection,
 } from "@/components/public/menu-sections";
 import { SiteFooter } from "@/components/public/site-footer";
-import { createClient } from "@/lib/supabase/server";
+import { createPublicClient } from "@/lib/supabase/public";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { computeOpenStatus } from "@/lib/business-hours";
 import { getAddonsAvailability } from "@/lib/consumption-availability";
@@ -19,14 +19,14 @@ import {
 } from "@/lib/structured-data";
 import { cn } from "@/lib/utils";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 300;
 
 function isoDaysAgo(days: number): string {
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
 }
 
 export default async function HomePage() {
-  const supabase = await createClient();
+  const supabase = createPublicClient();
 
   const [categoriesRes, productsRes, addonsRes, productAddonsRes, settingsRes, hoursRes] =
     await Promise.all([
@@ -266,6 +266,7 @@ export default async function HomePage() {
             alt="Imagen de TETSU BURGER"
             fill
             priority
+            fetchPriority="high"
             sizes="100vw"
             className="object-cover"
           />

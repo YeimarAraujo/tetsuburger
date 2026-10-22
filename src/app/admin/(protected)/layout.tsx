@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import type { Metadata } from "next";
+import { Geist_Mono } from "next/font/google";
 import { LogOut } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { signOutAction } from "@/features/auth/actions";
@@ -11,6 +12,11 @@ import { Button } from "@/components/ui/button";
 export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
+
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
 
 export default async function AdminLayout({
   children,
@@ -40,7 +46,9 @@ export default async function AdminLayout({
   }
 
   return (
-    <div className="flex min-h-screen bg-muted/40">
+    <div
+      className={`${geistMono.variable} flex min-h-screen bg-muted/40`}
+    >
       {/* Sidebar escritorio */}
       <aside className="sticky top-0 hidden h-screen w-60 flex-col border-r bg-background md:flex">
         <div className="flex h-16 items-center gap-3 border-b px-6">

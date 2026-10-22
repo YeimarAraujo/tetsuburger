@@ -8,7 +8,7 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-jakarta);
-  --font-mono: var(--font-geist-mono);
+  --font-mono: var(--font-geist-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   --font-display: var(--font-anton);
   --font-heading: var(--font-jakarta);
   --color-sidebar-ring: var(--sidebar-ring);

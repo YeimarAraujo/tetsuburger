@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Plus_Jakarta_Sans, Anton, Geist_Mono } from "next/font/google";
+import { Plus_Jakarta_Sans, Anton } from "next/font/google";
 import { Toaster } from "sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { isProductionDeployment, getSiteUrl } from "@/lib/site-url";
@@ -21,11 +21,6 @@ const anton = Anton({
   subsets: ["latin"],
   variable: "--font-anton",
   display: "swap",
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
 });
 
 export const metadata: Metadata = {
@@ -78,7 +73,7 @@ export default function RootLayout({
   return (
     <html
       lang="es-CO"
-      className={`${jakarta.variable} ${anton.variable} ${geistMono.variable}`}
+      className={`${jakarta.variable} ${anton.variable}`}
     >
       <body>
         <TooltipProvider delayDuration={150}>

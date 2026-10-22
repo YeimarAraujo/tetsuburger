@@ -8,7 +8,7 @@ import {
   ProductCard,
   type ProductCardData,
 } from "@/components/public/product-card";
-import { createClient } from "@/lib/supabase/server";
+import { createPublicClient } from "@/lib/supabase/public";
 import { getAddonsAvailability } from "@/lib/consumption-availability";
 import {
   buildBreadcrumbJsonLd,
@@ -21,12 +21,21 @@ import type { AddonTipo } from "@/types/db";
 
 export const revalidate = 300;
 
+export async function generateStaticParams() {
+  const supabase = createPublicClient();
+  const { data } = await supabase
+    .from("products")
+    .select("slug")
+    .eq("is_active", true);
+  return (data ?? []).map((product) => ({ slug: product.slug }));
+}
+
 interface PageProps {
   params: Promise<{ slug: string }>;
 }
 
 async function getProduct(slug: string) {
-  const supabase = await createClient();
+  const supabase = createPublicClient();
   const { data } = await supabase
     .from("products")
     .select(
@@ -86,7 +95,7 @@ export default async function ProductPage({ params }: PageProps) {
 
   if (!product) notFound();
 
-  const supabase = await createClient();
+  const supabase = createPublicClient();
 
   const [productAddonsRes, reviewsRes] = await Promise.all([
     supabase
