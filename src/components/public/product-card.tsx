@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { Loader2, Minus, Plus, ShoppingCart, Star } from "lucide-react";
 import { toast } from "sonner";
 import type { CartAddon } from "@/store/cart";
@@ -23,6 +24,7 @@ import {
 
 export interface ProductCardData {
   id: string;
+  slug?: string;
   name: string;
   description: string;
   price: number;
@@ -191,7 +193,16 @@ export function ProductCard({ product }: { product: ProductCardData }) {
         {/* Contenido */}
         <div className="flex min-w-0 flex-1 flex-col">
           <h3 className="text-base font-bold leading-tight sm:text-lg">
-            {product.name}
+            {product.slug ? (
+              <Link
+                href={`/producto/${product.slug}`}
+                className="rounded-sm transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {product.name}
+              </Link>
+            ) : (
+              product.name
+            )}
           </h3>
           {product.description ? (
             <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">

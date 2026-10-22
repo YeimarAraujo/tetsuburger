@@ -13,6 +13,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { computeOpenStatus } from "@/lib/business-hours";
 import { getAddonsAvailability } from "@/lib/consumption-availability";
 import {
+  buildMenuJsonLd,
   buildRestaurantJsonLd,
   serializeJsonLd,
 } from "@/lib/structured-data";
@@ -135,7 +136,7 @@ export default async function HomePage() {
     .slice(0, 6);
 
   function toCard(p: {
-    id: string; name: string; description: string; price: number;
+    id: string; name: string; slug: string; description: string; price: number;
     image_url: string; is_available: boolean;
     conteo_hamburguesas: number; conteo_perros: number;
   }): ProductCardData {
@@ -144,6 +145,7 @@ export default async function HomePage() {
     const perros = Number(p.conteo_perros) || 0;
     return {
       id: p.id,
+      slug: p.slug,
       name: p.name,
       description: p.description,
       price: Number(p.price) || 0,
@@ -230,6 +232,25 @@ export default async function HomePage() {
           ),
         }}
       />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: serializeJsonLd(
+            buildMenuJsonLd(
+              products.map((p) => ({
+                id: p.id,
+                slug: p.slug,
+                name: p.name,
+                description: p.description,
+                price: Number(p.price) || 0,
+                is_available: p.is_available,
+                category_id: p.category_id,
+              })),
+              categoryOptions.map((c) => ({ id: c.id, name: c.name }))
+            )
+          ),
+        }}
+      />
       <Header />
       <FloatingCartButton />
 
@@ -276,6 +297,7 @@ export default async function HomePage() {
       </section>
 
       {/* Filtros + menú */}
+      <div id="menu" className="scroll-mt-28" />
       <MenuSections sections={sections} />
 
       <SiteFooter />
