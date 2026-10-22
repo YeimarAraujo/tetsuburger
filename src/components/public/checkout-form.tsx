@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Loader2, Banknote, Landmark, Truck, Info } from "lucide-react";
 import { toast } from "sonner";
+import { track } from "@vercel/analytics";
 import { site } from "@/config/site";
 import { cartSubtotal, useCart } from "@/store/cart";
 import { placeOrder } from "@/features/orders/actions";
@@ -16,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
+import { TrackView } from "@/components/public/track-view";
 import {
   isTurnstileEnabled,
   TurnstileWidget,
@@ -111,11 +113,20 @@ export function CheckoutForm({ deliveryFee }: { deliveryFee: number }) {
     // confirmación (que conserva el token para poder reseñar) y desde ahí se
     // ofrece el envío por WhatsApp en un clic.
     clear();
+    track("generate_lead", {
+      order_number: result.orderNumber ?? "",
+      total: subtotal,
+      payment_method: paymentMethod,
+    });
     startTransition(() => router.push(`/pedido/confirmado?t=${result.confirmationToken}`));
   }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
+      <TrackView
+        event="begin_checkout"
+        data={{ items: items.length, total: subtotal }}
+      />
 
       {/* Datos de entrega */}
       <Card>

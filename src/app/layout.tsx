@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans, Anton } from "next/font/google";
 import { Toaster } from "sonner";
+import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { isProductionDeployment, getSiteUrl } from "@/lib/site-url";
 
@@ -79,6 +81,8 @@ export default function RootLayout({
         <TooltipProvider delayDuration={150}>
           {children}
           <Toaster richColors position="top-center" />
+          <Analytics />
+          <SpeedInsights />
         </TooltipProvider>
       </body>
     </html>

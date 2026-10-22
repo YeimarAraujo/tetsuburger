@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronRight } from "lucide-react";
 import { Header } from "@/components/public/header";
+import { TrackView } from "@/components/public/track-view";
 import { SiteFooter } from "@/components/public/site-footer";
 import {
   ProductCard,
@@ -175,6 +176,14 @@ export default async function ProductPage({ params }: PageProps) {
 
   return (
     <div className="min-h-screen bg-background">
+      <TrackView
+        event="view_item"
+        data={{
+          product_id: product.id,
+          product: product.name,
+          price: card.price,
+        }}
+      />
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{

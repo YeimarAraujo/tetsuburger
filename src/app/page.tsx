@@ -1,8 +1,11 @@
 import { Header } from "@/components/public/header";
 import Image from "next/image";
+import Link from "next/link";
+import { ArrowDown, MessageCircle } from "lucide-react";
 import { ClosedOverlay } from "@/components/public/closed-overlay";
 import { FloatingCartButton } from "@/components/public/floating-cart-button";
 import { type ProductCardData } from "@/components/public/product-card";
+import { Button } from "@/components/ui/button";
 import {
   MenuSections,
   type MenuSection,
@@ -18,6 +21,7 @@ import {
   serializeJsonLd,
 } from "@/lib/structured-data";
 import { cn } from "@/lib/utils";
+import { whatsappContactUrl } from "@/lib/whatsapp";
 
 export const revalidate = 300;
 
@@ -294,6 +298,29 @@ export default async function HomePage() {
           <p className="max-w-xl text-[15px] leading-relaxed text-white sm:text-base lg:text-lg">
             {status.message}
           </p>
+
+          <div className="flex flex-wrap gap-3 pt-2">
+            <Button asChild size="lg" className="h-11 gap-2">
+              <Link href="#menu">
+                Ver el menú
+                <ArrowDown aria-hidden="true" className="size-4" />
+              </Link>
+            </Button>
+            <Button
+              asChild
+              size="lg"
+              className="h-11 gap-2 bg-white text-foreground hover:bg-white/90"
+            >
+              <a
+                href={whatsappContactUrl()}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <MessageCircle aria-hidden="true" className="size-4" />
+                Pedir por WhatsApp
+              </a>
+            </Button>
+          </div>
         </div>
       </section>
 

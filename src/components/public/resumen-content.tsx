@@ -9,6 +9,7 @@ import { formatCOP } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { TrackView } from "@/components/public/track-view";
 
 export function ResumenContent({ deliveryFee }: { deliveryFee: number }) {
   const items = useCart((s) => s.items);
@@ -31,6 +32,7 @@ export function ResumenContent({ deliveryFee }: { deliveryFee: number }) {
 
   return (
     <main className="mx-auto max-w-2xl space-y-6 px-4 py-8">
+      <TrackView event="view_cart" data={{ items: count, total }} />
       <div className="flex items-center gap-3">
         <Link
           href="/"

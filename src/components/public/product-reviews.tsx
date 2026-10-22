@@ -11,6 +11,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { track } from "@vercel/analytics";
 import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/format";
 import { Button } from "@/components/ui/button";
@@ -272,6 +273,7 @@ export function ReviewsTrigger({
         return;
       }
       toast.success("¡Gracias! Tu reseña está pendiente de aprobación.");
+      track("review_submitted", { product: productName, rating: stars });
       setSent(true);
       setStars(0);
       setComment("");

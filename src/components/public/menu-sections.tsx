@@ -351,7 +351,7 @@ export function MenuSections({ sections: allSections }: { sections: MenuSection[
         onClick={() => window.scrollTo({ top: 0, behavior: smoothBehavior() })}
         aria-label="Volver arriba"
         className={cn(
-          "fixed bottom-5 right-5 z-40 grid size-11 place-items-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30",
+          "fixed bottom-5 right-20 z-40 grid size-11 place-items-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30",
           "transition-all duration-300 hover:-translate-y-0.5 active:scale-95",
           showTop
             ? "translate-y-0 opacity-100"

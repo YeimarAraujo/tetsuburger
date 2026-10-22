@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Loader2, Minus, Plus, ShoppingCart, Star } from "lucide-react";
 import { toast } from "sonner";
+import { track } from "@vercel/analytics";
 import type { CartAddon } from "@/store/cart";
 import { useCart } from "@/store/cart";
 import { addonCharged } from "@/lib/addons";
@@ -142,6 +143,7 @@ export function ProductCard({ product }: { product: ProductCardData }) {
       addons: [],
     });
     toast.success(`${product.name} agregado al carrito`);
+    track("add_to_cart", { product: product.name, price: product.price });
     setTimeout(() => setAdding(false), 400);
   }
 
@@ -156,6 +158,11 @@ export function ProductCard({ product }: { product: ProductCardData }) {
       addons,
     });
     toast.success(`${product.name} agregado al carrito`);
+    track("add_to_cart", {
+      product: product.name,
+      price: product.price,
+      addons: addons.length,
+    });
     setDialogOpen(false);
     resetSel();
   }

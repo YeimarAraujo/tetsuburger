@@ -9,6 +9,7 @@ import { addonLabel } from "@/lib/addons";
 import { formatCOP } from "@/lib/format";
 import { Logo } from "@/components/ui/logo";
 import { Button } from "@/components/ui/button";
+import { WhatsappFab } from "@/components/public/whatsapp-fab";
 import {
   Sheet,
   SheetContent,
@@ -133,6 +134,8 @@ export function Header() {
           </SheetTrigger>
         </div>
       </header>
+
+      <WhatsappFab />
 
       <SheetContent side="right" className="flex w-full flex-col gap-0 sm:max-w-md">
         <SheetHeader>
