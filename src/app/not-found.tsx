@@ -1,4 +1,3 @@
-
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
@@ -7,68 +6,50 @@ import { Button } from "@/components/ui/button";
 import { whatsappContactUrl } from "@/lib/whatsapp";
 
 export const metadata: Metadata = {
-  title: "Página no encontrada | Tetsu Burger",
-  robots: {
-    index: false,
-    follow: false,
-  },
+  title: "Página no encontrada",
+  robots: { index: false, follow: false },
 };
 
 export default function NotFound() {
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-background px-4 py-10 text-center">
-      <Link
-        href="/"
-        aria-label="Volver al inicio de Tetsu Burger"
-        className="flex w-full max-w-sm justify-center sm:max-w-md"
-      >
+    <main className="flex min-h-screen items-center justify-center bg-background px-4 py-10">
+      <h1 className="sr-only">Página no encontrada (error 404)</h1>
+
+      <div className="relative w-full max-w-4xl overflow-hidden rounded-2xl border bg-muted">
         <Image
           src="/images/tetsu_404.webp"
-          alt="Tetsu Burger - Página no encontrada"
-          width={600}
-          height={600}
+          alt="Ilustración de página no encontrada de TETSU BURGER"
+          width={1440}
+          height={900}
           priority
-          sizes="(max-width: 640px) 90vw, 448px"
-          className="h-auto w-full object-contain"
+          sizes="(max-width: 896px) 100vw, 896px"
+          className="h-auto w-full"
         />
-      </Link>
 
-      <p className="mt-6 text-sm font-bold uppercase tracking-[0.25em] text-price">
-        Error 404
-      </p>
-
-      <h1 className="mt-2 text-3xl font-extrabold tracking-tight sm:text-4xl">
-        Esta página no existe
-      </h1>
-
-      <p className="mt-3 max-w-md text-sm leading-6 text-muted-foreground">
-        Puede que el enlace esté mal escrito o que el producto ya no esté
-        disponible. Vuelve al menú para seguir disfrutando de Tetsu Burger.
-      </p>
-
-      <div className="mt-7 flex w-full max-w-xs flex-col gap-3 sm:max-w-none sm:flex-row sm:justify-center">
-        <Button asChild size="lg" className="h-11 gap-2">
-          <Link href="/#menu">
-            <Home className="size-4" />
-            Ver el menú
-          </Link>
-        </Button>
-
-        <Button
-          asChild
-          variant="outline"
-          size="lg"
-          className="h-11 gap-2"
-        >
-          <a
-            href={whatsappContactUrl()}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <MessageCircle className="size-4" />
-            Escríbenos por WhatsApp
-          </a>
-        </Button>
+        <div className="absolute inset-x-0 bottom-3 flex justify-center px-3 sm:bottom-5">
+          <div className="flex w-full max-w-md gap-2 rounded-2xl border bg-background/90 p-2 shadow-lg backdrop-blur sm:w-auto">
+            <Button asChild size="lg" className="h-11 flex-1 gap-2 sm:flex-none">
+              <Link href="/#menu">
+                <Home aria-hidden="true" className="size-4" />
+                Ver el menú
+              </Link>
+            </Button>
+            <Button
+              asChild
+              size="lg"
+              className="h-11 flex-1 gap-2 bg-white text-foreground hover:bg-white/90 sm:flex-none"
+            >
+              <a
+                href={whatsappContactUrl()}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <MessageCircle aria-hidden="true" className="size-4" />
+                WhatsApp
+              </a>
+            </Button>
+          </div>
+        </div>
       </div>
     </main>
   );

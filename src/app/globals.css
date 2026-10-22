@@ -59,8 +59,8 @@
   --popover-foreground: oklch(0.145 0 0);
   /* Marca TETSU BURGER: naranja parrilla */
   --primary: oklch(0.698 0.197 38);
-  /* Texto oscuro sobre naranja: 7:1 (AA). */
-  --primary-foreground: oklch(0.145 0.1 10);
+  /* Texto blanco sobre el naranja de marca (identidad original). */
+  --primary-foreground: oklch(0.985 0 0);
   /* Naranja oscurecido solo para textos de precio: 6:1 sobre blanco. */
   --price: oklch(0.505 0.16 38);
   --secondary: oklch(0.97 0 0);

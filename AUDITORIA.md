@@ -346,9 +346,11 @@ queda documentado como pendiente del dueño.
   (14 URLs), manifest, `lang="es-CO"`, JSON-LD y páginas de producto indexables.
 - **Rendimiento**: home y producto en ISR, imágenes AVIF/WebP, LCP priorizado y
   CSS/fuentes del admin fuera del bundle público.
-- **Accesibilidad**: contraste AA en textos y botones, objetivos táctiles de
-  40–44 px, nombres accesibles, foco visible, estados de carga/error/404 y
-  `prefers-reduced-motion`.
+- **Accesibilidad**: contraste AA en textos, precios y campos, objetivos
+  táctiles de 40–44 px, nombres accesibles, foco visible, estados de
+  carga/error/404 y `prefers-reduced-motion`. Los botones primarios conservan
+  **texto blanco sobre el naranja de marca** por decisión explícita del dueño
+  (identidad visual), aunque ese par no alcanza 4,5:1.
 - **Conversión**: CTA principal en el hero, WhatsApp siempre visible y eventos
   `view_item`, `add_to_cart`, `view_cart`, `begin_checkout`, `generate_lead` y
   `review_submitted`.
