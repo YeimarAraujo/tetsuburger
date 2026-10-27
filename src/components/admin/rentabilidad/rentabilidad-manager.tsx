@@ -171,7 +171,7 @@ export function RentabilidadManager({
       {/* Datos del negocio */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-sm">
+          <CardTitle className="flex items-center gap-2">
             <Settings2 className="size-4" />
             Datos del negocio (costos fijos mensuales y meta)
           </CardTitle>

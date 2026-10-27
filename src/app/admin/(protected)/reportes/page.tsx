@@ -10,7 +10,7 @@ import {
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Reportes · TETSUBURGER Admin",
+  title: "Reportes · TETSU BURGER Admin",
 };
 
 function bogotaToday(): string {
@@ -51,7 +51,7 @@ export default async function ReportsPage({
   const [ordersRes, expensesRes, categoriesRes, productionRes] = await Promise.all([
     supabase
       .from("orders")
-      .select("id, order_number, status, customer_name, total, subtotal, delivery_fee, delivery_fee_retained, payment_method, origin, created_at")
+      .select("id, order_number, status, customer_name, total, subtotal, final_adjustment, delivery_fee, delivery_fee_retained, payment_method, origin, created_at")
       .gte("created_at", `${from}T00:00:00-05:00`)
       .lte("created_at", `${to}T23:59:59-05:00`)
       .order("created_at", { ascending: false }),
@@ -110,6 +110,7 @@ export default async function ReportsPage({
     customer_name: string;
     total: number | string;
     subtotal: number | string;
+    final_adjustment?: number | string | null;
     delivery_fee: number | string;
     delivery_fee_retained: boolean;
     payment_method: string | null;
@@ -122,6 +123,7 @@ export default async function ReportsPage({
     customer_name: o.customer_name,
     total: Number(o.total),
     subtotal: Number(o.subtotal),
+    final_adjustment: Number(o.final_adjustment ?? 0),
     delivery_fee: Number(o.delivery_fee),
     delivery_fee_retained: o.delivery_fee_retained,
     payment_method: o.payment_method,
@@ -178,7 +180,7 @@ export default async function ReportsPage({
   const sales = countSales(lines, productCounts);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-4 lg:p-6">
+    <div className="mx-auto w-full max-w-6xl space-y-6 p-4 lg:p-6">
       <PageHeader
         title="Reportes"
         description="Historiales de pedidos, gastos y compras por período"

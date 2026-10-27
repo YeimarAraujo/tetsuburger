@@ -317,7 +317,7 @@ export function ExpenseManager({
       {byCategory.length > 0 ? (
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm">Por categoría</CardTitle>
+            <CardTitle>Por categoría</CardTitle>
             <CardDescription>
               {filters.from} → {filters.to} · dónde se va la plata en el período
             </CardDescription>

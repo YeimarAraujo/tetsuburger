@@ -6,7 +6,7 @@ import { PageHeader } from "@/components/admin/page-header";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Rentabilidad · TETSUBURGER Admin",
+  title: "Rentabilidad · TETSU BURGER Admin",
 };
 
 export default async function RentabilidadPage() {
@@ -14,7 +14,7 @@ export default async function RentabilidadPage() {
 
   const { data } = await supabase
     .from("products")
-    .select("id, name, price, cost, packaging_cost, is_active, category:categories(name)")
+    .select("id, name, price, cost, packaging_cost, is_active, category:categories(name, slug)")
     .eq("is_active", true)
     .order("name");
 
@@ -25,8 +25,11 @@ export default async function RentabilidadPage() {
     cost: number | string;
     packaging_cost: number | string;
     is_active: boolean;
-    category?: { name: string } | null;
-  }[]).map((p) => ({
+    category?: { name: string; slug: string } | null;
+  }[])
+    // Las gaseosas no se analizan aquí (rentabilidad de comida).
+    .filter((p) => !(p.category && !Array.isArray(p.category) && p.category.slug === "bebidas"))
+    .map((p) => ({
     id: p.id,
     name: p.name,
     price: Number(p.price),
@@ -38,7 +41,7 @@ export default async function RentabilidadPage() {
   const initialConfig = await getBusinessCosts();
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-4 lg:p-6">
+    <div className="mx-auto w-full max-w-6xl space-y-6 p-4 lg:p-6">
       <PageHeader
         title="Rentabilidad"
         description="Costo completo por producto (ingredientes + empaque + costos fijos) y precio sugerido"

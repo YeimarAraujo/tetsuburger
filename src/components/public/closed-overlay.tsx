@@ -92,7 +92,7 @@ export function ClosedOverlay({
         {/* Botón */}
         <Button
           size="lg"
-          className="h-11 w-full font-bold"
+          className="h-11 w-full bg-primary/85 font-bold text-primary-foreground hover:bg-primary/95"
           onClick={() => setVisible(false)}
         >
           Explorar catálogo

@@ -8,7 +8,7 @@ import { PageHeader } from "@/components/admin/page-header";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Dashboard · TETSUBURGER Admin",
+  title: "Dashboard · TETSU BURGER Admin",
 };
 
 function bogotaToday(): string {
@@ -34,7 +34,7 @@ export default async function AdminDashboardPage() {
   ] = await Promise.all([
     supabase
       .from("orders")
-      .select("id, status, subtotal, total, delivery_fee, payment_method, origin, created_at")
+      .select("id, status, subtotal, final_adjustment, total, delivery_fee, payment_method, origin, created_at")
       .gte("created_at", `${today}T00:00:00-05:00`)
       .lte("created_at", `${today}T23:59:59-05:00`),
     supabase
@@ -72,9 +72,13 @@ export default async function AdminDashboardPage() {
   const validOrders = orders.filter((o) => o.status !== "CANCELADO");
   const deliveredOrders = orders.filter((o) => o.status === "ENTREGADO");
 
-  // Ventas del dashboard = SOLO el valor de los productos (subtotal) de los
-  // pedidos ENTREGADO. Los domicilios no se incluyen: ni retenidos ni externos.
-  const totalSales = deliveredOrders.reduce((s, o) => s + Number(o.subtotal), 0);
+  // Ventas del dashboard = valor neto de los productos (subtotal menos el
+  // ajuste del valor final) de los pedidos ENTREGADO. Los domicilios no se
+  // incluyen: ni retenidos ni externos.
+  const totalSales = deliveredOrders.reduce(
+    (s, o) => s + Number(o.subtotal) - Number(o.final_adjustment ?? 0),
+    0
+  );
   const totalExpenses = expenses.reduce((s, o) => s + Number(o.amount), 0);
 
   // Utilidad = ventas entregadas − costo de lo vendido − gastos.
@@ -104,7 +108,7 @@ export default async function AdminDashboardPage() {
   );
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 p-4 lg:p-6">
+    <div className="mx-auto w-full max-w-6xl space-y-6 p-4 lg:p-6">
       <PageHeader
         title="Dashboard"
         description={`Resumen de hoy · ${formatDate(`${today}T12:00:00Z`)}`}

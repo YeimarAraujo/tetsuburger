@@ -1,7 +1,7 @@
 import { Header } from "@/components/public/header";
 import Image from "next/image";
-import Link from "next/link";
-import { ArrowDown, MessageCircle } from "lucide-react";
+import { MessageCircle } from "lucide-react";
+import { SocialLinks } from "@/components/public/social-links";
 import { ClosedOverlay } from "@/components/public/closed-overlay";
 import { FloatingCartButton } from "@/components/public/floating-cart-button";
 import { type ProductCardData } from "@/components/public/product-card";
@@ -299,13 +299,7 @@ export default async function HomePage() {
             {status.message}
           </p>
 
-          <div className="flex flex-wrap gap-3 pt-2">
-            <Button asChild size="lg" className="h-11 gap-2">
-              <Link href="#menu">
-                Ver el menú
-                <ArrowDown aria-hidden="true" className="size-4" />
-              </Link>
-            </Button>
+          <div className="flex flex-wrap items-center gap-3 pt-2">
             <Button
               asChild
               size="lg"
@@ -320,6 +314,8 @@ export default async function HomePage() {
                 Pedir por WhatsApp
               </a>
             </Button>
+
+            <SocialLinks />
           </div>
         </div>
       </section>

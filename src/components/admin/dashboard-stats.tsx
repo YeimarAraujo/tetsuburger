@@ -97,8 +97,8 @@ today: {
           valueClassName="text-emerald-600"
           caption="Subtotal de entregados · sin domis"
           help={{
-            what: "Suma de los subtotales de los pedidos ENTREGADOS hoy. No incluye el cobro de domicilio.",
-            formula: "Σ subtotal · solo estado ENTREGADO",
+            what: "Suma del valor neto de los productos (subtotal menos ajustes del valor final) de los pedidos ENTREGADOS hoy. No incluye el cobro de domicilio.",
+            formula: "Σ (subtotal − ajuste) · solo estado ENTREGADO",
           }}
         />
 
@@ -164,7 +164,7 @@ today: {
         {/* Por estado */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm">Pedidos por estado</CardTitle>
+            <CardTitle>Pedidos por estado</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
             {Object.entries(today.ordersByStatus).length === 0 ? (
@@ -183,7 +183,7 @@ today: {
         {/* Por medio de pago */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm">Pedidos por pago</CardTitle>
+            <CardTitle>Pedidos por pago</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
             {Object.entries(today.paymentsByMethod).length === 0 ? (
@@ -211,7 +211,7 @@ today: {
       {lowStock.length > 0 ? (
         <Card className="border-amber-500/30 bg-amber-500/5">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-sm text-amber-700">
+            <CardTitle className="flex items-center gap-2 text-amber-700">
               <AlertTriangle className="size-4" />
               Stock bajo ({lowStock.length})
             </CardTitle>
@@ -235,7 +235,7 @@ today: {
       {/* Pedidos recientes */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm">Pedidos recientes de hoy</CardTitle>
+          <CardTitle>Pedidos recientes de hoy</CardTitle>
         </CardHeader>
         <CardContent>
           {recentOrders.length === 0 ? (

@@ -1,7 +1,13 @@
+import type { Metadata } from "next";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { PageHeader } from "@/components/admin/page-header";
 import { PqrManager, type PqrRow } from "@/components/admin/pqr-manager";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  title: "PQR · TETSU BURGER Admin",
+};
 
 export default async function AdminPqrPage() {
   const admin = createAdminClient();
@@ -12,13 +18,11 @@ export default async function AdminPqrPage() {
     .limit(200);
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">PQR</h1>
-        <p className="text-sm text-muted-foreground">
-          Peticiones, quejas y reclamos recibidos desde el sitio.
-        </p>
-      </div>
+    <div className="mx-auto w-full max-w-6xl space-y-6 p-4 lg:p-6">
+      <PageHeader
+        title="PQR"
+        description="Peticiones, quejas y reclamos recibidos desde el sitio."
+      />
 
       {error ? (
         <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">

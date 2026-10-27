@@ -6,7 +6,7 @@ import {
 import { PageHeader } from "@/components/admin/page-header";
 
 export const metadata = {
-  title: "Productos · TETSUBURGER Admin",
+  title: "Productos · TETSU BURGER Admin",
 };
 
 export default async function ProductsPage() {
@@ -72,7 +72,7 @@ export default async function ProductsPage() {
   }));
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-4 lg:p-6">
+    <div className="mx-auto w-full max-w-6xl space-y-6 p-4 lg:p-6">
       <PageHeader
         title="Productos"
         description="Catálogo que verán tus clientes · precios en COP"

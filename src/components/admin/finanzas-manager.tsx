@@ -39,7 +39,7 @@ export function FinanzasManager({
   missingCostCount,
   filters,
 }: {
-  orders: { id: string; status: string; total: number | string; subtotal: number | string; delivery_fee: number | string; delivery_fee_retained: boolean; payment_method: string | null; origin: string; created_at: string }[];
+  orders: { id: string; status: string; total: number | string; subtotal: number | string; final_adjustment?: number | string | null; delivery_fee: number | string; delivery_fee_retained: boolean; payment_method: string | null; origin: string; created_at: string }[];
   expenses: { id: string; expense_date: string; amount: number | string; concept: string; category?: { name: string } | null }[];
   production: { id: string; record_date: string; total_cost: number | string }[];
   closings: { id: string; closing_date: string; orders_count: number; sales_total: number | string; expenses_total: number | string; estimated_profit: number | string; details?: Record<string, unknown> | null }[];
@@ -57,9 +57,12 @@ export function FinanzasManager({
     // Las ventas del período son SOLO los pedidos ENTREGADO (máximo realismo).
     const deliveredOrders = orders.filter((o) => o.status === "ENTREGADO");
 
-    // Ingresos por ventas = SOLO el valor de los productos (subtotal).
-    // Los domicilios no se incluyen: ni retenidos ni externos.
-    const subtotalSales = deliveredOrders.reduce((s, o) => s + Number(o.subtotal), 0);
+    // Ingresos por ventas = valor neto de los productos (subtotal menos el
+    // ajuste del valor final, si lo hay). Los domicilios no se incluyen: ni
+    // retenidos ni externos.
+    const netProducts = (o: { subtotal: number | string; final_adjustment?: number | string | null }) =>
+      Number(o.subtotal) - Number(o.final_adjustment ?? 0);
+    const subtotalSales = deliveredOrders.reduce((s, o) => s + netProducts(o), 0);
     const sales = subtotalSales;
     const expTotal = expenses.reduce((s, e) => s + Number(e.amount), 0);
     const prodCost = production.reduce((s, p) => s + Number(p.total_cost), 0);
@@ -69,12 +72,12 @@ export function FinanzasManager({
       const m = o.payment_method ?? "EFECTIVO";
       if (!byMethod[m]) byMethod[m] = { count: 0, total: 0 };
       byMethod[m].count++;
-      byMethod[m].total += Number(o.subtotal);
+      byMethod[m].total += netProducts(o);
     });
 
     const byOrigin: Record<string, number> = {};
     deliveredOrders.forEach((o) => {
-      byOrigin[o.origin] = (byOrigin[o.origin] || 0) + Number(o.subtotal);
+      byOrigin[o.origin] = (byOrigin[o.origin] || 0) + netProducts(o);
     });
 
     // Gastos por categoría
@@ -158,7 +161,8 @@ export function FinanzasManager({
             ].map((r) => (
               <button
                 key={r.label}
-                onClick={() => { pushFrom(r.from); }}
+                type="button"
+                onClick={() => { pushFrom(r.from); pushTo(r.to); }}
                 className="rounded-md border px-3 py-1.5 text-xs font-medium transition hover:bg-muted"
               >
                 {r.label}
@@ -166,12 +170,12 @@ export function FinanzasManager({
             ))}
           </div>
           <div className="ml-auto">
-            <a href={exportHref}>
-              <Button variant="outline" size="sm">
+            <Button asChild variant="outline" size="sm">
+              <a href={exportHref}>
                 <Download className="size-4" />
                 Exportar CSV
-              </Button>
-            </a>
+              </a>
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -187,8 +191,8 @@ export function FinanzasManager({
           valueClassName="text-xl text-emerald-600"
           caption={`Sin domicilios · ${stats.totalDelivered} pedidos entregados${stats.cancelled > 0 ? ` · ${stats.cancelled} cancelados` : ""}`}
           help={{
-            what: "Suma del subtotal de los pedidos ENTREGADOS en el período. No incluye domicilios (ni retenidos ni externos).",
-            formula: "Σ subtotal · solo estado ENTREGADO",
+            what: "Suma del valor neto de los productos (subtotal menos ajustes del valor final) de los pedidos ENTREGADOS en el período. No incluye domicilios (ni retenidos ni externos).",
+            formula: "Σ (subtotal − ajuste) · solo estado ENTREGADO",
             suggestion: "Compara el número de pedidos entregados vs. creados para medir cuánto se pierde entre pedido y entrega.",
           }}
         />
@@ -265,7 +269,7 @@ export function FinanzasManager({
       <div className="grid gap-4 sm:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm">Ingresos por método de pago</CardTitle>
+            <CardTitle>Ingresos por método de pago</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {Object.entries(stats.byMethod).map(([method, data]) => (
@@ -285,7 +289,7 @@ export function FinanzasManager({
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm">Gastos por categoría</CardTitle>
+            <CardTitle>Gastos por categoría</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {Object.entries(stats.expByCategory).sort((a, b) => b[1] - a[1]).map(([cat, total]) => (
@@ -304,7 +308,7 @@ export function FinanzasManager({
       {/* Ingresos por origen */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm">Ingresos por origen del pedido</CardTitle>
+          <CardTitle>Ingresos por origen del pedido</CardTitle>
         </CardHeader>
         <CardContent className="flex gap-6">
           {Object.entries(stats.byOrigin).map(([origin, total]) => (
@@ -323,7 +327,7 @@ export function FinanzasManager({
       {dailyData.length > 0 ? (
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm">Utilidad por día (cierres)</CardTitle>
+            <CardTitle>Utilidad por día (cierres)</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
@@ -367,7 +371,7 @@ export function FinanzasManager({
       {/* Historial de gastos */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm">Historial de gastos ({expenses.length})</CardTitle>
+          <CardTitle>Historial de gastos ({expenses.length})</CardTitle>
         </CardHeader>
         <CardContent>
           {expenses.length === 0 ? (

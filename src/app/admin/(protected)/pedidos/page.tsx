@@ -8,7 +8,7 @@ import { PageHeader } from "@/components/admin/page-header";
 import { Button } from "@/components/ui/button";
 
 export const metadata = {
-  title: "Pedidos · TETSUBURGER Admin",
+  title: "Pedidos · TETSU BURGER Admin",
 };
 
 export const dynamic = "force-dynamic";
@@ -95,7 +95,7 @@ export default async function OrdersPage() {
   });
 
   return (
-    <div className="mx-auto max-w-[1600px] space-y-6 p-4 lg:p-6">
+    <div className="mx-auto w-full max-w-[1600px] space-y-6 p-4 lg:p-6">
       <PageHeader
         title="Pedidos en vivo"
         description="Los pedidos nuevos aparecen solos, con alerta sonora · orden por llegada (los más antiguos arriba)"

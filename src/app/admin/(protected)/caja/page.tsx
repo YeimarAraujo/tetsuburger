@@ -4,7 +4,7 @@ import { getCajaBase } from "@/features/caja/actions";
 import { PageHeader } from "@/components/admin/page-header";
 
 export const metadata = {
-  title: "Caja y Pagos · TETSUBURGER Admin",
+  title: "Caja y Pagos · TETSU BURGER Admin",
 };
 
 export const dynamic = "force-dynamic";
@@ -41,7 +41,7 @@ export default async function CajaPage() {
   const base = await getCajaBase();
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-4 lg:p-6">
+    <div className="mx-auto w-full max-w-6xl space-y-6 p-4 lg:p-6">
       <PageHeader
         title="Caja y Pagos"
         description="Saldos por medio de pago (efectivo y transferencia), arqueo diario y movimientos. Las ventas entregadas entran solas al saldo; las compras y gastos marcadas “sale de caja” se descuentan según el medio elegido."

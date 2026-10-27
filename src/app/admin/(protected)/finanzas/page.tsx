@@ -6,7 +6,7 @@ import { PageHeader } from "@/components/admin/page-header";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Finanzas · TETSUBURGER Admin",
+  title: "Finanzas · TETSU BURGER Admin",
 };
 
 function bogotaToday(): string {
@@ -35,7 +35,7 @@ export default async function FinanzasPage({
   const [ordersRes, expensesRes, productionRes, closingsRes] = await Promise.all([
     supabase
       .from("orders")
-      .select("id, status, total, subtotal, delivery_fee, delivery_fee_retained, payment_method, origin, created_at")
+      .select("id, status, total, subtotal, final_adjustment, delivery_fee, delivery_fee_retained, payment_method, origin, created_at")
       .gte("created_at", `${from}T00:00:00-05:00`)
       .lte("created_at", `${to}T23:59:59-05:00`),
     supabase
@@ -59,6 +59,7 @@ export default async function FinanzasPage({
 
   const orders = (ordersRes.data ?? []) as {
     id: string; status: string; total: string | number; subtotal: string | number;
+    final_adjustment: string | number | null;
     delivery_fee: string | number; delivery_fee_retained: boolean;
     payment_method: string | null; origin: string; created_at: string;
   }[];
@@ -89,7 +90,7 @@ export default async function FinanzasPage({
   const cogsTotal = sumCogs(cogsByOrder);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-4 lg:p-6">
+    <div className="mx-auto w-full max-w-6xl space-y-6 p-4 lg:p-6">
       <PageHeader
         title="Finanzas"
         description="Resumen financiero del período · ventas entregadas, costo de lo vendido, gastos y utilidad"

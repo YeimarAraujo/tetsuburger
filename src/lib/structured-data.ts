@@ -55,7 +55,9 @@ export function buildRestaurantJsonLd(hours: PublicHour[]) {
       "@type": "City",
       name: site.city,
     },
-    sameAs: [site.social.instagram],
+    sameAs: [site.social.instagram, site.social.facebook, site.social.tiktok].filter(
+      (url): url is string => Boolean(url)
+    ),
     hasMenu: `${base}/#menu`,
     ...(openingHoursSpecification.length > 0
       ? { openingHoursSpecification }

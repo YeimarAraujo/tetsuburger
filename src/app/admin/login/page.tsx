@@ -13,7 +13,7 @@ export default function LoginPage() {
       <div className="w-full max-w-sm space-y-4">
         <div className="text-center">
           <Logo className="mx-auto h-14 w-auto" />
-          <h1 className="mt-3 font-display text-2xl tracking-wide uppercase">
+          <h1 className="mt-3 font-display text-2xl tracking-wide uppercase sm:text-3xl">
             Panel administrativo
           </h1>
         </div>

@@ -191,7 +191,7 @@ export function InventoryManager({
       {/* Historial de movimientos */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm">Últimos movimientos</CardTitle>
+          <CardTitle>Últimos movimientos</CardTitle>
         </CardHeader>
         <CardContent>
           {movements.length === 0 ? (

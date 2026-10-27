@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/admin/page-header";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Cierres diarios · TETSUBURGER Admin",
+  title: "Cierres diarios · TETSU BURGER Admin",
 };
 
 export default async function ClosingsPage() {
@@ -24,7 +24,7 @@ export default async function ClosingsPage() {
   }));
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 p-4 lg:p-6">
+    <div className="mx-auto w-full max-w-6xl space-y-6 p-4 lg:p-6">
       <PageHeader
         title="Cierres diarios"
         description="Congela los totales de cada día. Los cierres son inmutables."

@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/admin/page-header";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Compras del día · TETSUBURGER Admin",
+  title: "Compras del día · TETSU BURGER Admin",
 };
 
 export default async function ProductionPage() {
@@ -51,7 +51,7 @@ export default async function ProductionPage() {
   }));
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 p-4 lg:p-6">
+    <div className="mx-auto w-full max-w-6xl space-y-6 p-4 lg:p-6">
       <PageHeader
         title="Compras del día"
         description="Registra la materia prima que compraste para cocinar cada día"

@@ -113,6 +113,7 @@ export function CajaManager({ rows, base }: { rows: CajaRow[]; base: number }) {
   const [from, setFrom] = useState(() => `${bogotaToday().slice(0, 8)}01`);
   const [to, setTo] = useState(bogotaToday());
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- usado por el bloque "Arqueo de caja" (comentado)
   const [arqueoDate, setArqueoDate] = useState(bogotaToday());
   const [contado, setContado] = useState("");
   const [manTipo, setManTipo] = useState<"INGRESO_EXTRA" | "RETIRO" | "AJUSTE">("INGRESO_EXTRA");
@@ -214,6 +215,7 @@ export function CajaManager({ rows, base }: { rows: CajaRow[]; base: number }) {
     startTransition(() => router.refresh());
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- usado por el bloque "Arqueo de caja" (comentado)
   async function handleAjuste() {
     if (diff === 0) return;
     setSaving(true);
@@ -350,7 +352,7 @@ export function CajaManager({ rows, base }: { rows: CajaRow[]; base: number }) {
       {/* Arqueo del día */}
       {/* <Card className="border-primary/30 bg-primary/5">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-sm">
+          <CardTitle className="flex items-center gap-2">
             <Coins className="size-4 text-primary" />
             Arqueo de caja (efectivo)
           </CardTitle>
@@ -411,7 +413,7 @@ export function CajaManager({ rows, base }: { rows: CajaRow[]; base: number }) {
       {/* Base de caja */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-sm">
+          <CardTitle className="flex items-center gap-2">
             <Landmark className="size-4 text-primary" />
             Base de caja
           </CardTitle>
@@ -450,7 +452,7 @@ export function CajaManager({ rows, base }: { rows: CajaRow[]; base: number }) {
       {/* Saldo a una fecha */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-sm">
+          <CardTitle className="flex items-center gap-2">
             <CalendarDays className="size-4 text-primary" />
             Saldo a una fecha
           </CardTitle>
@@ -517,7 +519,7 @@ export function CajaManager({ rows, base }: { rows: CajaRow[]; base: number }) {
       {/* Ganancia por semana */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-sm">
+          <CardTitle className="flex items-center gap-2">
             <PiggyBank className="size-4 text-primary" />
             Ganancia por semana
           </CardTitle>
