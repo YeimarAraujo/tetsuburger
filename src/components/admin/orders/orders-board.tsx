@@ -23,7 +23,7 @@ import {
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { playNewOrderSound } from "@/lib/sound";
-import { addOrderItem, setBoardMuted, updateOrderStatus } from "@/features/orders/board-actions";
+import { addOrderItem, setBoardMuted, updateOrderStatus, updateOrderTotals } from "@/features/orders/board-actions";
 import {
   getOrderConsumptionBreakdown,
   saveOrderConsumptionOverrides,
@@ -62,6 +62,7 @@ export interface BoardOrder {
   delivery_fee: number;
   delivery_fee_retained: boolean;
   subtotal: number;
+  final_adjustment: number;
   total: number;
   notes: string;
   created_at: string;
@@ -122,6 +123,8 @@ export function OrdersBoard({
   const [editingFeeValue, setEditingFeeValue] = useState("");
   const [editingSubtotalId, setEditingSubtotalId] = useState<string | null>(null);
   const [editingSubtotalValue, setEditingSubtotalValue] = useState("");
+  const [editingFinalId, setEditingFinalId] = useState<string | null>(null);
+  const [editingFinalValue, setEditingFinalValue] = useState("");
   const [consumptionTarget, setConsumptionTarget] = useState<BoardOrder | null>(null);
   const [addItemTarget, setAddItemTarget] = useState<BoardOrder | null>(null);
   const [addItemSearch, setAddItemSearch] = useState("");
@@ -270,20 +273,20 @@ export function OrdersBoard({
       return;
     }
 
-    const supabase = createClient();
-    const newTotal = Number(order.subtotal) + newFee;
-    const { error } = await supabase
-      .from("orders")
-      .update({ delivery_fee: newFee, total: newTotal })
-      .eq("id", order.id);
-
-    if (error) {
-      toast.error("No se pudo actualizar el valor");
+    const res = await updateOrderTotals(order.id, { deliveryFee: newFee });
+    if (res.error) {
+      toast.error(res.error);
       setEditingFeeId(null);
       return;
     }
 
-    upsertOrder({ ...order, delivery_fee: newFee, total: newTotal });
+    upsertOrder({
+      ...order,
+      delivery_fee: newFee,
+      subtotal: res.subtotal ?? order.subtotal,
+      final_adjustment: res.final_adjustment ?? order.final_adjustment,
+      total: res.total ?? order.total,
+    });
     setEditingFeeId(null);
     toast.success(`Domicilio actualizado a ${formatCOP(newFee)}`);
   }
@@ -296,22 +299,46 @@ export function OrdersBoard({
       return;
     }
 
-    const supabase = createClient();
-    const newTotal = newSubtotal + Number(order.delivery_fee);
-    const { error } = await supabase
-      .from("orders")
-      .update({ subtotal: newSubtotal, total: newTotal })
-      .eq("id", order.id);
-
-    if (error) {
-      toast.error("No se pudo actualizar el valor");
+    const res = await updateOrderTotals(order.id, { subtotal: newSubtotal });
+    if (res.error) {
+      toast.error(res.error);
       setEditingSubtotalId(null);
       return;
     }
 
-    upsertOrder({ ...order, subtotal: newSubtotal, total: newTotal });
+    upsertOrder({
+      ...order,
+      subtotal: newSubtotal,
+      delivery_fee: res.delivery_fee ?? order.delivery_fee,
+      final_adjustment: res.final_adjustment ?? order.final_adjustment,
+      total: res.total ?? order.total,
+    });
     setEditingSubtotalId(null);
     toast.success(`Subtotal actualizado a ${formatCOP(newSubtotal)}`);
+  }
+
+  async function saveFinalValue(order: BoardOrder) {
+    const finalValue = Number(editingFinalValue);
+    if (isNaN(finalValue) || finalValue < 0) {
+      toast.error("Valor inválido");
+      setEditingFinalId(null);
+      return;
+    }
+
+    const res = await updateOrderTotals(order.id, { finalValue });
+    if (res.error) {
+      toast.error(res.error);
+      setEditingFinalId(null);
+      return;
+    }
+
+    upsertOrder({
+      ...order,
+      final_adjustment: res.final_adjustment ?? order.final_adjustment,
+      total: res.total ?? order.total,
+    });
+    setEditingFinalId(null);
+    toast.success(`Valor final del pedido: ${formatCOP(finalValue)}`);
   }
 
   function addItemCost(): number {
@@ -616,7 +643,38 @@ export function OrdersBoard({
 
                       <footer className="flex flex-wrap items-center justify-between gap-2 pt-1">
                         <div className="flex items-center gap-1">
-                          {editingSubtotalId === order.id ? (
+                          {editingFinalId === order.id ? (
+                            <div className="flex items-center gap-1">
+                              <input
+                                type="number"
+                                value={editingFinalValue}
+                                onChange={(e) => setEditingFinalValue(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") saveFinalValue(order);
+                                  if (e.key === "Escape") setEditingFinalId(null);
+                                }}
+                                className="h-6 w-24 rounded border px-1.5 text-[11px] font-bold"
+                                autoFocus
+                                min={0}
+                                step="any"
+                                inputMode="decimal"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => saveFinalValue(order)}
+                                className="rounded bg-emerald-500 px-1.5 py-0.5 text-[10px] font-bold text-white hover:bg-emerald-600"
+                              >
+                                <Check className="size-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingFinalId(null)}
+                                className="rounded bg-zinc-300 px-1.5 py-0.5 text-[10px] font-bold text-zinc-700 hover:bg-zinc-400"
+                              >
+                                <X className="size-3.5" />
+                              </button>
+                            </div>
+                          ) : editingSubtotalId === order.id ? (
                             <div className="flex items-center gap-1">
                               <input
                                 type="number"
@@ -649,6 +707,14 @@ export function OrdersBoard({
                           ) : (
                             <>
                               <span className="font-bold">{formatCOP(Number(order.total))}</span>
+                              {Number(order.final_adjustment ?? 0) !== 0 ? (
+                                <span
+                                  className="rounded bg-amber-100 px-1 text-[9px] font-bold uppercase text-amber-700"
+                                  title={`Valor final editado (ajuste de ${formatCOP(Number(order.final_adjustment))}). Solo aplica en la web, no se envía a WhatsApp.`}
+                                >
+                                  ajuste
+                                </span>
+                              ) : null}
                               <button
                                 type="button"
                                 onClick={() => {
@@ -657,6 +723,17 @@ export function OrdersBoard({
                                 }}
                                 className="rounded p-0.5 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-600"
                                 title="Editar subtotal (valor de los productos, ej. si regalas uno)"
+                              >
+                                <Pencil className="size-3" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingFinalId(order.id);
+                                  setEditingFinalValue(String(order.total));
+                                }}
+                                className="rounded p-0.5 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-600"
+                                title="Editar el valor final del pedido (total exacto a cobrar; puede subir o bajar)"
                               >
                                 <Pencil className="size-3" />
                               </button>

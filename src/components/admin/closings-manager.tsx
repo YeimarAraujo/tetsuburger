@@ -131,7 +131,7 @@ export function ClosingsManager({ rows }: { rows: ClosingRow[] }) {
                       <InfoTip
                         content={{
                           what: "Subtotal de los pedidos asociados al cierre (sin contabilizar el domicilio retenido).",
-                          formula: "Σ subtotal de pedidos del día",
+                          formula: "Σ (subtotal − ajuste) de pedidos del día",
                         }}
                       />
                     </p>

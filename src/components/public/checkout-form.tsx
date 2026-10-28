@@ -3,10 +3,9 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Loader2, Banknote, Landmark, Truck, Info } from "lucide-react";
+import { ArrowLeft, Loader2, Banknote, Landmark, Truck, MapPin, Info, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { track } from "@vercel/analytics";
-import { site } from "@/config/site";
 import { cartSubtotal, useCart } from "@/store/cart";
 import { placeOrder } from "@/features/orders/actions";
 import { formatCOP } from "@/lib/format";
@@ -15,7 +14,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { TrackView } from "@/components/public/track-view";
 import {
@@ -23,20 +21,21 @@ import {
   TurnstileWidget,
 } from "@/components/public/turnstile-widget";
 
-export function CheckoutForm({ deliveryFee }: { deliveryFee: number }) {
+export function CheckoutForm({ deliveryFee, deliveryFeeAconvenir }: { deliveryFee: number; deliveryFeeAconvenir?: boolean }) {
   const router = useRouter();
   const items = useCart((s) => s.items);
   const clear = useCart((s) => s.clear);
   const [isPending, startTransition] = useTransition();
   const [submitting, setSubmitting] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<"EFECTIVO" | "TRANSFERENCIA">("EFECTIVO");
-  const [accepted, setAccepted] = useState(false);
+  const [deliveryType, setDeliveryType] = useState<"DOMICILIO" | "RECOGIDA">("DOMICILIO");
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [turnstileResetKey, setTurnstileResetKey] = useState(0);
   const turnstileEnabled = isTurnstileEnabled();
 
   const subtotal = cartSubtotal(items);
-  const fee = deliveryFee;
+  const isDelivery = deliveryType === "DOMICILIO";
+  const fee = isDelivery && !deliveryFeeAconvenir ? deliveryFee : 0;
   const total = subtotal + fee;
 
   if (items.length === 0 && !submitting) {
@@ -56,8 +55,6 @@ export function CheckoutForm({ deliveryFee }: { deliveryFee: number }) {
 
     const formData = new FormData(e.currentTarget);
 
-    // Honeypot anti-spam: si un bot lo llenó, se descarta en silencio sin
-    // bloquear el botón (el server también lo valida).
     const honeypot = String(formData.get("website") ?? "");
     if (honeypot) return;
 
@@ -72,10 +69,10 @@ export function CheckoutForm({ deliveryFee }: { deliveryFee: number }) {
       customer_name: String(formData.get("customer_name") ?? ""),
       customer_phone: String(formData.get("customer_phone") ?? ""),
       customer_address: String(formData.get("customer_address") ?? ""),
-      delivery_type: "DOMICILIO",
+      delivery_type: deliveryType,
       notes: String(formData.get("notes") ?? ""),
       payment_method: paymentMethod,
-      accepted_terms: accepted,
+      accepted_terms: true,
       turnstile_token: turnstileToken ?? "",
       website: honeypot,
     };
@@ -109,9 +106,6 @@ export function CheckoutForm({ deliveryFee }: { deliveryFee: number }) {
       return;
     }
 
-    // El pedido queda registrado. Siempre llevamos a la página de
-    // confirmación (que conserva el token para poder reseñar) y desde ahí se
-    // ofrece el envío por WhatsApp en un clic.
     clear();
     track("generate_lead", {
       order_number: result.orderNumber ?? "",
@@ -128,182 +122,277 @@ export function CheckoutForm({ deliveryFee }: { deliveryFee: number }) {
         data={{ items: items.length, total: subtotal }}
       />
 
-      {/* Datos de entrega */}
+      {/* Encabezado */}
+      <div className="flex items-center gap-3">
+        <Link href="/resumen" className="rounded-lg border p-2 transition-colors hover:bg-muted">
+          <ArrowLeft className="size-4" />
+        </Link>
+        <div>
+          <h1 className="text-2xl font-bold">Finalizar pedido</h1>
+          <p className="text-sm text-muted-foreground">
+            Confirma tus datos y elige cómo recibir tu pedido.
+          </p>
+        </div>
+      </div>
+
       <Card>
-        <CardHeader>
-          <CardTitle>Datos de entrega</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <Link href="/resumen" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-primary">
-            <ArrowLeft className="size-4" /> Volver al resumen
-          </Link>
-          <input
-            type="text"
-            name="website"
-            tabIndex={-1}
-            autoComplete="off"
-            className="hidden"
-            aria-hidden="true"
-          />
-
-
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="customer_name">Nombre *</Label>
-              <Input id="customer_name" name="customer_name" placeholder="Tu nombre" required maxLength={80} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="customer_phone">Teléfono / WhatsApp *</Label>
-              <Input
-                id="customer_phone"
-                name="customer_phone"
-                type="tel"
-                placeholder="300 000 0000"
-                required
-                maxLength={20}
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="customer_address">Dirección de domicilio *</Label>
-            <Input
-              id="customer_address"
-              name="customer_address"
-              placeholder="Calle 00 #00-00, Barrio, Apto/Torre"
-              required
-              maxLength={200}
+        <CardContent className="space-y-6 p-0">
+          {/* Datos de entrega */}
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <MapPin className="size-4" />
+              Datos de entrega
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <input
+              type="text"
+              name="website"
+              tabIndex={-1}
+              autoComplete="off"
+              className="hidden"
+              aria-hidden="true"
             />
-          </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="notes">Nota para el pedido</Label>
-            <Textarea
-              id="notes"
-              name="notes"
-              placeholder="Ej: sin cebolla, punto de cocción, referencias de la casa…"
-              rows={3}
-              maxLength={300}
-            />
-          </div>
-
-
-          <div className="space-y-2">
-            <Label id="payment-label">Medio de pago *</Label>
-            <div role="radiogroup" aria-labelledby="payment-label" className="grid grid-cols-2 gap-3">
-              {([
-                { value: "EFECTIVO", label: "Efectivo", hint: "Al recibir tu pedido", Icon: Banknote },
-                { value: "TRANSFERENCIA", label: "Transferencia", hint: "Te enviamos los datos", Icon: Landmark },
-              ] as const).map(({ value, label, hint, Icon }) => (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="customer_name">Nombre *</Label>
+                <Input
+                  id="customer_name"
+                  name="customer_name"
+                  placeholder="Tu nombre"
+                  required
+                  maxLength={80}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="customer_phone">Teléfono / WhatsApp *</Label>
+                <Input
+                  id="customer_phone"
+                  name="customer_phone"
+                  type="tel"
+                  placeholder="300 000 0000"
+                  required
+                  maxLength={20}
+                />
+              </div>
+            </div>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Truck className="size-4" />
+                ¿Cómo recibes tu pedido?
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 p-0">
+              <div className="grid grid-cols-2 gap-2">
                 <button
-                  key={value}
                   type="button"
                   role="radio"
-                  aria-checked={paymentMethod === value}
-                  onClick={() => setPaymentMethod(value)}
+                  aria-checked={deliveryType === "DOMICILIO"}
+                  onClick={() => setDeliveryType("DOMICILIO")}
                   className={cn(
-                    "flex flex-col items-center gap-1 rounded-xl border px-4 py-3 text-sm font-medium transition-colors",
-                    paymentMethod === value
-                      ? "border-primary bg-primary/10 text-price"
-                      : "text-muted-foreground hover:border-foreground/30"
+                    "flex flex-col items-center gap-1 rounded-lg border border-dashed px-2.5 py-2 text-xs font-medium transition-colors",
+                    deliveryType === "DOMICILIO"
+                      ? "border-primary bg-primary/5 text-primary"
+                      : "text-muted-foreground hover:border-foreground/30 hover:bg-muted"
                   )}
                 >
-                  <Icon className="size-5" />
-                  {label}
-                  <span className="text-[11px] font-normal">{hint}</span>
+                  <Truck className="size-3.5" />
+                  <span className="text-xs">Domicilio</span>
+                  {deliveryFeeAconvenir ? (
+                    <span className="text-[9px] font-medium text-muted-foreground">
+                      a convenir
+                    </span>
+                  ) : fee > 0 ? (
+                    <span className="text-[9px] font-medium text-primary">
+                      + {formatCOP(fee)}
+                    </span>
+                  ) : null}
                 </button>
-              ))}
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={deliveryType === "RECOGIDA"}
+                  onClick={() => setDeliveryType("RECOGIDA")}
+                  className={cn(
+                    "flex flex-col items-center gap-1 rounded-lg border border-dashed px-2.5 py-2 text-xs font-medium transition-colors",
+                    deliveryType === "RECOGIDA"
+                      ? "border-primary bg-primary/5 text-primary"
+                      : "text-muted-foreground hover:border-foreground/30 hover:bg-muted"
+                  )}
+                >
+                  <MapPin className="size-3.5" />
+                  <span className="text-xs">Pasar a recoger</span>
+                  <span className="text-[9px] font-medium text-muted-foreground">
+                    Sin costo
+                  </span>
+                </button>
+              </div>
+            </CardContent>
+
+            <div className="space-y-2">
+              <Label
+                htmlFor="customer_address"
+                className={cn(
+                  "flex items-center gap-1",
+                  isDelivery && "after:[content:'*'] after:text-destructive"
+                )}
+              >
+                {isDelivery ? "Dirección de domicilio" : "Dirección (opcional)"}
+              </Label>
+              <Input
+                id="customer_address"
+                name="customer_address"
+                placeholder={
+                  isDelivery
+                    ? "Calle 00 #00-00, Barrio, Apto/Torre"
+                    : "Solo si quieres dejar una referencia"
+                }
+                required={isDelivery}
+                maxLength={200}
+              />
             </div>
-          </div>
-          <div className="space-y-2 rounded-lg border bg-muted/40 p-3 text-sm">
-            <p className="flex items-start gap-2">
-              <Truck className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-              <span>
-                <strong>Modalidad:</strong> solo domicilio en {site.city}, {site.region}.
-              </span>
-            </p>
-            <p className="flex items-start gap-2">
-              <Info className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-              <span>
-                <strong>Domicilio:</strong> {formatCOP(deliveryFee)} de referencia.
-                Puede variar por distancia y hora; te lo confirmamos por WhatsApp.
-              </span>
-            </p>
-            <p>
-              <strong>Tiempo estimado:</strong>{" "}
-              {site.estimatedDeliveryTime ??
-                "te lo confirmamos por WhatsApp al aceptar el pedido"}
-              .
-            </p>
-            <p>
-              <strong>Medios de pago:</strong> efectivo contra entrega y
-              transferencia.
-            </p>
-          </div>
 
-          {turnstileEnabled ? (
-            <TurnstileWidget
-              onToken={setTurnstileToken}
-              resetKey={turnstileResetKey}
-            />
-          ) : null}
+            <div className="space-y-2">
+              <Label htmlFor="notes">Nota para el pedido</Label>
+              <Textarea
+                id="notes"
+                name="notes"
+                placeholder="Ej: sin cebolla, punto de cocción, referencias de la casa…"
+                rows={3}
+                maxLength={300}
+              />
+            </div>
+          </CardContent>
 
-          <label className="flex items-start gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={accepted}
-              onChange={(e) => setAccepted(e.target.checked)}
-              required
-              className="mt-0.5 size-4 shrink-0 rounded border-input"
-            />
-            <span className="text-muted-foreground">
-              Acepto los{" "}
-              <Link
-                href="/terminos"
-                className="font-medium text-foreground underline underline-offset-2"
-              >
-                términos y condiciones
-              </Link>{" "}
-              y autorizo el tratamiento de mis datos según la{" "}
-              <Link
-                href="/privacidad"
-                className="font-medium text-foreground underline underline-offset-2"
-              >
-                política de privacidad
-              </Link>
-              .
-            </span>
-          </label>
+          {/* Tipo de entrega */}
 
-          <Separator />
-
-          <Button
-            type="submit"
-            size="lg"
-            className="w-full"
-            disabled={
-              submitting ||
-              isPending ||
-              !accepted ||
-              (turnstileEnabled && !turnstileToken)
-            }
-          >
-            {submitting || isPending ? (
-              <>
-                <Loader2 className="size-4 animate-spin" />
-                Registrando pedido…
-              </>
-            ) : (
-              `Enviar y confirmar · ${formatCOP(total)}`
-            )}
-          </Button>
-
-          <p className="text-center text-xs text-muted-foreground">
-            Tu pedido queda registrado y te llevamos a WhatsApp para confirmar el pago.
-          </p>
         </CardContent>
       </Card>
+
+
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Banknote className="size-4" />
+            Medio de pago
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            {([
+              {
+                value: "EFECTIVO",
+                label: "Efectivo",
+                hint: "Pagas al recibir",
+                Icon: Banknote,
+              },
+              {
+                value: "TRANSFERENCIA",
+                label: "Transferencia",
+                hint: "Te enviamos los datos",
+                Icon: Landmark,
+              },
+            ] as const).map(({ value, label, hint, Icon }) => (
+              <button
+                key={value}
+                type="button"
+                role="radio"
+                aria-checked={paymentMethod === value}
+                onClick={() => setPaymentMethod(value)}
+                className={cn(
+                  "flex flex-col items-center gap-1 rounded-lg border border-dashed px-2.5 py-2 text-xs font-medium transition-colors",
+                  paymentMethod === value
+                    ? "border-primary bg-primary/5 text-primary"
+                    : "text-muted-foreground hover:border-foreground/30 hover:bg-muted"
+                )}
+              >
+                <Icon className="size-3.5" />
+                <span className="text-xs">{label}</span>
+                <span className="text-[9px] font-medium text-muted-foreground">
+                  {hint}
+                </span>
+              </button>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Info className="size-4" />
+            Resumen
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex justify-between text-sm text-muted-foreground">
+            <span>Subtotal</span>
+            <span>{formatCOP(subtotal)}</span>
+          </div>
+          {deliveryFeeAconvenir ? (
+            <div className="flex justify-between text-sm text-muted-foreground">
+              <span>Domicilio</span>
+              <span className="font-medium">Valor a convenir</span>
+            </div>
+          ) : fee > 0 ? (
+            <div className="flex justify-between text-sm text-muted-foreground">
+              <span>Domicilio</span>
+              <span>{formatCOP(fee)}</span>
+            </div>
+          ) : null}
+          <div className="flex justify-between text-base font-bold">
+            <span>Total</span>
+            <span className="text-primary">{formatCOP(total)}</span>
+          </div>
+          <div
+            className={cn(
+              "rounded-lg border px-3 py-2.5 text-sm",
+              isDelivery && deliveryFeeAconvenir
+                ? "border-amber-500/30 bg-amber-500/5 text-orange-900 dark:text-amber-400"
+                : "border-transparent bg-muted/40 text-muted-foreground"
+            )}
+          >
+            {isDelivery
+              ? deliveryFeeAconvenir
+                ? "El valor del domicilio está sujeto a cambios según tu zona, la distancia y la hora. Lo confirmamos contigo por WhatsApp antes de enviar tu pedido. No está incluido en el total."
+                : "El domicilio se confirma por WhatsApp según distancia y hora."
+              : "Paga al pasar a recoger tu pedido."}
+          </div>
+        </CardContent>
+      </Card>
+
+      {turnstileEnabled ? (
+        <TurnstileWidget
+          onToken={setTurnstileToken}
+          resetKey={turnstileResetKey}
+        />
+      ) : null}
+
+      <Button
+        type="submit"
+        size="sm"
+        className="w-full"
+        disabled={
+          submitting ||
+          isPending ||
+          (turnstileEnabled && !turnstileToken)
+        }
+      >
+        {submitting || isPending ? (
+          <>
+            <Loader2 className="size-4 animate-spin" />
+            Registrando pedido…
+          </>
+        ) : (
+          `Enviar y confirmar · ${formatCOP(total)}`
+        )}
+      </Button>
+
+      <p className="text-center text-xs text-muted-foreground">
+        Tu pedido queda registrado y te llevamos a WhatsApp para confirmar el pago.
+      </p>
     </form>
   );
 }

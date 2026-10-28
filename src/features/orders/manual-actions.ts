@@ -1,7 +1,7 @@
 "use server";
 
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { checkStaff } from "@/features/auth/guard";
 import {
   buildOrderFromItems,
   persistOrder,
@@ -22,6 +22,8 @@ const manualSchema = z
     delivery_fee_retained: z.boolean().default(false),
     payment_method: z.enum(["EFECTIVO", "TRANSFERENCIA"]),
     notes: z.string().trim().max(300).default(""),
+    // Valor final opcional a cobrar (puede subir o bajar el total calculado).
+    final_total: z.coerce.number().min(0).max(10_000_000).optional(),
   })
   .refine(
     (data) =>
@@ -38,12 +40,8 @@ export async function createManualOrder(
   payloadRaw: unknown,
   itemsRaw: unknown
 ): Promise<ManualOrderResult> {
-  const supabaseAuth = await createClient();
-  const {
-    data: { user },
-  } = await supabaseAuth.auth.getUser();
-
-  if (!user) return { error: "Sesión expirada. Vuelve a iniciar sesión." };
+  const check = await checkStaff();
+  if (!check.ok) return { error: check.error };
 
   const parsed = manualSchema.safeParse(payloadRaw);
   if (!parsed.success) return { error: parsed.error.issues[0].message };
@@ -60,7 +58,12 @@ export async function createManualOrder(
   // Si el pedido es exento (sin cargo de domicilio), no puede marcarse como retenido.
   const deliveryFeeRetained =
     data.delivery_fee_retained && deliveryFee > 0;
-  const total = subtotal + deliveryFee;
+  const base = subtotal + deliveryFee;
+  // Si el personal define un valor final, se guarda como ajuste con signo
+  // (total = base − ajuste); si no, el pedido queda con el total calculado.
+  const finalAdjustment =
+    data.final_total !== undefined ? base - data.final_total : 0;
+  const total = base - finalAdjustment;
 
   const persisted = await persistOrder({
     origin: "MANUAL",
@@ -69,6 +72,7 @@ export async function createManualOrder(
     subtotal,
     deliveryFee,
     deliveryFeeRetained,
+    finalAdjustment,
     total,
     customerName: data.customer_name,
     customerPhone: data.customer_phone,
@@ -77,7 +81,7 @@ export async function createManualOrder(
     notes: data.notes,
     deliveryType: data.delivery_type,
     paymentMethod: data.payment_method,
-    createdBy: user.id,
+    createdBy: check.userId ?? null,
     confirmedAt: new Date().toISOString(),
   });
 

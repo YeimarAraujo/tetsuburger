@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { signOutAction } from "@/features/auth/actions";
 import { SidebarNav } from "@/components/admin/sidebar-nav";
 import { MobileNav } from "@/components/admin/mobile-nav";
+import { AdminSectionNavAuto } from "@/components/admin/admin-section-nav-auto";
 import { Logo } from "@/components/ui/logo";
 import { Button } from "@/components/ui/button";
 
@@ -45,6 +46,29 @@ export default async function AdminLayout({
     redirect("/admin/login");
   }
 
+  const [reviewsRes, pqrRes, inventoryRes] = await Promise.all([
+    supabase
+      .from("product_reviews")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "PENDIENTE"),
+    supabase
+      .from("pqr_requests")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "NUEVO"),
+    supabase
+      .from("inventory_items")
+      .select("current_stock, min_stock")
+      .eq("is_active", true),
+  ]);
+
+  const badges = {
+    reviews: reviewsRes.count ?? 0,
+    pqr: pqrRes.count ?? 0,
+    lowStock: (inventoryRes.data ?? []).filter(
+      (item) => item.current_stock <= item.min_stock
+    ).length,
+  };
+
   return (
     <div
       className={`${geistMono.variable} flex min-h-screen bg-muted/40`}
@@ -58,7 +82,7 @@ export default async function AdminLayout({
           </span>
         </div>
         <div className="flex-1 overflow-y-auto py-4">
-          <SidebarNav />
+          <SidebarNav badges={badges} />
         </div>
         <div className="border-t p-3">
           <form action={signOutAction}>
@@ -77,7 +101,7 @@ export default async function AdminLayout({
       {/* Barra móvil */}
       <div className="fixed inset-x-0 top-0 z-40 flex h-14 items-center justify-between border-b bg-background px-4 md:hidden">
         <div className="flex items-center gap-2">
-          <MobileNav />
+          <MobileNav badges={badges} />
           <Logo className="h-9 w-auto" />
         </div>
         <form action={signOutAction}>
@@ -87,7 +111,10 @@ export default async function AdminLayout({
         </form>
       </div>
 
-      <main className="flex-1 pt-14 md:pt-0">{children}</main>
+      <main className="flex-1 pt-14 md:pt-0">
+        <AdminSectionNavAuto exclude={["/admin/pedidos"]} />
+        {children}
+      </main>
     </div>
   );
 }

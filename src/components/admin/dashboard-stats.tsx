@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { formatCOP } from "@/lib/format";
 import type { OpenStatus } from "@/lib/business-hours";
+import { ORDER_STATUS_META } from "@/lib/order-status";
 import {
   Card,
   CardContent,
@@ -22,25 +23,21 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { KpiCard } from "@/components/admin/kpi-card";
-
-const STATUS_LABELS: Record<string, string> = {
-  PENDIENTE: "Pendiente",
-  CONFIRMADO: "Confirmado",
-  EN_PREPARACION: "En preparación",
-  LISTO: "Listo",
-  EN_CAMINO: "En camino",
-  ENTREGADO: "Entregado",
-  CANCELADO: "Cancelado",
-};
+import { DashboardQuickActions } from "@/components/admin/dashboard-quick-actions";
+import { TodayOrdersDialog } from "@/components/admin/today-orders-dialog";
+import type { DayOrder } from "@/components/admin/order-day";
 
 export function DashboardStats({
   status,
   today,
-  recentOrders,
+  todayOrders,
+  dateLabel,
+  pendingReviews,
+  newPqr,
   lowStock,
 }: {
   status: OpenStatus;
-today: {
+  today: {
     ordersCount: number;
     totalSales: number;
     totalExpenses: number;
@@ -49,19 +46,15 @@ today: {
     missingCostCount: number;
     ordersByStatus: Record<string, number>;
     paymentsByMethod: Record<string, number>;
-};
-  recentOrders: {
-    id: string;
-    order_number: number;
-    status: string;
-    customer_name: string;
-    total: number;
-    payment_method: string | null;
-    origin: string;
-    created_at: string;
-  }[];
+  };
+  todayOrders: DayOrder[];
+  dateLabel: string;
+  pendingReviews: number;
+  newPqr: number;
   lowStock: { id: string; name: string; current_stock: number; min_stock: number; unit: string }[];
 }) {
+  const recentOrders = todayOrders.slice(0, 8);
+
   return (
     <div className="space-y-6">
       {/* Estado del negocio */}
@@ -76,6 +69,12 @@ today: {
           </div>
         </CardContent>
       </Card>
+
+      <DashboardQuickActions
+        pendingReviews={pendingReviews}
+        newPqr={newPqr}
+        lowStock={lowStock.length}
+      />
 
       {/* KPIs */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
@@ -172,7 +171,10 @@ today: {
             ) : (
               Object.entries(today.ordersByStatus).map(([status, count]) => (
                 <div key={status} className="flex items-center justify-between">
-                  <span className="text-sm">{STATUS_LABELS[status] ?? status}</span>
+                  <span className="text-sm">
+                    {ORDER_STATUS_META[status as keyof typeof ORDER_STATUS_META]
+                      ?.label ?? status}
+                  </span>
                   <Badge variant="secondary">{count}</Badge>
                 </div>
               ))
@@ -235,7 +237,14 @@ today: {
       {/* Pedidos recientes */}
       <Card>
         <CardHeader>
-          <CardTitle>Pedidos recientes de hoy</CardTitle>
+          <CardTitle>
+            Pedidos recientes de hoy
+            {todayOrders.length > 0 ? (
+              <span className="ml-2 text-xs font-normal text-muted-foreground">
+                {todayOrders.length} en total
+              </span>
+            ) : null}
+          </CardTitle>
         </CardHeader>
         <CardContent>
           {recentOrders.length === 0 ? (
@@ -253,15 +262,18 @@ today: {
                   </div>
                   <div className="flex items-center gap-3">
                     <Badge variant="secondary" className="text-[10px]">
-                      {STATUS_LABELS[o.status] ?? o.status}
+                      {ORDER_STATUS_META[o.status].label}
                     </Badge>
                     <span className="text-sm font-semibold">{formatCOP(Number(o.total))}</span>
                   </div>
                 </div>
               ))}
-              <Link href="/admin/pedidos" className="block pt-1 text-xs font-medium text-primary hover:underline">
-                Ver todos los pedidos →
-              </Link>
+              <div className="pt-1">
+                <TodayOrdersDialog
+                  orders={todayOrders}
+                  dateLabel={dateLabel}
+                />
+              </div>
             </div>
           )}
         </CardContent>

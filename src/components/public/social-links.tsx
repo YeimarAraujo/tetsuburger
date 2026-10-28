@@ -25,11 +25,11 @@ const candidates: { label: string; href: string | null; icon: ReactNode }[] = [
     href: site.social.tiktok,
     icon: <path d="M9 12a4 4 0 1 0 4 4V4a5 5 0 0 0 5 5" />,
   },
-  {
-    label: "Facebook",
-    href: site.social.facebook,
-    icon: <path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" />,
-  },
+  // {
+  //   label: "Facebook",
+  //   href: site.social.facebook,
+  //   icon: <path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" />,
+  // },
 ];
 
 const socials = candidates.filter(
@@ -38,6 +38,7 @@ const socials = candidates.filter(
 
 export function SocialLinks({ className }: { className?: string }) {
   return (
+
     <div className={cn("flex items-center gap-2", className)}>
       {socials.map((social) => (
         <a
@@ -46,7 +47,7 @@ export function SocialLinks({ className }: { className?: string }) {
           target="_blank"
           rel="noopener noreferrer"
           aria-label={`${social.label} de TETSU BURGER`}
-          className="grid size-11 place-items-center rounded-lg border border-white/40 bg-white/10 text-white backdrop-blur-sm transition-colors hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+          className="grid size-11 place-items-center rounded-full border border-white/40 bg-white/10 text-white backdrop-blur-sm transition-all hover:bg-white/20 hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
         >
           <svg
             viewBox="0 0 24 24"
@@ -63,5 +64,6 @@ export function SocialLinks({ className }: { className?: string }) {
         </a>
       ))}
     </div>
+
   );
 }

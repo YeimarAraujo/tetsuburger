@@ -125,7 +125,7 @@ export async function buildOrderFromItems(itemsRaw: unknown): Promise<BuildResul
         target: entry.target,
         components:
           entry.target === "EACH"
-            ? Math.max(1, entry.components ?? comboCount)
+            ? Math.max(1, comboCount)
             : undefined,
       });
     }
@@ -158,6 +158,7 @@ export async function persistOrder(params: {
   subtotal: number;
   deliveryFee: number;
   deliveryFeeRetained: boolean;
+  finalAdjustment?: number;
   total: number;
   customerName: string;
   customerPhone: string;
@@ -167,6 +168,8 @@ export async function persistOrder(params: {
   paymentMethod: "EFECTIVO" | "TRANSFERENCIA";
   createdBy: string | null;
   confirmedAt: string | null;
+  acceptedTermsAt?: string | null;
+  policyVersion?: string | null;
 }): Promise<{
   error?: string;
   orderId?: string;
@@ -188,10 +191,17 @@ export async function persistOrder(params: {
       delivery_fee: params.deliveryFee,
       delivery_fee_retained: params.deliveryFeeRetained,
       subtotal: params.subtotal,
+      final_adjustment: params.finalAdjustment ?? 0,
       total: params.total,
       notes: params.notes,
       created_by: params.createdBy,
       ...(params.confirmedAt ? { confirmed_at: params.confirmedAt } : {}),
+      ...(params.acceptedTermsAt
+        ? {
+            accepted_terms_at: params.acceptedTermsAt,
+            policy_version: params.policyVersion ?? null,
+          }
+        : {}),
     })
     .select("id, order_number, confirmation_token")
     .single();

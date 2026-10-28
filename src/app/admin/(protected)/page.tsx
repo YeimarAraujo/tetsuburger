@@ -2,6 +2,7 @@ import { formatDate } from "@/lib/format";
 import { createClient } from "@/lib/supabase/server";
 import { getCogsForOrders, sumCogs } from "@/features/finance/cogs";
 import { computeOpenStatus } from "@/lib/business-hours";
+import { bogotaToday } from "@/lib/bogota";
 import { DashboardStats } from "@/components/admin/dashboard-stats";
 import { PageHeader } from "@/components/admin/page-header";
 
@@ -10,15 +11,6 @@ export const dynamic = "force-dynamic";
 export const metadata = {
   title: "Dashboard · TETSU BURGER Admin",
 };
-
-function bogotaToday(): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Bogota",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date());
-}
 
 export default async function AdminDashboardPage() {
   const supabase = await createClient();
@@ -29,14 +21,16 @@ export default async function AdminDashboardPage() {
     expensesRes,
     settingsRes,
     hoursRes,
-    todayOrdersRes,
     inventoryRes,
+    reviewsRes,
+    pqrRes,
   ] = await Promise.all([
     supabase
       .from("orders")
-      .select("id, status, subtotal, final_adjustment, total, delivery_fee, payment_method, origin, created_at")
+      .select("id, order_number, status, customer_name, subtotal, final_adjustment, total, delivery_fee, payment_method, origin, created_at")
       .gte("created_at", `${today}T00:00:00-05:00`)
-      .lte("created_at", `${today}T23:59:59-05:00`),
+      .lte("created_at", `${today}T23:59:59-05:00`)
+      .order("created_at", { ascending: false }),
     supabase
       .from("expenses")
       .select("id, amount, expense_category_id, category:expense_categories(name)")
@@ -44,17 +38,18 @@ export default async function AdminDashboardPage() {
     supabase.from("settings").select("key, value").eq("is_public", true),
     supabase.from("business_hours").select("*"),
     supabase
-      .from("orders")
-      .select("id, order_number, status, customer_name, total, payment_method, origin, created_at")
-      .gte("created_at", `${today}T00:00:00-05:00`)
-      .lte("created_at", `${today}T23:59:59-05:00`)
-      .order("created_at", { ascending: false })
-      .limit(8),
-    supabase
       .from("inventory_items")
       .select("id, name, current_stock, min_stock, unit")
       .eq("is_active", true)
       .order("name"),
+    supabase
+      .from("product_reviews")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "PENDIENTE"),
+    supabase
+      .from("pqr_requests")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "NUEVO"),
   ]);
 
   const settings = Object.fromEntries(
@@ -126,7 +121,10 @@ export default async function AdminDashboardPage() {
           ordersByStatus,
           paymentsByMethod,
         }}
-        recentOrders={todayOrdersRes.data ?? []}
+        todayOrders={orders}
+        dateLabel={formatDate(`${today}T12:00:00Z`)}
+        pendingReviews={reviewsRes.count ?? 0}
+        newPqr={pqrRes.count ?? 0}
         lowStock={lowStock}
       />
     </div>

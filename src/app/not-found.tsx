@@ -27,28 +27,12 @@ export default function NotFound() {
         />
 
         <div className="absolute inset-x-0 bottom-3 flex justify-center px-3 sm:bottom-5">
-          <div className="flex w-full max-w-md gap-2 rounded-2xl bg-background/85 p-2 shadow-lg backdrop-blur-md sm:w-auto">
-            <Button asChild size="lg" className="h-11 flex-1 gap-2 sm:flex-none">
-              <Link href="/#menu">
-                <Home aria-hidden="true" className="size-4" />
-                Ver el menú
-              </Link>
-            </Button>
-            <Button
-              asChild
-              size="lg"
-              className="h-11 flex-1 gap-2 bg-white text-foreground hover:bg-white/90 sm:flex-none"
-            >
-              <a
-                href={whatsappContactUrl()}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <MessageCircle aria-hidden="true" className="size-4" />
-                WhatsApp
-              </a>
-            </Button>
-          </div>
+          <Button asChild size="lg" className="h-11 flex-1 gap-2 sm:flex-none">
+            <Link href="/">
+              <Home aria-hidden="true" className="size-4" />
+              Ver el menú
+            </Link>
+          </Button>
         </div>
       </div>
     </main>

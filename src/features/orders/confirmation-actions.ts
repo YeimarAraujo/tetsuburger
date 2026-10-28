@@ -10,10 +10,14 @@ export interface OrderConfirmation {
   orderNumber: number;
   total: number;
   whatsappUrl: string;
+  customerName?: string;
+  /** Productos del pedido (con id) para invitar a calificar. */
+  items?: { productId: string; productName: string }[];
   error?: string;
 }
 
 interface ConfirmationItem {
+  product_id?: string | null;
   product_name: string;
   quantity: number;
   unit_price: number;
@@ -58,6 +62,22 @@ export async function getOrderConfirmation(token: string): Promise<OrderConfirma
     return { orderNumber: 0, total: 0, whatsappUrl: "", error: "No encontramos el pedido." };
   }
 
+  const items = Array.isArray(order.items)
+    ? (order.items as ConfirmationItem[])
+    : [];
+
+  // Productos únicos con id (para invitar a calificar tras el pedido).
+  const seenProductIds = new Set<string>();
+  const reviewItems: { productId: string; productName: string }[] = [];
+  for (const line of items) {
+    if (!line.product_id || seenProductIds.has(line.product_id)) continue;
+    seenProductIds.add(line.product_id);
+    reviewItems.push({
+      productId: String(line.product_id),
+      productName: line.product_name,
+    });
+  }
+
   const { data: settingsRows } = await supabase
     .from("settings")
     .select("value")
@@ -70,13 +90,11 @@ export async function getOrderConfirmation(token: string): Promise<OrderConfirma
       orderNumber: Number(order.order_number),
       total: toNum(order.total),
       whatsappUrl: "",
+      customerName: String(order.customer_name ?? ""),
+      items: reviewItems,
       error: "El pedido está registrado, pero falta configurar el número de WhatsApp.",
     };
   }
-
-  const items = Array.isArray(order.items)
-    ? (order.items as ConfirmationItem[])
-    : [];
 
   const lines = items.map((line) => {
     const base = `${line.quantity}x ${line.product_name}`;
@@ -102,7 +120,9 @@ export async function getOrderConfirmation(token: string): Promise<OrderConfirma
     lines,
     subtotal: toNum(order.subtotal),
     deliveryFee: toNum(order.delivery_fee),
-    total: toNum(order.total),
+    // El ajuste del valor final es SOLO web: WhatsApp siempre muestra los
+    // valores originales (subtotal + domicilio), sin línea de ajuste.
+    total: toNum(order.subtotal) + toNum(order.delivery_fee),
     paymentMethod: order.payment_method === "TRANSFERENCIA" ? "TRANSFERENCIA" : "EFECTIVO",
     name: String(order.customer_name ?? ""),
     phone: String(order.customer_phone ?? ""),
@@ -114,5 +134,7 @@ export async function getOrderConfirmation(token: string): Promise<OrderConfirma
     orderNumber: Number(order.order_number),
     total: toNum(order.total),
     whatsappUrl: `https://wa.me/${waNumber}?text=${encodeURIComponent(message)}`,
+    customerName: String(order.customer_name ?? ""),
+    items: reviewItems,
   };
 }

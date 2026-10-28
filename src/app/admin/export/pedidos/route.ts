@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
 
   const { data: orders } = await supabase
     .from("orders")
-    .select("id, order_number, status, customer_name, subtotal, payment_method, origin, created_at")
+    .select("id, order_number, status, customer_name, subtotal, final_adjustment, payment_method, origin, created_at")
     .gte("created_at", `${from}T00:00:00-05:00`)
     .lte("created_at", `${to}T23:59:59-05:00`)
     .order("created_at");
@@ -87,7 +87,8 @@ export async function GET(request: NextRequest) {
 
   for (const o of active) {
     const sub = Number(o.subtotal);
-    total += sub;
+    const net = sub - Number(o.final_adjustment ?? 0);
+    total += net;
     const c = perOrder[o.id] ?? { hamburguesas: 0, perros: 0 };
     totalH += c.hamburguesas;
     totalP += c.perros;
@@ -101,7 +102,7 @@ export async function GET(request: NextRequest) {
       String(c.hamburguesas),
       String(c.perros),
       String(sub).replace(".", ","),
-      String(sub).replace(".", ","),
+      String(net).replace(".", ","),
     ].join(";"));
   }
 

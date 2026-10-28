@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
   // Pedidos
   const { data: orders } = await supabase
     .from("orders")
-    .select("order_number, status, customer_name, subtotal, total, delivery_fee, delivery_fee_retained, payment_method, origin, created_at")
+    .select("order_number, status, customer_name, subtotal, final_adjustment, total, delivery_fee, delivery_fee_retained, payment_method, origin, created_at")
     .gte("created_at", `${from}T00:00:00-05:00`)
     .lte("created_at", `${to}T23:59:59-05:00`)
     .order("created_at");
@@ -59,7 +59,8 @@ export async function GET(request: NextRequest) {
   for (const o of orders ?? []) {
     if (o.status === "CANCELADO") continue;
     const sub = Number(o.subtotal);
-    totalSubtotal += sub;
+    const net = sub - Number(o.final_adjustment ?? 0);
+    totalSubtotal += net;
     const fecha = o.created_at ? o.created_at.slice(0, 10) : "";
     lines.push([
       String(o.order_number),
@@ -68,7 +69,7 @@ export async function GET(request: NextRequest) {
       o.status,
       o.payment_method ?? "EFECTIVO",
       String(sub).replace(".", ","),
-      String(sub).replace(".", ","),
+      String(net).replace(".", ","),
     ].join(";"));
   }
 

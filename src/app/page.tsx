@@ -300,7 +300,7 @@ export default async function HomePage() {
           </p>
 
           <div className="flex flex-wrap items-center gap-3 pt-2">
-            <Button
+            {/* <Button
               asChild
               size="lg"
               className="h-11 gap-2 bg-white text-foreground hover:bg-white/90"
@@ -313,7 +313,7 @@ export default async function HomePage() {
                 <MessageCircle aria-hidden="true" className="size-4" />
                 Pedir por WhatsApp
               </a>
-            </Button>
+            </Button> */}
 
             <SocialLinks />
           </div>

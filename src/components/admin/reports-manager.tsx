@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Download, Drumstick, Flame, Hamburger, Package, ReceiptText, Search, ShoppingCart, Trophy } from "lucide-react";
+import { Download, Flame, Package, ReceiptText, Search, ShoppingCart, Trophy } from "lucide-react";
 import { formatCOP, formatDate } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -20,6 +20,7 @@ interface OrderRow {
   customer_name: string;
   total: number;
   subtotal: number;
+  final_adjustment: number;
   delivery_fee: number;
   delivery_fee_retained: boolean;
   payment_method: string | null;
@@ -105,7 +106,10 @@ export function ReportsManager({
 
   const stats = useMemo(() => {
     const validOrders = orders.filter((o) => o.status !== "CANCELADO");
-    const subtotalSales = validOrders.reduce((s, o) => s + Number(o.subtotal), 0);
+    const subtotalSales = validOrders.reduce(
+      (s, o) => s + Number(o.subtotal) - Number(o.final_adjustment ?? 0),
+      0
+    );
     const sales = subtotalSales;
     const expTotal = expenses.reduce((s, e) => s + Number(e.amount), 0);
     const prodTotal = production.reduce((s, p) => s + Number(p.total_cost), 0);
@@ -203,8 +207,8 @@ export function ReportsManager({
           valueClassName="text-xl text-emerald-600"
           caption={`${stats.validOrdersCount} pedidos`}
           help={{
-            what: "Subtotal de los pedidos no cancelados del período. Excluye el valor de los domicilios.",
-            formula: "Σ subtotal · pedidos ≠ CANCELADO",
+            what: "Valor neto de los productos (subtotal menos ajustes del valor final) de los pedidos no cancelados del período. Excluye el valor de los domicilios.",
+            formula: "Σ (subtotal − ajuste) · pedidos ≠ CANCELADO",
           }}
         />
         <KpiCard
@@ -240,15 +244,15 @@ export function ReportsManager({
           label="Unidades vendidas"
           value={
             <>
-              <span className="text-orange-600">{sales.totals.pedidos}</span>
-              <span className="text-sm font-normal text-muted-foreground"> pedidos</span>
+              <span className="text-orange-600">{sales.totals.hamburguesas + sales.totals.perros}</span>
+              <span className="text-sm font-normal text-muted-foreground"> unidades</span>
             </>
           }
           valueClassName="text-xl"
           caption={
             <span className="inline-flex items-center gap-1.5">
               🍔 {sales.totals.hamburguesas}
-              <hr />
+              <span className="text-muted-foreground/50">·</span>
               🌭 {sales.totals.perros}
             </span>
           }
@@ -326,7 +330,7 @@ export function ReportsManager({
                         })()}
                       </td>
                       <td className="py-2 pr-2 text-right">{formatCOP(Number(o.subtotal))}</td>
-                      <td className="py-2 text-right font-semibold">{formatCOP(Number(o.subtotal))}</td>
+                      <td className="py-2 text-right font-semibold">{formatCOP(Number(o.subtotal) - Number(o.final_adjustment ?? 0))}</td>
                     </tr>
                   ))}
                 </tbody>

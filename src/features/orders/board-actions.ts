@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { checkStaff } from "@/features/auth/guard";
 import { bogotaToday } from "@/lib/bogota";
 import { consumeInventoryForOrder, validateStockForOrder } from "@/features/orders/consumption";
 import { buildOrderFromItems, orderItemsSchema } from "@/features/orders/order-builder";
@@ -13,17 +14,13 @@ export interface ActionResult {
 }
 
 /**
- * Verifica que la acción la ejecute un usuario autenticado del panel.
+ * Verifica que la acción la ejecute un usuario del panel con perfil de staff.
  * La escritura real se hace con service_role porque orders no permite
  * UPDATE ni para staff por diseño (toda mutación pasa por aquí).
  */
 async function assertStaff(): Promise<ActionResult | null> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) return { error: "Sesión expirada. Vuelve a iniciar sesión." };
+  const check = await checkStaff();
+  if (!check.ok) return { error: check.error };
   return null;
 }
 
@@ -118,17 +115,21 @@ export async function updateOrderStatus(
   }
 
   // 3. Al entregar un pedido, la plata entra a la caja: en efectivo o por
-  //    transferencia según el medio de pago del pedido. Se cuenta solo el valor
-  //    de los productos (subtotal), igual que en las ventas de Finanzas; los
-  //    domicilios no pasan por la caja.
+  //    transferencia según el medio de pago del pedido. Se cuenta el valor
+  //    neto de los productos (subtotal menos el ajuste del valor final), igual
+  //    que en las ventas de Finanzas; los domicilios no pasan por la caja.
   if (parsed.data.toStatus === "ENTREGADO") {
     const { data: delivered } = await supabase
       .from("orders")
-      .select("order_number, subtotal, payment_method")
+      .select("order_number, subtotal, final_adjustment, payment_method")
       .eq("id", parsed.data.orderId)
       .single();
 
-    if (delivered && Number(delivered.subtotal) > 0) {
+    const netSales = delivered
+      ? Number(delivered.subtotal) - Number(delivered.final_adjustment ?? 0)
+      : 0;
+
+    if (delivered && netSales > 0) {
       // Guard anti doble conteo: si el pedido ya tiene su movimiento de venta
       // (p. ej. se reentregó), no insertar otro.
       const { data: existingMovement } = await supabase
@@ -144,7 +145,7 @@ export async function updateOrderStatus(
           movement_date: bogotaToday(),
           tipo: isTransfer ? "VENTA_TRANSFERENCIA" : "VENTA_EFECTIVO",
           metodo: isTransfer ? "TRANSFERENCIA" : "EFECTIVO",
-          amount: Number(delivered.subtotal),
+          amount: netSales,
           description: `Venta #${delivered.order_number} ${isTransfer ? "por transferencia" : "en efectivo"}`,
           fuente: `Pedido #${delivered.order_number}`,
           ref_type: "order",
@@ -188,7 +189,7 @@ export async function addOrderItem(
 
   const { data: order } = await supabase
     .from("orders")
-    .select("id, status, subtotal, delivery_fee")
+    .select("id, status, subtotal, delivery_fee, final_adjustment")
     .eq("id", parsed.data.orderId)
     .single();
 
@@ -242,7 +243,10 @@ export async function addOrderItem(
   }
 
   const newSubtotal = Number(order.subtotal) + (built.subtotal ?? 0);
-  const newTotal = newSubtotal + Number(order.delivery_fee);
+  // El ajuste del valor final se conserva: lo acordado sigue restando y los
+  // productos nuevos se suman encima.
+  const adj = Number(order.final_adjustment ?? 0);
+  const newTotal = newSubtotal + Number(order.delivery_fee) - adj;
 
   const { error: updateError } = await supabase
     .from("orders")
@@ -254,4 +258,81 @@ export async function addOrderItem(
   revalidatePath("/admin/pedidos");
   revalidatePath("/admin");
   return { subtotal: newSubtotal, total: newTotal };
+}
+
+const totalsSchema = z.object({
+  orderId: z.string().uuid(),
+  subtotal: z.number().min(0).max(10_000_000).optional(),
+  deliveryFee: z.number().min(0).max(1_000_000).optional(),
+  finalValue: z.number().min(0).max(10_000_000).optional(),
+});
+
+/**
+ * Actualiza los valores de un pedido (subtotal, domicilio y/o valor final) y
+ * recalcula el total en un solo lugar:
+ *   total = subtotal + domicilio − final_adjustment
+ * El "valor final" es la edición manual del total a cobrar (puede subir o
+ * bajar); el ajuste se guarda con signo. Al editar subtotal/domicilio sin
+ * tocar el valor final, el ajuste se conserva (con tope para no dejar el
+ * total en negativo).
+ */
+export async function updateOrderTotals(
+  orderId: string,
+  patch: { subtotal?: number; deliveryFee?: number; finalValue?: number }
+): Promise<
+  ActionResult & {
+    subtotal?: number;
+    delivery_fee?: number;
+    final_adjustment?: number;
+    total?: number;
+  }
+> {
+  const authError = await assertStaff();
+  if (authError) return authError;
+
+  const parsed = totalsSchema.safeParse({ ...patch, orderId });
+  if (!parsed.success) return { error: "Valor inválido" };
+
+  const supabase = createAdminClient();
+
+  const { data: order } = await supabase
+    .from("orders")
+    .select("id, subtotal, delivery_fee, final_adjustment")
+    .eq("id", parsed.data.orderId)
+    .single();
+
+  if (!order) return { error: "Pedido no encontrado" };
+
+  const newSubtotal = parsed.data.subtotal ?? Number(order.subtotal);
+  const newFee = parsed.data.deliveryFee ?? Number(order.delivery_fee);
+  const base = newSubtotal + newFee;
+
+  const adj =
+    parsed.data.finalValue !== undefined
+      ? base - parsed.data.finalValue
+      : Math.min(Number(order.final_adjustment ?? 0), base);
+
+  const newTotal = base - adj;
+
+  const { error } = await supabase
+    .from("orders")
+    .update({
+      subtotal: newSubtotal,
+      delivery_fee: newFee,
+      final_adjustment: adj,
+      total: newTotal,
+    })
+    .eq("id", order.id);
+
+  if (error) return { error: `No se pudo actualizar el pedido: ${error.message}` };
+
+  revalidatePath("/admin/pedidos");
+  revalidatePath("/admin");
+  revalidatePath("/admin/caja");
+  return {
+    subtotal: newSubtotal,
+    delivery_fee: newFee,
+    final_adjustment: adj,
+    total: newTotal,
+  };
 }

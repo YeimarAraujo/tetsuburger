@@ -91,6 +91,7 @@ export function ManualOrderForm({
   const [deliveryRetained, setDeliveryRetained] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<"EFECTIVO" | "TRANSFERENCIA">("EFECTIVO");
   const [notes, setNotes] = useState("");
+  const [finalValue, setFinalValue] = useState("");
 
   const [saving, setSaving] = useState(false);
 
@@ -105,7 +106,12 @@ export function ManualOrderForm({
     [lines]
   );
   const fee = deliveryType === "DOMICILIO" && chargeDeliveryFee ? Number(deliveryFee || 0) : 0;
-  const total = subtotal + fee;
+  const base = subtotal + fee;
+  const finalValueNum =
+    finalValue === "" || isNaN(Number(finalValue)) || Number(finalValue) < 0
+      ? null
+      : Number(finalValue);
+  const total = finalValueNum !== null ? finalValueNum : base;
 
   function openPicker(product: ManualProduct) {
     setPickerProduct(product);
@@ -159,6 +165,7 @@ export function ManualOrderForm({
         delivery_fee_retained: chargeDeliveryFee && deliveryRetained,
         payment_method: paymentMethod,
         notes,
+        ...(finalValueNum !== null ? { final_total: finalValueNum } : {}),
       },
       lines.map((l) => ({
         product_id: l.product.id,
@@ -330,6 +337,24 @@ export function ManualOrderForm({
                 </button>
               </div>
             ) : null}
+            <div className="flex items-center justify-between gap-2 text-muted-foreground">
+              <span>
+                Valor final
+                <span className="block text-[10px] font-normal">
+                  Opcional · vacío = total calculado
+                </span>
+              </span>
+              <Input
+                type="number"
+                min={0}
+                step="any"
+                inputMode="decimal"
+                value={finalValue}
+                onChange={(e) => setFinalValue(e.target.value)}
+                placeholder={String(base)}
+                className="h-7 w-24 text-right"
+              />
+            </div>
             <div className="flex justify-between text-base font-bold">
               <span>Total</span>
               <span className="text-primary">{formatCOP(total)}</span>

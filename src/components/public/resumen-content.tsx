@@ -11,7 +11,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { TrackView } from "@/components/public/track-view";
 
-export function ResumenContent({ deliveryFee }: { deliveryFee: number }) {
+export function ResumenContent({ deliveryFee, deliveryFeeAconvenir }: { deliveryFee: number; deliveryFeeAconvenir?: boolean }) {
   const items = useCart((s) => s.items);
   const removeItem = useCart((s) => s.removeItem);
   const setQuantity = useCart((s) => s.setQuantity);
@@ -77,11 +77,11 @@ export function ResumenContent({ deliveryFee }: { deliveryFee: number }) {
                   <button
                     type="button"
                     onClick={() => removeItem(item.key)}
-                    className="grid size-9 place-items-center rounded-md text-destructive transition-opacity hover:opacity-70"
+                    className="grid size-8 place-items-center rounded-md text-destructive transition-opacity hover:opacity-70"
                     aria-label={`Eliminar ${item.name}`}
                     title="Eliminar"
                   >
-                    <Trash2 className="size-4" />
+                    <Trash2 className="size-3.5" />
                   </button>
                 </div>
                 <div className="mt-2 flex items-center justify-between">
@@ -93,22 +93,22 @@ export function ResumenContent({ deliveryFee }: { deliveryFee: number }) {
                       <button
                         type="button"
                         onClick={() => setQuantity(item.key, item.quantity - 1)}
-                        className="flex size-10 items-center justify-center rounded-l-full text-muted-foreground transition-colors hover:bg-muted disabled:opacity-30"
+                        className="flex size-9 items-center justify-center rounded-l-full text-muted-foreground transition-colors hover:bg-muted disabled:opacity-30"
                         disabled={item.quantity <= 1}
                         aria-label="Reducir cantidad"
                       >
-                        <Minus className="size-4" />
+                        <Minus className="size-3.5" />
                       </button>
-                      <span className="min-w-8 text-center text-sm font-semibold">
+                      <span className="min-w-7 text-center text-xs font-semibold">
                         {item.quantity}
                       </span>
                       <button
                         type="button"
                         onClick={() => setQuantity(item.key, item.quantity + 1)}
-                        className="flex size-10 items-center justify-center rounded-r-full text-muted-foreground transition-colors hover:bg-muted"
+                        className="flex size-9 items-center justify-center rounded-r-full text-muted-foreground transition-colors hover:bg-muted"
                         aria-label="Aumentar cantidad"
                       >
-                        <Plus className="size-4" />
+                        <Plus className="size-3.5" />
                       </button>
                     </div>
                     <span className="w-20 text-right font-bold">
@@ -124,43 +124,44 @@ export function ResumenContent({ deliveryFee }: { deliveryFee: number }) {
 
       <Card>
         <CardContent className="space-y-3 p-4 text-sm">
-          <div className="flex justify-between text-muted-foreground">
+          {/* <div className="flex justify-between text-muted-foreground">
             <span>Subtotal</span>
             <span>{formatCOP(subtotal)}</span>
           </div>
-          {deliveryFee > 0 ? (
+          {deliveryFeeAconvenir ? (
+            <div className="flex justify-between text-muted-foreground">
+              <span>Domicilio (si aplica)</span>
+              <span className="font-medium">Valor a convenir</span>
+            </div>
+          ) : deliveryFee > 0 ? (
             <div className="flex justify-between text-muted-foreground">
               <span>Domicilio (si aplica)</span>
               <span>{formatCOP(deliveryFee)}</span>
             </div>
           ) : null}
 
-          <Separator />
+          <Separator /> */}
 
           <div className="flex justify-between text-base font-bold">
             <span>Total</span>
-            <span className="text-price">{formatCOP(total)}</span>
+            <span className="text-primary">{formatCOP(total)}</span>
           </div>
-          {deliveryFee > 0 ? (
-            <p className="text-xs text-muted-foreground">
-              El domicilio se suma solo si eliges entrega a domicilio en el
-              siguiente paso.
-            </p>
-          ) : null}
 
-          <Button asChild size="lg" className="w-full gap-2">
-            <Link href="/checkout">
-              <ArrowRight className="size-4" />
-              Continuar con el pedido
-            </Link>
-          </Button>
+          <div className="grid grid-cols-2 gap-2">
+            <Button asChild variant="outline" size="sm" className="gap-2">
+              <Link href="/">
+                <Plus className="size-3.5" />
+                Agregar más productos
+              </Link>
+            </Button>
 
-          <Button asChild variant="outline" size="lg" className="w-full gap-2">
-            <Link href="/">
-              <Plus className="size-4" />
-              Agregar más productos
-            </Link>
-          </Button>
+            <Button asChild size="sm" className="gap-2">
+              <Link href="/checkout">
+                Continuar con el pedido
+                <ArrowRight className="size-3.5" />
+              </Link>
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </main>

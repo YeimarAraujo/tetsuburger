@@ -19,13 +19,7 @@ export default function Error({
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-background px-4 py-12 text-center">
-      <Link href="/" aria-label="Ir al inicio">
-        <Logo className="h-16 w-auto" />
-      </Link>
 
-      <p className="mt-8 text-sm font-bold uppercase tracking-widest text-price">
-        Algo salió mal
-      </p>
       <h1 className="mt-2 text-3xl font-extrabold tracking-tight sm:text-4xl">
         No pudimos cargar esta página
       </h1>
