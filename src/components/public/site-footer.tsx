@@ -3,7 +3,8 @@ import { Clock, MapPin } from "lucide-react";
 import { site } from "@/config/site";
 import { whatsappContactUrl } from "@/lib/whatsapp";
 import { formatHoursSummary, getPublicHours } from "@/lib/public-hours";
-import { Logo } from "@/components/ui/logo";
+import { BurgerPattern } from "@/components/ui/burger-pattern";
+import { Logo2 } from "@/components/ui/logoFooter";
 import { SocialLinks } from "@/components/public/social-links";
 
 interface FooterLink {
@@ -13,12 +14,12 @@ interface FooterLink {
 }
 
 const linkClass =
-  "rounded-sm text-sm text-white/70 [overflow-wrap:anywhere] transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary";
+  "rounded-sm text-sm text-white/90 [overflow-wrap:anywhere] underline-offset-4 transition-colors hover:text-white hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white";
 
 function FooterColumn({ title, links }: { title: string; links: FooterLink[] }) {
   return (
     <nav aria-label={title}>
-      <h2 className="text-xs font-bold uppercase tracking-[0.14em] text-primary">
+      <h2 className="text-xs font-bold uppercase tracking-[0.14em] text-white">
         {title}
       </h2>
       <ul className="mt-4 space-y-2.5">
@@ -77,11 +78,13 @@ export async function SiteFooter() {
   ];
 
   return (
-    <footer className="relative bg-[oklch(0.17_0.012_40)] text-white">
+    <footer className="relative isolate overflow-hidden bg-primary text-white">
+      <BurgerPattern id="footer" />
+
       {/* Filo de marca */}
       <div
         aria-hidden="true"
-        className="h-1 bg-linear-to-r from-primary/0 via-primary to-primary/0"
+        className="h-1 bg-linear-to-r from-white/0 via-white/50 to-white/0"
       />
 
       <div className="mx-auto w-full max-w-5xl px-4 py-12 sm:px-6">
@@ -91,23 +94,20 @@ export async function SiteFooter() {
             <Link
               href="/"
               aria-label="Ir al inicio"
-              className="-ml-3 inline-block rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              className="-ml-3 inline-block rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
             >
-              <Logo className="h-24 w-auto" />
+              <Logo2 className="h-16 w-auto" />
             </Link>
-            <p className="font-display text-lg tracking-wide text-white">
-              {site.tagline.toUpperCase()}
-            </p>
 
-            <ul className="space-y-2 text-sm text-white/70">
+            <ul className="space-y-2 text-sm text-white/90">
               {hours ? (
                 <li className="flex items-start gap-2">
-                  <Clock aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-primary" />
+                  <Clock aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-white" />
                   <span>{hours}</span>
                 </li>
               ) : null}
               <li className="flex items-start gap-2">
-                <MapPin aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-primary" />
+                <MapPin aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-white" />
                 <span>Domicilios en {site.serviceArea}</span>
               </li>
             </ul>
@@ -124,7 +124,7 @@ export async function SiteFooter() {
         </div>
 
         {/* Pie legal */}
-        <div className="mt-10 flex flex-col gap-1 border-t border-white/10 pt-6 text-xs text-white/55 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mt-10 flex flex-col gap-1 border-t border-white/30 pt-6 text-xs text-white/85 sm:flex-row sm:items-center sm:justify-between">
           <p>
             © {new Date().getFullYear()} {site.name}. Todos los derechos reservados.
           </p>

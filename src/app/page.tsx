@@ -2,6 +2,7 @@ import { Header } from "@/components/public/header";
 import Image from "next/image";
 import { ChevronDown } from "lucide-react";
 import { SocialLinks } from "@/components/public/social-links";
+import { BurgerPattern } from "@/components/ui/burger-pattern";
 import {
   ClosedOverlay,
   StoreStatusBadge,
@@ -65,7 +66,7 @@ export default async function HomePage() {
   const toCard = (p: { id: string }): ProductCardData => cards.get(p.id)!;
 
   const featured = products.filter((p) => p.is_featured && p.is_available);
-  const heroImage = "/images/bannerTetsu.webp";
+  // const heroImage = "/images/bannerTetsu.webp";
 
   const categoryOptions = categoriesRes.data ?? [];
   const sections: MenuSection[] = [];
@@ -135,7 +136,8 @@ export default async function HomePage() {
         <FloatingCartButton />
 
         {/* Hero */}
-        <section className="relative border-b overflow-hidden">
+        <section className="relative isolate overflow-hidden border-b bg-primary">
+          {/* Banner anterior (foto de fondo), reemplazado por el patrón de hamburguesas + Tetsito
           {heroImage ? (
             <Image
               src={heroImage}
@@ -149,8 +151,24 @@ export default async function HomePage() {
           ) : (
             <div className="absolute inset-0 bg-gradient-to-br from-primary via-orange-600 to-red-700" />
           )}
-          {/* Velo para que el texto blanco sea legible sobre cualquier foto */}
+          */}
+          <BurgerPattern id="hero" opacity={0.18} />
 
+          {/* Mascota a un lado; el título deja espacio con su max-w */}
+          <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+            <div className="relative mx-auto h-full max-w-5xl">
+              <Image
+                src="/images/tetsitoHero.webp"
+                alt=""
+                width={443}
+                height={432}
+                priority
+                fetchPriority="high"
+                sizes="(min-width: 1024px) 320px, (min-width: 640px) 256px, 144px"
+                className="absolute right-5 top-1/2 w-36 -translate-y-1/2 min-[480px]:right-8 min-[480px]:w-44 sm:right-14 sm:w-64 lg:right-28 lg:w-80"
+              />
+            </div>
+          </div>
 
           <div className="relative mx-auto max-w-5xl space-y-4 px-4 py-14 sm:py-24">
             <StoreStatusBadge />

@@ -188,7 +188,7 @@ export function ClosedOverlay() {
         className="rounded-3xl ring-primary/20 sm:max-w-sm"
         bodyClassName="flex flex-col items-center gap-6 rounded-3xl p-6 text-center sm:p-8"
       >
-        <Logo className="h-24" />
+        <Logo className="h-12" />
 
         <DialogHeader className="items-center gap-2">
           <DialogTitle className="font-display text-3xl uppercase tracking-wide">

@@ -107,7 +107,7 @@ export function Header() {
       <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
           <Link href="/" aria-label="Ir al inicio">
-            <Logo className="h-25 w-auto" />
+            <Logo className="h-10 w-auto" />
           </Link>
 
           <SheetTrigger asChild>
