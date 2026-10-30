@@ -1,4 +1,12 @@
+import { site } from "@/config/site";
 import { formatCOP, formatOrderNumber } from "@/lib/format";
+
+/** Enlace de contacto con mensaje prellenado (codificado). */
+export function whatsappContactUrl(
+  message = "Hola TETSU BURGER, quiero hacer un pedido."
+): string {
+  return `https://wa.me/${site.whatsapp}?text=${encodeURIComponent(message)}`;
+}
 
 export function paymentLabel(method: "EFECTIVO" | "TRANSFERENCIA"): string {
   return method === "EFECTIVO" ? "Efectivo" : "Transferencia";
@@ -22,7 +30,7 @@ export function buildWhatsappMessage(params: {
   } = params;
 
   const parts = [
-    `*Pedido ${formatOrderNumber(orderNumber)}* — TETSUBURGER`,
+    `*Pedido ${formatOrderNumber(orderNumber)}* — TETSU BURGER`,
     "",
     ...lines,
     "",
@@ -33,7 +41,7 @@ export function buildWhatsappMessage(params: {
     `Medio de pago: ${paymentLabel(paymentMethod)}`,
     "",
     `Nombre: ${name}`,
-    ...(address ? [`Dirección: ${address}`] : ["Modalidad: Recoger en el local"]),
+    ...(address ? [`Dirección: ${address}`] : ["Modalidad: Domicilio"]),
     `Teléfono: ${phone}`,
     ...(notes ? ["", `Nota: ${notes}`] : []),
   ];

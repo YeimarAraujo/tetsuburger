@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/admin/page-header";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Auditoría · TETSUBURGER Admin",
+  title: "Auditoría · TETSU BURGER Admin",
 };
 
 export default async function AuditPage({
@@ -39,7 +39,7 @@ export default async function AuditPage({
   const rows = (data ?? []) as unknown as AuditRow[];
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-4 lg:p-6">
+    <div className="mx-auto w-full max-w-6xl space-y-6 p-4 lg:p-6">
       <PageHeader
         title="Auditoría"
         description="Registro de todas las modificaciones al sistema · solo lectura"

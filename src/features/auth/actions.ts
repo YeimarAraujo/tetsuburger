@@ -26,7 +26,11 @@ export async function signInAction(
   }
 
   // Rate limit: 5 intentos / 15 min por email
-  const { allowed } = rateLimit(`login:${parsed.data.email}`, RATE_LIMITS.login);
+  const { allowed } = await rateLimit(
+    `login:${parsed.data.email}`,
+    RATE_LIMITS.login,
+    { failClosed: true }
+  );
   if (!allowed) {
     return { error: "Demasiados intentos. Intenta en 15 minutos." };
   }

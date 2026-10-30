@@ -125,7 +125,7 @@ export async function buildOrderFromItems(itemsRaw: unknown): Promise<BuildResul
         target: entry.target,
         components:
           entry.target === "EACH"
-            ? Math.max(1, entry.components ?? comboCount)
+            ? Math.max(1, comboCount)
             : undefined,
       });
     }
@@ -150,6 +150,8 @@ export async function buildOrderFromItems(itemsRaw: unknown): Promise<BuildResul
   return { lines, subtotal };
 }
 
+const ORDER_SAVE_ERROR = "No se pudo registrar el pedido. Intenta de nuevo.";
+
 /** Inserta el pedido + líneas + adicionales con snapshots históricos */
 export async function persistOrder(params: {
   origin: "WEB" | "MANUAL";
@@ -158,6 +160,7 @@ export async function persistOrder(params: {
   subtotal: number;
   deliveryFee: number;
   deliveryFeeRetained: boolean;
+  finalAdjustment?: number;
   total: number;
   customerName: string;
   customerPhone: string;
@@ -167,6 +170,8 @@ export async function persistOrder(params: {
   paymentMethod: "EFECTIVO" | "TRANSFERENCIA";
   createdBy: string | null;
   confirmedAt: string | null;
+  acceptedTermsAt?: string | null;
+  policyVersion?: string | null;
 }): Promise<{
   error?: string;
   orderId?: string;
@@ -188,18 +193,24 @@ export async function persistOrder(params: {
       delivery_fee: params.deliveryFee,
       delivery_fee_retained: params.deliveryFeeRetained,
       subtotal: params.subtotal,
+      final_adjustment: params.finalAdjustment ?? 0,
       total: params.total,
       notes: params.notes,
       created_by: params.createdBy,
       ...(params.confirmedAt ? { confirmed_at: params.confirmedAt } : {}),
+      ...(params.acceptedTermsAt
+        ? {
+            accepted_terms_at: params.acceptedTermsAt,
+            policy_version: params.policyVersion ?? null,
+          }
+        : {}),
     })
     .select("id, order_number, confirmation_token")
     .single();
 
   if (error || !order) {
-    return {
-      error: `No se pudo registrar el pedido: ${error?.message ?? "error desconocido"}`,
-    };
+    console.error("persistOrder: insert order failed", error);
+    return { error: ORDER_SAVE_ERROR };
   }
 
   for (const line of params.lines ?? []) {
@@ -216,10 +227,9 @@ export async function persistOrder(params: {
       .single();
 
     if (itemError || !insertedItem) {
+      console.error("persistOrder: insert order_item failed", itemError);
       await supabase.from("orders").delete().eq("id", order.id);
-      return {
-        error: `No se pudo registrar el pedido: ${itemError?.message ?? "no se pudo insertar el ítem"}`,
-      };
+      return { error: ORDER_SAVE_ERROR };
     }
 
     if (line.addons.length > 0) {
@@ -236,8 +246,9 @@ export async function persistOrder(params: {
       );
 
       if (addonsError) {
+        console.error("persistOrder: insert order_item_addons failed", addonsError);
         await supabase.from("orders").delete().eq("id", order.id);
-        return { error: `No se pudo registrar el pedido: ${addonsError.message}` };
+        return { error: ORDER_SAVE_ERROR };
       }
     }
   }

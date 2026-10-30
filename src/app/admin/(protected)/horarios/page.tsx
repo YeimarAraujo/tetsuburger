@@ -4,7 +4,7 @@ import { HoursManager } from "@/components/admin/hours/hours-manager";
 import { PageHeader } from "@/components/admin/page-header";
 
 export const metadata = {
-  title: "Horarios · TETSUBURGER Admin",
+  title: "Horarios · TETSU BURGER Admin",
 };
 
 export default async function HoursPage() {
@@ -26,7 +26,7 @@ export default async function HoursPage() {
   );
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 p-4 lg:p-6">
+    <div className="mx-auto w-full max-w-6xl space-y-6 p-4 lg:p-6">
       <PageHeader
         title="Horarios"
         description="Define cuándo el catálogo acepta pedidos"

@@ -1,8 +1,8 @@
 ﻿"use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ArrowDownCircle, ArrowUpCircle, Loader2, Pencil, Plus, RefreshCw } from "lucide-react";
+import { AlertTriangle, ArrowDownCircle, ArrowUpCircle, Loader2, Pencil, Plus, RefreshCw, Search, X } from "lucide-react";
 import { toast } from "sonner";
 import { createInventoryItem, updateInventoryItem, registerMovement } from "@/features/inventory/actions";
 import { formatCOP } from "@/lib/format";
@@ -16,6 +16,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { UNITS } from "@/lib/units";
+
+/** Minúsculas y sin tildes: "pina" encuentra "Piña". */
+function normalize(text: string): string {
+  return text.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+}
 
 export interface ItemRow {
   id: string;
@@ -52,6 +57,24 @@ export function InventoryManager({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [barcodeValue, setBarcodeValue] = useState("");
+  const [search, setSearch] = useState("");
+  const [onlyLow, setOnlyLow] = useState(false);
+
+  const lowCount = useMemo(
+    () => items.filter((i) => i.current_stock <= i.min_stock).length,
+    [items]
+  );
+
+  const visibleItems = useMemo(() => {
+    const q = normalize(search.trim());
+    return items.filter((i) => {
+      if (onlyLow && i.current_stock > i.min_stock) return false;
+      if (!q) return true;
+      return normalize(i.name).includes(q) || normalize(i.barcode ?? "").includes(q);
+    });
+  }, [items, search, onlyLow]);
+
+  const filtering = search.trim() !== "" || onlyLow;
 
   function openCreateItem() {
     setEditing(null);
@@ -118,10 +141,9 @@ export function InventoryManager({
 
   return (
     <>
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-muted-foreground">
-          {items.length} insumos registrados ·{" "}
-          {items.filter((i) => i.current_stock <= i.min_stock).length} con stock bajo
+          {items.length} insumos registrados · {lowCount} con stock bajo
         </p>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => { setError(null); setMoveDialog(true); }}>
@@ -135,49 +157,107 @@ export function InventoryManager({
         </div>
       </div>
 
+      {/* Búsqueda y filtro */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative min-w-0 flex-1 basis-56">
+          <Search
+            className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+            aria-hidden="true"
+          />
+          <Input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => e.key === "Escape" && setSearch("")}
+            placeholder="Buscar por nombre o código de barras…"
+            aria-label="Buscar insumo por nombre o código de barras"
+            className="h-9 pl-8"
+          />
+        </div>
+        <Button
+          type="button"
+          variant={onlyLow ? "secondary" : "outline"}
+          aria-pressed={onlyLow}
+          onClick={() => setOnlyLow((v) => !v)}
+          className="h-9"
+        >
+          <AlertTriangle className="size-4" />
+          Stock bajo ({lowCount})
+        </Button>
+        {filtering ? (
+          <Button
+            type="button"
+            variant="ghost"
+            className="h-9"
+            onClick={() => {
+              setSearch("");
+              setOnlyLow(false);
+            }}
+          >
+            <X className="size-4" />
+            Limpiar
+          </Button>
+        ) : null}
+      </div>
+      {filtering ? (
+        <p className="-mt-1 text-xs text-muted-foreground" aria-live="polite">
+          {visibleItems.length} de {items.length} insumos
+        </p>
+      ) : null}
+
       {/* Items */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {items.map((item) => {
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        {visibleItems.map((item) => {
           const low = item.current_stock <= item.min_stock;
           return (
-            <Card key={item.id} className={low ? "border-amber-500/50" : ""}>
-              <CardContent className="flex items-start justify-between py-4">
-                <div>
-                  <p className="font-bold">{item.name}</p>
-                  <p className="text-xs text-muted-foreground">{item.unit}</p>
-                  {item.barcode ? (
-                    <Badge variant="secondary" className="mt-1 font-mono text-[10px]">
-                      {item.barcode}
-                    </Badge>
-                  ) : null}
+            <div
+              key={item.id}
+              className={`rounded-lg border bg-card p-3 ${low ? "border-amber-500/60" : ""}`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="truncate font-semibold leading-tight" title={item.name}>
+                    {item.name}
+                  </p>
+                  <p className="truncate text-[11px] text-muted-foreground">
+                    {item.unit}
+                    {item.barcode ? <span className="font-mono"> · {item.barcode}</span> : null}
+                  </p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex shrink-0 items-center gap-1">
                   {low ? (
-                    <Badge variant="outline" className="gap-1 text-amber-600">
+                    <Badge variant="outline" className="gap-1 px-1.5 text-[10px] text-amber-700 dark:text-amber-400">
                       <AlertTriangle className="size-3" />
                       Bajo
                     </Badge>
                   ) : null}
-                  <Button variant="ghost" size="sm" onClick={() => openEditItem(item)}>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => openEditItem(item)}
+                    aria-label={`Editar ${item.name}`}
+                  >
                     <Pencil className="size-3.5" />
                   </Button>
                 </div>
-              </CardContent>
-              <div className="flex items-center justify-between border-t px-4 py-2">
-                <span className="text-xs text-muted-foreground">Stock actual</span>
-                <span className={`text-lg font-bold ${low ? "text-amber-600" : ""}`}>
-                  {item.current_stock} <span className="text-xs font-normal text-muted-foreground">{item.unit}</span>
-                </span>
               </div>
-              <div className="flex items-center justify-between border-t px-4 py-2">
-                <span className="text-xs text-muted-foreground">Mínimo</span>
-                <span className="text-sm text-muted-foreground">{item.min_stock} {item.unit}</span>
-              </div>
-              <div className="flex items-center justify-between border-t px-4 py-2">
-                <span className="text-xs text-muted-foreground">Costo / unidad</span>
-                <span className="text-sm font-semibold text-primary">{formatCOP(item.cost)}</span>
-              </div>
-            </Card>
+              <dl className="mt-2 grid grid-cols-3 gap-2 border-t pt-2 text-[11px]">
+                <div>
+                  <dt className="text-muted-foreground">Stock</dt>
+                  <dd className={`text-sm font-bold tabular-nums ${low ? "text-amber-700 dark:text-amber-400" : ""}`}>
+                    {item.current_stock}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground">Mínimo</dt>
+                  <dd className="text-sm tabular-nums text-muted-foreground">{item.min_stock}</dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground">Costo/u</dt>
+                  <dd className="truncate text-sm font-semibold tabular-nums text-price">{formatCOP(item.cost)}</dd>
+                </div>
+              </dl>
+            </div>
           );
         })}
 
@@ -185,13 +265,19 @@ export function InventoryManager({
           <div className="col-span-full rounded-xl border border-dashed p-10 text-center text-muted-foreground">
             No hay insumos registrados. Crea el primero para empezar a controlar el stock.
           </div>
+        ) : visibleItems.length === 0 ? (
+          <div className="col-span-full rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
+            {onlyLow && !search.trim()
+              ? "Ningún insumo está en stock bajo."
+              : `Sin resultados${search.trim() ? ` para “${search.trim()}”` : ""}.`}
+          </div>
         ) : null}
       </div>
 
       {/* Historial de movimientos */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm">Últimos movimientos</CardTitle>
+          <CardTitle>Últimos movimientos</CardTitle>
         </CardHeader>
         <CardContent>
           {movements.length === 0 ? (

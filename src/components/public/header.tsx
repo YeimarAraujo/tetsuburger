@@ -9,6 +9,7 @@ import { addonLabel } from "@/lib/addons";
 import { formatCOP } from "@/lib/format";
 import { Logo } from "@/components/ui/logo";
 import { Button } from "@/components/ui/button";
+import { WhatsappFab } from "@/components/public/whatsapp-fab";
 import {
   Sheet,
   SheetContent,
@@ -56,7 +57,7 @@ function CartLines() {
                 + {item.addons.map((a) => addonLabel(a)).join(", ")}
               </p>
             ) : null}
-            <p className="mt-0.5 text-sm font-semibold text-primary">
+            <p className="mt-0.5 text-sm font-semibold text-price">
               {formatCOP(itemUnitPrice(item))}
             </p>
 
@@ -64,7 +65,7 @@ function CartLines() {
               <Button
                 variant="outline"
                 size="icon"
-                className="size-7"
+                className="size-10"
                 onClick={() => setQuantity(item.key, item.quantity - 1)}
                 aria-label="Quitar uno"
               >
@@ -74,7 +75,7 @@ function CartLines() {
               <Button
                 variant="outline"
                 size="icon"
-                className="size-7"
+                className="size-10"
                 onClick={() => setQuantity(item.key, item.quantity + 1)}
                 aria-label="Agregar uno"
               >
@@ -105,13 +106,22 @@ export function Header() {
     <Sheet open={open} onOpenChange={setOpen}>
       <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
-          <Link href="/">
-            <Logo className="h-25 w-auto" />
+          <Link href="/" aria-label="Ir al inicio">
+            <Logo className="h-10 w-auto" />
           </Link>
 
           <SheetTrigger asChild>
-            <Button variant="outline" size="lg" className="relative gap-2">
-              <ShoppingCart className="size-5  " />
+            <Button
+              variant="outline"
+              size="lg"
+              className="relative h-10 gap-2 px-3"
+              aria-label={
+                count > 0
+                  ? `Abrir carrito, ${count} ${count === 1 ? "producto" : "productos"}`
+                  : "Abrir carrito"
+              }
+            >
+              <ShoppingCart className="size-5" />
               <span className="hidden sm:inline">Carrito</span>
               {count > 0 ? (
                 <>
@@ -124,6 +134,8 @@ export function Header() {
           </SheetTrigger>
         </div>
       </header>
+
+      <WhatsappFab />
 
       <SheetContent side="right" className="flex w-full flex-col gap-0 sm:max-w-md">
         <SheetHeader>
@@ -140,11 +152,11 @@ export function Header() {
               <p className="-mt-1 text-xs text-muted-foreground">
                 El costo de domicilio se suma en el siguiente paso.
               </p>
-              <Link href="/resumen" onClick={() => setOpen(false)} className="block">
-                <Button className="w-full" size="lg">
+              <Button asChild className="w-full" size="lg">
+                <Link href="/resumen" onClick={() => setOpen(false)}>
                   Ver pedido · {formatCOP(subtotal)}
-                </Button>
-              </Link>
+                </Link>
+              </Button>
             </div>
           </SheetFooter>
         ) : null}

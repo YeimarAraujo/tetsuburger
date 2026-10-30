@@ -3,7 +3,7 @@ import { SettingsForm } from "@/components/admin/settings/settings-form";
 import { PageHeader } from "@/components/admin/page-header";
 
 export const metadata = {
-  title: "Configuración · TETSUBURGER Admin",
+  title: "Configuración · TETSU BURGER Admin",
 };
 
 export default async function SettingsPage() {
@@ -18,7 +18,7 @@ export default async function SettingsPage() {
   );
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6 p-4 lg:p-6">
+    <div className="mx-auto w-full max-w-6xl space-y-6 p-4 lg:p-6">
       <PageHeader
         title="Configuración"
         description="Parámetros del negocio · se aplican al instante en el catálogo"

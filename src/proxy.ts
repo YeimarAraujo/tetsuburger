@@ -12,9 +12,13 @@ export async function proxy(request: NextRequest) {
       request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
       request.headers.get("x-real-ip") ??
       "anonymous";
-    const { allowed, resetMs } = rateLimit(`login:${ip}`, RATE_LIMITS.login);
+    const { allowed, retryAfterMs } = await rateLimit(
+      `login:${ip}`,
+      RATE_LIMITS.login,
+      { failClosed: true }
+    );
     if (!allowed) {
-      const retryAfter = Math.ceil(resetMs / 1000);
+      const retryAfter = Math.max(1, Math.ceil(retryAfterMs / 1000));
       return NextResponse.json(
         { error: "Demasiados intentos. Intenta más tarde." },
         { status: 429, headers: { "Retry-After": String(retryAfter) } }

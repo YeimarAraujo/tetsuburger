@@ -1,22 +1,37 @@
 import { Header } from "@/components/public/header";
-import { ClosedOverlay } from "@/components/public/closed-overlay";
-import { FloatingCartButton } from "@/components/public/floating-cart-button";
+import Image from "next/image";
+import { ChevronDown } from "lucide-react";
+import { SocialLinks } from "@/components/public/social-links";
+import { BurgerPattern } from "@/components/ui/burger-pattern";
 import {
-  ProductCard,
-  type ProductCardData,
-} from "@/components/public/product-card";
-import { createClient } from "@/lib/supabase/server";
-import { computeOpenStatus } from "@/lib/business-hours";
-import { getAddonsAvailability } from "@/lib/consumption-availability";
-import { cn } from "@/lib/utils";
-import { Flame } from "lucide-react";
+  ClosedOverlay,
+  StoreStatusBadge,
+  StoreStatusMessage,
+  StoreStatusProvider,
+} from "@/components/public/store-status";
+import { FloatingCartButton } from "@/components/public/floating-cart-button";
+import { type ProductCardData } from "@/components/public/product-card";
+import {
+  MenuSections,
+  type MenuSection,
+} from "@/components/public/menu-sections";
+import { SiteFooter } from "@/components/public/site-footer";
+import { createPublicClient } from "@/lib/supabase/public";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { currentMinute } from "@/lib/business-hours";
+import { buildProductCards } from "@/lib/product-cards";
+import {
+  buildMenuJsonLd,
+  buildRestaurantJsonLd,
+  serializeJsonLd,
+} from "@/lib/structured-data";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 300;
 
 export default async function HomePage() {
-  const supabase = await createClient();
+  const supabase = createPublicClient();
 
-  const [categoriesRes, productsRes, addonsRes, productAddonsRes, settingsRes, hoursRes] =
+  const [categoriesRes, productsRes, settingsRes, hoursRes, outsideHoursRes] =
     await Promise.all([
       supabase.from("categories").select("*").eq("is_active", true).order("display_order"),
       supabase
@@ -26,193 +41,164 @@ export default async function HomePage() {
         )
         .eq("is_active", true)
         .order("name"),
-      supabase.from("addons").select("id, name, price, tipo").eq("is_active", true),
-      supabase.from("product_addons").select("product_id, addon_id"),
       supabase.from("settings").select("key, value").eq("is_public", true),
       supabase.from("business_hours").select("*"),
+      // Configuración no pública: solo se usa para saber si se aceptan pedidos
+      // fuera de horario (igual que valida placeOrder).
+      createAdminClient()
+        .from("settings")
+        .select("value")
+        .eq("key", "allow_orders_outside_hours")
+        .maybeSingle(),
     ]);
 
   const settings = Object.fromEntries(
     (settingsRes.data ?? []).map((r) => [r.key, r.value])
   ) as Record<string, unknown>;
 
-  const status = computeOpenStatus(
-    hoursRes.data ?? [],
-    settings.store_temporarily_closed === true,
-    typeof settings.closed_message === "string" ? settings.closed_message : undefined
-  );
-
-  const addonMap = new Map((addonsRes.data ?? []).map((a) => [a.id, a]));
-
-  const productAddonsMap = new Map<string, string[]>();
-  for (const pa of productAddonsRes.data ?? []) {
-    if (!addonMap.has(pa.addon_id)) continue;
-    const list = productAddonsMap.get(pa.product_id) ?? [];
-    list.push(pa.addon_id);
-    productAddonsMap.set(pa.product_id, list);
-  }
+  const temporarilyClosed = settings.store_temporarily_closed === true;
+  const closedMessage =
+    typeof settings.closed_message === "string" ? settings.closed_message : undefined;
+  const allowOutsideHours = outsideHoursRes.data?.value === true;
 
   const products = productsRes.data ?? [];
-
-  // Disponibilidad de adiciones (si el insumo no alcanza, se desactivan).
-  const availabilityByProduct = await getAddonsAvailability(
-    products.map((p) => p.id)
-  );
-
-  function toCard(p: {
-    id: string; name: string; description: string; price: number;
-    image_url: string; is_available: boolean;
-    conteo_hamburguesas: number; conteo_perros: number;
-  }): ProductCardData {
-    const avail = availabilityByProduct.get(p.id) ?? new Map<string, boolean>();
-    const hamburguesas = Number(p.conteo_hamburguesas) || 0;
-    const perros = Number(p.conteo_perros) || 0;
-    return {
-      id: p.id,
-      name: p.name,
-      description: p.description,
-      price: Number(p.price),
-      imageUrl: p.image_url,
-      isAvailable: p.is_available,
-      isCombo: hamburguesas + perros >= 2,
-      hamburguesas,
-      perros,
-      addons: (productAddonsMap.get(p.id) ?? [])
-        .map((id) => addonMap.get(id))
-        .filter((a): a is NonNullable<typeof a> => Boolean(a))
-        .map((a) => ({
-          id: a.id,
-          name: a.name,
-          price: Number(a.price),
-          available: avail.get(a.id),
-          tipo: a.tipo,
-        })),
-    };
-  }
+  const cards = await buildProductCards(supabase, products);
+  const toCard = (p: { id: string }): ProductCardData => cards.get(p.id)!;
 
   const featured = products.filter((p) => p.is_featured && p.is_available);
-  const heroImage = "/images/bannerTetsu.webp";
+  // const heroImage = "/images/bannerTetsu.webp";
+
+  const categoryOptions = categoriesRes.data ?? [];
+  const sections: MenuSection[] = [];
+
+  if (featured.length > 0) {
+    sections.push({
+      key: "destacados",
+      label: "Destacados",
+      icon: "flame",
+      tagline: "Nuestras recomendaciones de la casa",
+      items: featured.map(toCard),
+      default: true,
+      special: true,
+    });
+  }
+
+  for (const category of categoryOptions) {
+    const items = products.filter((p) => p.category_id === category.id);
+    if (items.length === 0) continue;
+    sections.push({
+      key: `cat-${category.slug}`,
+      label: category.name,
+      tagline: category.description || undefined,
+      items: items.map(toCard),
+      default: sections.length === 0,
+    });
+  }
 
   return (
     <div className="min-h-screen bg-background">
-      <Header />
-      <FloatingCartButton />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: serializeJsonLd(
+            buildRestaurantJsonLd(hoursRes.data ?? [])
+          ),
+        }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: serializeJsonLd(
+            buildMenuJsonLd(
+              products.map((p) => ({
+                id: p.id,
+                slug: p.slug,
+                name: p.name,
+                description: p.description,
+                price: Number(p.price) || 0,
+                is_available: p.is_available,
+                category_id: p.category_id,
+              })),
+              categoryOptions.map((c) => ({ id: c.id, name: c.name }))
+            )
+          ),
+        }}
+      />
+      <StoreStatusProvider
+        hours={hoursRes.data ?? []}
+        temporarilyClosed={temporarilyClosed}
+        closedMessage={closedMessage}
+        allowOutsideHours={allowOutsideHours}
+        renderedAtMinute={currentMinute()}
+      >
+        <Header />
+        <ClosedOverlay />
+        <FloatingCartButton />
 
-      {!status.isOpen ? (
-        <ClosedOverlay message={status.message} nextOpensAt={status.nextOpensAt} />
-      ) : null}
+        {/* Hero */}
+        <section className="relative isolate overflow-hidden border-b bg-primary">
+          {/* Banner anterior (foto de fondo), reemplazado por el patrón de hamburguesas + Tetsito
+          {heroImage ? (
+            <Image
+              src={heroImage}
+              alt="Imagen de TETSU BURGER"
+              fill
+              priority
+              fetchPriority="high"
+              sizes="100vw"
+              className="object-cover"
+            />
+          ) : (
+            <div className="absolute inset-0 bg-gradient-to-br from-primary via-orange-600 to-red-700" />
+          )}
+          */}
+          <BurgerPattern id="hero" opacity={0.18} />
 
-      {/* Hero */}
-      <section className="relative border-b overflow-hidden">
-        {heroImage ? (
-          <img
-            src={heroImage}
-            alt="imagen del heroe de Tetsuburger"
-            className="absolute inset-0 h-full w-full object-cover"
-          />
-        ) : (
-          <div className="absolute inset-0 bg-gradient-to-br from-primary via-orange-600 to-red-700" />
-        )}
+          {/* Mascota a un lado; el título deja espacio con su max-w */}
+          <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+            <div className="relative mx-auto h-full max-w-5xl">
+              <Image
+                src="/images/tetsitoHero.webp"
+                alt=""
+                width={443}
+                height={432}
+                priority
+                fetchPriority="high"
+                sizes="(min-width: 1024px) 320px, (min-width: 640px) 256px, 144px"
+                className="absolute right-5 top-1/2 w-36 -translate-y-1/2 min-[480px]:right-8 min-[480px]:w-44 sm:right-14 sm:w-64 lg:right-28 lg:w-80"
+              />
+            </div>
+          </div>
 
-        <div className="relative mx-auto max-w-5xl space-y-4 px-4 py-20 sm:py-28">
-          <span
-            className={cn(
-              "inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wide",
-              status.isOpen
-                ? "bg-emerald-500 text-white"
-                : "bg-red-500 text-white"
-            )}
-          >
-            <span className={cn("size-2 rounded-full", status.isOpen ? "animate-pulse bg-white" : "bg-white")} />
-            {status.isOpen ? "Abierto" : "Cerrado"}
-          </span>
+          <div className="relative mx-auto max-w-5xl space-y-4 px-4 py-14 sm:py-24">
+            <StoreStatusBadge />
 
-          <h1 className="max-w-60 font-display text-3xl leading-tight tracking-wider text-white sm:max-w-md sm:text-5xl lg:max-w-xl lg:text-5xl">
-            SAZÓN SOBRE LA PLANCHA
-          </h1>
+            <h1 className="max-w-[10.5rem] min-[480px]:max-w-60 font-display text-4xl leading-tight tracking-wide text-white sm:max-w-md sm:text-5xl lg:max-w-xl lg:text-6xl">
+              SAZÓN SOBRE LA PLANCHA
+            </h1>
 
-          <p className="max-w-xl text-[15px] leading-relaxed text-white sm:text-base lg:text-lg">
-            {status.message}
-          </p>
-        </div>
-      </section>
+            <StoreStatusMessage className="max-w-xl text-[15px] leading-relaxed text-white sm:text-base lg:text-lg" />
 
-      {/* Destacados */}
-      {featured.length > 0 ? (
-        <section className="mx-auto max-w-5xl px-4 pt-8">
-          <h2 className="mb-3 flex items-center gap-2 font-display text-2xl tracking-wide uppercase">
-            <Flame className="size-5 text-primary" />
-            Destacados
-          </h2>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {featured.map((p) => (
-              <ProductCard key={p.id} product={toCard(p)} />
-            ))}
+            <div className="flex flex-wrap items-center gap-3 pt-2">
+              {/* <a
+                href="#menu"
+                className="inline-flex h-11 items-center gap-2 rounded-full bg-primary px-6 text-sm font-bold text-primary-foreground shadow-lg shadow-black/20 transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-black/40 motion-reduce:transition-none"
+              >
+                Ver menú
+                <ChevronDown aria-hidden="true" className="size-4" />
+              </a> */}
+
+              <SocialLinks />
+            </div>
           </div>
         </section>
-      ) : null}
 
-      {/* Navegación de categorías */}
-      {(categoriesRes.data ?? []).length > 0 ? (
-        <nav className="sticky top-14 z-30 mt-8 border-y bg-background/95 backdrop-blur">
-          <div className="mx-auto flex max-w-5xl gap-2 overflow-x-auto px-4 py-2">
-            {(categoriesRes.data ?? []).map((c) => (
-              <a
-                key={c.id}
-                href={`#cat-${c.slug}`}
-                className="whitespace-nowrap rounded-full border px-4 py-1.5 text-sm font-medium transition-colors hover:border-primary hover:text-primary"
-              >
-                {c.name}
-              </a>
-            ))}
-          </div>
-        </nav>
-      ) : null}
+        {/* Filtros + menú */}
+        <div id="menu" className="scroll-mt-28" />
+        <MenuSections sections={sections} />
 
-      {/* Menú por categorías */}
-      <main className="mx-auto max-w-5xl space-y-10 px-4 py-8">
-        {(categoriesRes.data ?? []).map((category) => {
-          const items = products.filter((p) => p.category_id === category.id);
-          if (items.length === 0) return null;
-
-          return (
-            <section key={category.id} id={`cat-${category.slug}`} className="scroll-mt-28">
-              <h2 className="mb-1 font-display text-2xl tracking-wide uppercase">
-                {category.name}
-              </h2>
-              {category.description ? (
-                <p className="mb-4 text-sm text-muted-foreground">{category.description}</p>
-              ) : (
-                <p className="mb-4 text-xs text-muted-foreground">
-                  {items.length} opciones
-                </p>
-              )}
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                {items.map((p) => (
-                  <ProductCard key={p.id} product={toCard(p)} />
-                ))}
-              </div>
-            </section>
-          );
-        })}
-
-        {products.length === 0 ? (
-          <div className="rounded-xl border border-dashed p-12 text-center text-muted-foreground">
-            El menú se está preparando, vuelve en un momento.
-          </div>
-        ) : null}
-      </main>
-
-      {/* Footer */}
-      <footer className="border-t py-8">
-        <div className="mx-auto max-w-5xl space-y-2 px-4 text-center text-sm text-muted-foreground">
-          {typeof settings.address === "string" && settings.address ? (
-            <p>{settings.address}</p>
-          ) : null}
-          <p>© {new Date().getFullYear()} TETSUBURGER · Todos los derechos reservados</p>
-        </div>
-      </footer>
+        <SiteFooter />
+      </StoreStatusProvider>
     </div>
   );
 }

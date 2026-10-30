@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { csvText } from "@/lib/csv";
 
 /**
  * Exportación CSV del historial de compras (producción). Respeta los filtros from/to
@@ -31,7 +32,7 @@ export async function GET(request: NextRequest) {
     .lte("record_date", to)
     .order("record_date");
 
-  const esc = (v: string) => `"${v.replaceAll('"', '""')}"`;
+  const esc = csvText;
   const lines: string[] = [];
   let total = 0;
 

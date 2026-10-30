@@ -1,22 +1,43 @@
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { Plus } from "lucide-react";
-import { OrdersBoard, type BoardOrder } from "@/components/admin/orders/orders-board";
+import type { BoardOrder } from "@/components/admin/orders/orders-board";
 import type { ManualProduct } from "@/components/admin/orders/manual-order-form";
+import type { DayOrder } from "@/components/admin/order-day";
+import { OrdersTabs } from "@/components/admin/orders/orders-tabs";
 import { getAddonsAvailability } from "@/lib/consumption-availability";
+import { bogotaToday } from "@/lib/bogota";
 import { PageHeader } from "@/components/admin/page-header";
 import { Button } from "@/components/ui/button";
 
 export const metadata = {
-  title: "Pedidos · TETSUBURGER Admin",
+  title: "Pedidos · TETSU BURGER Admin",
 };
 
 export const dynamic = "force-dynamic";
 
-export default async function OrdersPage() {
-  const supabase = await createClient();
+function isValidDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T12:00:00Z`);
+  return (
+    !Number.isNaN(parsed.getTime()) &&
+    parsed.toISOString().slice(0, 10) === value
+  );
+}
 
-  const [orders, settings, productsRes, addonsRes, productAddonsRes, me] = await Promise.all([
+export default async function OrdersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ fecha?: string }>;
+}) {
+  const supabase = await createClient();
+  const params = await searchParams;
+  const today = bogotaToday();
+  const requestedDate =
+    typeof params.fecha === "string" ? params.fecha : "";
+  const selectedDate = isValidDate(requestedDate) ? requestedDate : today;
+
+  const [orders, settings, productsRes, addonsRes, productAddonsRes, me, historyRes] = await Promise.all([
     supabase
       .from("orders")
       .select("*, items:order_items(*, order_item_addons(*))")
@@ -41,16 +62,22 @@ export default async function OrdersPage() {
     supabase.from("addons").select("id, name, price, tipo").eq("is_active", true),
     supabase.from("product_addons").select("product_id, addon_id"),
     supabase.auth.getUser(),
+    supabase
+      .from("orders")
+      .select("id, order_number, status, customer_name, subtotal, final_adjustment, total, payment_method, origin, created_at")
+      .gte("created_at", `${selectedDate}T00:00:00-05:00`)
+      .lte("created_at", `${selectedDate}T23:59:59-05:00`)
+      .order("created_at", { ascending: false }),
   ]);
 
   const deliveryFeeBusiness = Number(settings.data?.value ?? 0);
 
   const profileRes = me.data?.user
     ? await supabase
-        .from("profiles")
-        .select("board_muted")
-        .eq("id", me.data.user.id)
-        .maybeSingle()
+      .from("profiles")
+      .select("board_muted")
+      .eq("id", me.data.user.id)
+      .maybeSingle()
     : { data: null };
   const initialMuted = profileRes.data?.board_muted === true;
 
@@ -95,24 +122,28 @@ export default async function OrdersPage() {
   });
 
   return (
-    <div className="mx-auto max-w-[1600px] space-y-6 p-4 lg:p-6">
+    <div className="mx-auto w-full max-w-[1600px] space-y-6 p-4 lg:p-6">
       <PageHeader
-        title="Pedidos en vivo"
-        description="Los pedidos nuevos aparecen solos, con alerta sonora · orden por llegada (los más antiguos arriba)"
+        title="Pedidos"
+        description="Gestiona los pedidos en vivo y consulta el historial por día"
       >
-        <Link href="/admin/pedidos/nuevo">
-          <Button>
+        <Button asChild>
+          <Link href="/admin/pedidos/nuevo">
             <Plus className="size-4" />
             Pedido manual
-          </Button>
-        </Link>
+          </Link>
+        </Button>
       </PageHeader>
 
-      <OrdersBoard
+      <OrdersTabs
+        initialTab={requestedDate ? "history" : "live"}
         initialOrders={(orders.data ?? []) as unknown as BoardOrder[]}
         deliveryFeeBusiness={deliveryFeeBusiness}
         products={products}
         initialMuted={initialMuted}
+        historyOrders={(historyRes.data ?? []) as DayOrder[]}
+        selectedDate={selectedDate}
+        today={today}
       />
     </div>
   );

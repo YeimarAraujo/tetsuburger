@@ -35,6 +35,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { TablePagination, usePagination } from "@/components/admin/table-pagination";
 
 interface FormState {
   name: string;
@@ -60,6 +61,7 @@ export function CategoryManager({ initial }: { initial: Category[] }) {
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const pager = usePagination(initial);
 
   function openCreate() {
     setEditing(null);
@@ -164,7 +166,9 @@ export function CategoryManager({ initial }: { initial: Category[] }) {
                     </td>
                   </tr>
                 ) : (
-                  initial.map((category, index) => (
+                  pager.visible.map((category, i) => {
+                    const index = pager.offset + i;
+                    return (
                     <tr key={category.id} className="border-b last:border-0">
                       <td className="py-3 pr-2">
                         <div className="flex items-center gap-1">
@@ -221,11 +225,13 @@ export function CategoryManager({ initial }: { initial: Category[] }) {
                         </Button>
                       </td>
                     </tr>
-                  ))
+                    );
+                  })
                 )}
               </tbody>
             </table>
           </div>
+          <TablePagination pager={pager} />
         </CardContent>
       </Card>
 

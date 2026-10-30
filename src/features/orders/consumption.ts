@@ -212,28 +212,6 @@ async function computeNeeded(
 }
 
 /**
- * Valida que haya stock suficiente para preparar el pedido.
- * No descuenta nada. Devuelve error si falta algún insumo.
- */
-export async function validateStockForOrder(
-  orderId: string
-): Promise<ConsumptionResult> {
-  const { error, missing } = await computeNeeded(orderId);
-  if (error) return { error };
-  if (missing && missing.length > 0) {
-    const msg = missing
-      .map((m) => `${m.name}: necesitas ${m.needed}${m.unit}, hay ${m.available}${m.unit}`)
-      .join(". ");
-    return {
-      error: `Stock insuficiente. ${msg}. Repón inventario para preparar el pedido.`,
-      missing,
-    };
-  }
-  // Aunque no haya consumos configurados, permitimos preparar.
-  return { applied: true };
-}
-
-/**
  * Descuenta del inventario los insumos consumidos por un pedido al prepararse.
  * Idempotente: si ya hay logs de consumo, no vuelve a descontar.
  */
@@ -277,6 +255,24 @@ export async function consumeInventoryForOrder(
 
   // Aplicar descuento: movimiento SALIDA + actualizar stock + log inmutable
   const orderRef = String(order.order_number).padStart(5, "0");
+
+  const { error: rpcError } = await supabase.rpc("consume_order_inventory", {
+    p_order_id: orderId,
+    p_reference: `Pedido #${orderRef}`,
+    p_items: [...map].map(([itemId, entry]) => ({
+      item_id: itemId,
+      quantity: entry.needed,
+      refs: entry.references.join(", "),
+    })),
+  });
+
+  if (!rpcError) return { applied: true };
+
+  // PGRST202: la migración 0031 aún no está aplicada; se usa el camino anterior.
+  if (rpcError.code !== "PGRST202") {
+    console.error("consume_order_inventory failed", rpcError);
+    return { error: "No se pudo descontar el inventario del pedido" };
+  }
 
   for (const [itemId, entry] of map) {
     await supabase.from("inventory_movements").insert({

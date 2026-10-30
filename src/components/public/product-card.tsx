@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { Loader2, Minus, Plus, ShoppingCart, X } from "lucide-react";
+import Link from "next/link";
+import { Loader2, Minus, Plus, ShoppingCart, Star } from "lucide-react";
 import { toast } from "sonner";
+import { track } from "@vercel/analytics";
 import type { CartAddon } from "@/store/cart";
 import { useCart } from "@/store/cart";
 import { addonCharged } from "@/lib/addons";
@@ -13,6 +15,8 @@ import { formatCOP } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { InfoTip } from "@/components/ui/info-tip";
+import { ReviewsTrigger } from "@/components/public/product-reviews";
+import { useStoreStatus } from "@/components/public/store-status";
 import {
   Dialog,
   DialogContent,
@@ -22,6 +26,7 @@ import {
 
 export interface ProductCardData {
   id: string;
+  slug?: string;
   name: string;
   description: string;
   price: number;
@@ -31,6 +36,8 @@ export interface ProductCardData {
   isCombo: boolean;
   hamburguesas: number;
   perros: number;
+  /** Promedio de las reseñas aprobadas (null si aún no hay reseñas). */
+  rating?: { avg: number; count: number } | null;
   addons: (CartAddon & { available?: boolean; tipo?: AddonTipo })[];
 }
 
@@ -47,9 +54,13 @@ export function ProductCard({ product }: { product: ProductCardData }) {
   const { addItem } = useCart();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [imageOpen, setImageOpen] = useState(false);
+  const [reviewsOpen, setReviewsOpen] = useState(false);
   const [sel, setSel] = useState<Record<string, AddonSel>>({});
   const [adding, setAdding] = useState(false);
 
+  const store = useStoreStatus();
+  // Fuera de horario no se deja llenar un carrito que el checkout rechazaría.
+  const closed = store !== null && !store.canOrder;
   const soldOut = !product.isAvailable;
   const hasMix = product.isCombo && product.hamburguesas > 0 && product.perros > 0;
   const components = product.hamburguesas + product.perros;
@@ -136,6 +147,7 @@ export function ProductCard({ product }: { product: ProductCardData }) {
       addons: [],
     });
     toast.success(`${product.name} agregado al carrito`);
+    track("add_to_cart", { product: product.name, price: product.price });
     setTimeout(() => setAdding(false), 400);
   }
 
@@ -150,19 +162,25 @@ export function ProductCard({ product }: { product: ProductCardData }) {
       addons,
     });
     toast.success(`${product.name} agregado al carrito`);
+    track("add_to_cart", {
+      product: product.name,
+      price: product.price,
+      addons: addons.length,
+    });
     setDialogOpen(false);
     resetSel();
   }
 
   return (
     <>
-      <div className="group flex gap-4 rounded-2xl border bg-card p-3 transition-all sm:p-4">
+      <div className="group flex min-w-0 gap-3 rounded-2xl border bg-card p-3 transition-all sm:gap-4 sm:p-4">
         {/* Imagen del producto */}
         {product.imageUrl ? (
           <button
             type="button"
             onClick={() => setImageOpen(true)}
-            className="relative size-28 shrink-0 overflow-hidden rounded-xl border sm:size-36"
+            aria-label={`Ampliar imagen de ${product.name}`}
+            className="relative size-24 shrink-0 overflow-hidden rounded-xl border min-[400px]:size-28 sm:size-36"
           >
             <Image
               src={product.imageUrl}
@@ -180,13 +198,22 @@ export function ProductCard({ product }: { product: ProductCardData }) {
             )}
           </button>
         ) : (
-          <div className="size-28 shrink-0 rounded-xl border bg-muted sm:size-36" />
+          <div className="size-24 shrink-0 rounded-xl border bg-muted min-[400px]:size-28 sm:size-36" />
         )}
 
         {/* Contenido */}
         <div className="flex min-w-0 flex-1 flex-col">
           <h3 className="text-base font-bold leading-tight sm:text-lg">
-            {product.name}
+            {product.slug ? (
+              <Link
+                href={`/producto/${product.slug}`}
+                className="rounded-sm transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {product.name}
+              </Link>
+            ) : (
+              product.name
+            )}
           </h3>
           {product.description ? (
             <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
@@ -194,48 +221,56 @@ export function ProductCard({ product }: { product: ProductCardData }) {
             </p>
           ) : null}
 
-          <div className="mt-auto flex items-end justify-between gap-2 pt-3">
-            <span className="text-lg font-bold text-primary sm:text-xl">
+          <ReviewsTrigger
+            productId={product.id}
+            productName={product.name}
+            rating={product.rating ?? null}
+          />
+
+          <div className="mt-auto flex flex-wrap items-end justify-between gap-x-2 gap-y-2 pt-3">
+            <span className="text-lg font-bold text-price sm:text-xl">
               {formatCOP(product.price)}
             </span>
 
-            {soldOut ? (
-              <span className="rounded-full border border-red-200 bg-red-50 px-4 py-2 text-xs font-semibold text-red-600">
-                Agotado
-              </span>
-            ) : (
-              <Button
-                size="default"
-                disabled={adding}
-                onClick={() =>
-                  product.addons.length > 0 ? setDialogOpen(true) : addDirect()
-                }
-                className="gap-1.5"
-              >
-                {adding ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <>
-                    <Plus className="size-4" />
-                    Agregar
-                  </>
-                )}
-              </Button>
-            )}
+            <div className="flex items-center gap-2">
+              {soldOut ? (
+                <span className="rounded-full border border-red-200 bg-red-50 px-4 py-2 text-xs font-semibold text-red-600">
+                  Agotado
+                </span>
+              ) : closed ? (
+                <span className="rounded-full border bg-muted px-4 py-2 text-xs font-semibold text-muted-foreground">
+                  Cerrado
+                </span>
+              ) : (
+                <Button
+                  size="default"
+                  disabled={adding}
+                  onClick={() =>
+                    product.addons.length > 0 ? setDialogOpen(true) : addDirect()
+                  }
+                  className="h-10 gap-1.5"
+                >
+                  {adding ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <>
+                      <Plus className="size-4" />
+                      Agregar
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
       {/* Visor de imagen ampliada */}
       <Dialog open={imageOpen} onOpenChange={setImageOpen}>
-        <DialogContent className="max-w-lg p-0 sm:max-w-xl">
-          <button
-            type="button"
-            onClick={() => setImageOpen(false)}
-            className="absolute right-3 top-3 z-10 rounded-full bg-black/60 p-1.5 text-white transition hover:bg-black/80"
-          >
-            <X className="size-5" />
-          </button>
+        <DialogContent
+          className="max-w-lg p-0 sm:max-w-xl"
+          closeButtonClassName="bg-white text-foreground hover:bg-white/90"
+        >
           <div className="relative aspect-square w-full">
             <Image
               src={product.imageUrl}
@@ -257,42 +292,69 @@ export function ProductCard({ product }: { product: ProductCardData }) {
             </div>
 
             <div className="flex items-center justify-between gap-3">
-              <span className="text-xl font-bold text-primary">
+              <span className="text-xl font-bold text-price">
                 {formatCOP(product.price)}
               </span>
 
-              {soldOut ? (
-                <span className="rounded-full border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-600">
-                  Agotado
-                </span>
-              ) : (
+              <div className="flex items-center gap-2">
                 <Button
+                  variant="outline"
                   size="lg"
-                  disabled={adding}
-                  onClick={() => {
-                    setImageOpen(false);
-                    if (product.addons.length > 0) {
-                      setDialogOpen(true);
-                    } else {
-                      addDirect();
-                    }
-                  }}
-                  className="gap-1.5"
+                  onClick={() => setReviewsOpen(true)}
+                  className="h-10 gap-1.5"
+                  aria-label={`Calificar ${product.name}`}
                 >
-                  {adding ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <>
-                      <Plus className="size-4" />
-                      Agregar
-                    </>
-                  )}
+                  <Star className="size-4 fill-amber-400 text-amber-400" />
+                  Calificar
                 </Button>
-              )}
+                {soldOut ? (
+                  <span className="rounded-full border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-600">
+                    Agotado
+                  </span>
+                ) : closed ? (
+                  <span className="rounded-full border bg-muted px-4 py-2 text-sm font-semibold text-muted-foreground">
+                    Cerrado
+                  </span>
+                ) : (
+                  <Button
+                    size="lg"
+                    disabled={adding}
+                    onClick={() => {
+                      setImageOpen(false);
+                      if (product.addons.length > 0) {
+                        setDialogOpen(true);
+                      } else {
+                        addDirect();
+                      }
+                    }}
+                    className="h-10 gap-1.5"
+                  >
+                    {adding ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <>
+                        <Plus className="size-4" />
+                        Agregar
+                      </>
+                    )}
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Reseñas (diálogo a nivel raíz, nunca anidado dentro del visor) */}
+      <ReviewsTrigger
+        variant="cta"
+        productId={product.id}
+        productName={product.name}
+        rating={product.rating ?? null}
+        open={reviewsOpen}
+        hideTrigger
+        onOpenChange={setReviewsOpen}
+      />
 
       {/* Selector de adicionales */}
       <Dialog
@@ -302,19 +364,23 @@ export function ProductCard({ product }: { product: ProductCardData }) {
           if (!o) resetSel();
         }}
       >
-        <DialogContent className="sm:max-w-md" onOpenAutoFocus={(e) => e.preventDefault()}>
-          <DialogHeader>
-            <DialogTitle>{product.name}</DialogTitle>
+        <DialogContent
+          className="sm:max-w-md"
+          bodyClassName="space-y-4"
+          onOpenAutoFocus={(e) => e.preventDefault()}
+        >
+          <DialogHeader className="space-y-1">
+            <DialogTitle className="pr-6">{product.name}</DialogTitle>
+            <p className="text-sm font-semibold text-price">
+              {formatCOP(product.price)}
+            </p>
           </DialogHeader>
 
-          <p className="-mt-1 text-sm font-semibold text-primary">
-            {formatCOP(product.price)}
-          </p>
-
           {product.isCombo ? (
-            <p className="-mt-2 flex items-center gap-1.5 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+            <div className="flex items-center gap-1.5 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
               <span>
-                Combo: {product.hamburguesas} {product.hamburguesas === 1 ? "hamburguesa" : "hamburguesas"} ·{" "}
+                Combo: {product.hamburguesas}{" "}
+                {product.hamburguesas === 1 ? "hamburguesa" : "hamburguesas"} ·{" "}
                 {product.perros} {product.perros === 1 ? "perro" : "perros"}
               </span>
               <InfoTip
@@ -324,146 +390,148 @@ export function ProductCard({ product }: { product: ProductCardData }) {
                   suggestion: `Cada unidad extra se cobra por separado. "A cada producto" aplica y cobra a los ${components} productos del combo.`,
                 }}
               />
-            </p>
-          ) : null}
-
-          {product.addons.length > 0 ? (
-            <div className="space-y-3">
-              <p className="text-sm font-medium">¿Quieres agregar algo más?</p>
-              {product.addons.map((addon) => {
-                const noStock = addon.available === false;
-                const state = sel[addon.id];
-                const qty = state?.qty ?? 0;
-                const each = state?.each ?? false;
-                return (
-                  <div
-                    key={addon.id}
-                    className={cn(
-                      "rounded-lg border p-3 text-sm transition-colors",
-                      noStock
-                        ? "border-dashed opacity-50"
-                        : qty > 0
-                          ? "border-primary bg-primary/5"
-                          : "border"
-                    )}
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="font-medium">
-                          {addon.name}
-                          {noStock ? (
-                            <span className="ml-2 text-[10px] font-semibold text-destructive">
-                              Sin stock
-                            </span>
-                          ) : null}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          +{formatCOP(addon.price)} c/u
-                        </p>
-                      </div>
-
-                      {/* Stepper de cantidad */}
-                      <div
-                        className={cn(
-                          "flex items-center rounded-full border",
-                          noStock && "pointer-events-none opacity-40"
-                        )}
-                      >
-                        <button
-                          type="button"
-                          onClick={() => bump(addon.id, -1)}
-                          disabled={qty <= 0 || noStock}
-                          className="flex size-8 items-center justify-center rounded-l-full text-muted-foreground transition-colors hover:bg-muted disabled:opacity-30"
-                          aria-label={`Quitar ${addon.name}`}
-                        >
-                          <Minus className="size-4" />
-                        </button>
-                        <span className="min-w-8 text-center text-sm font-semibold">
-                          {qty}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => bump(addon.id, 1)}
-                          disabled={noStock || qty >= MAX_ADDON_QTY}
-                          className="flex size-8 items-center justify-center rounded-r-full text-muted-foreground transition-colors hover:bg-muted disabled:opacity-30"
-                          aria-label={`Añadir ${addon.name}`}
-                        >
-                          <Plus className="size-4" />
-                        </button>
-                      </div>
-                    </div>
-
-                    {product.isCombo && qty > 0 && addon.tipo !== "ACOMPAÑAMIENTO" ? (
-                      <div className="mt-3 space-y-2 border-t pt-3">
-                        <label className="flex cursor-pointer items-center gap-2 text-xs font-medium">
-                          <input
-                            type="checkbox"
-                            checked={each}
-                            onChange={(e) => setEach(addon.id, e.target.checked)}
-                            className="size-4"
-                          />
-                          Añadir una adición a cada producto del combo
-                        </label>
-
-                        {!each && hasMix ? (
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-muted-foreground">
-                              Destino:
-                            </span>
-                            <div className="flex overflow-hidden rounded-lg border">
-                              <button
-                                type="button"
-                                onClick={() => setSlot(addon.id, "HAMBURGUESA")}
-                                className={cn(
-                                  "px-3 py-1 text-xs font-semibold transition-colors",
-                                  state?.slot === "HAMBURGUESA"
-                                    ? "bg-primary text-primary-foreground"
-                                    : "hover:bg-muted"
-                                )}
-                              >
-                                La hamburguesa
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setSlot(addon.id, "PERRO")}
-                                className={cn(
-                                  "border-l px-3 py-1 text-xs font-semibold transition-colors",
-                                  state?.slot === "PERRO"
-                                    ? "bg-primary text-primary-foreground"
-                                    : "hover:bg-muted"
-                                )}
-                              >
-                                El perro
-                              </button>
-                            </div>
-                          </div>
-                        ) : null}
-
-                        {each ? (
-                          <p className="text-[11px] text-muted-foreground">
-                            {qty} {qty === 1 ? "unidad" : "unidades"} ×{" "}
-                            {components} productos ={" "}
-                            <span className="font-semibold text-foreground">
-                              {formatCOP(addon.price * qty * components)}
-                            </span>
-                          </p>
-                        ) : (
-                          <p className="text-[11px] text-muted-foreground">
-                            {qty} {qty === 1 ? "unidad" : "unidades"} ={" "}
-                            <span className="font-semibold text-foreground">
-                              {formatCOP(addon.price * qty)}
-                            </span>
-                          </p>
-                        )}
-                      </div>
-                    ) : null}
-                  </div>
-                );
-              })}
             </div>
           ) : null}
 
-          <Button size="lg" onClick={addWithAddons}>
+          {product.addons.length > 0 ? (
+            <div className="space-y-2">
+              <p className="text-sm font-medium">¿Quieres agregar algo más?</p>
+              <div className="space-y-2">
+                {product.addons.map((addon) => {
+                  const noStock = addon.available === false;
+                  const state = sel[addon.id];
+                  const qty = state?.qty ?? 0;
+                  const each = state?.each ?? false;
+                  return (
+                    <div
+                      key={addon.id}
+                      className={cn(
+                        "rounded-lg border p-3 text-sm transition-colors",
+                        noStock
+                          ? "border-dashed opacity-50"
+                          : qty > 0
+                            ? "border-primary bg-primary/5"
+                            : "border"
+                      )}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate font-medium">
+                            {addon.name}
+                            {noStock ? (
+                              <span className="ml-2 text-[10px] font-semibold text-destructive">
+                                Sin stock
+                              </span>
+                            ) : null}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            +{formatCOP(addon.price)} c/u
+                          </p>
+                        </div>
+
+                        {/* Stepper de cantidad */}
+                        <div
+                          className={cn(
+                            "flex shrink-0 items-center rounded-full border",
+                            noStock && "pointer-events-none opacity-40"
+                          )}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => bump(addon.id, -1)}
+                            disabled={qty <= 0 || noStock}
+                            className="flex size-10 items-center justify-center rounded-l-full text-muted-foreground transition-colors hover:bg-muted disabled:opacity-30"
+                            aria-label={`Quitar ${addon.name}`}
+                          >
+                            <Minus className="size-4" />
+                          </button>
+                          <span className="min-w-8 text-center text-sm font-semibold tabular-nums">
+                            {qty}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => bump(addon.id, 1)}
+                            disabled={noStock || qty >= MAX_ADDON_QTY}
+                            className="flex size-10 items-center justify-center rounded-r-full text-muted-foreground transition-colors hover:bg-muted disabled:opacity-30"
+                            aria-label={`Añadir ${addon.name}`}
+                          >
+                            <Plus className="size-4" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {product.isCombo && qty > 0 && addon.tipo !== "ACOMPAÑAMIENTO" ? (
+                        <div className="mt-3 space-y-2 border-t pt-3">
+                          <label className="flex cursor-pointer items-center gap-2 text-xs font-medium">
+                            <input
+                              type="checkbox"
+                              checked={each}
+                              onChange={(e) => setEach(addon.id, e.target.checked)}
+                              className="size-4"
+                            />
+                            Añadir una adición a cada producto del combo
+                          </label>
+
+                          {!each && hasMix ? (
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-muted-foreground">
+                                Destino:
+                              </span>
+                              <div className="flex overflow-hidden rounded-lg border">
+                                <button
+                                  type="button"
+                                  onClick={() => setSlot(addon.id, "HAMBURGUESA")}
+                                  className={cn(
+                                    "px-3 py-1 text-xs font-semibold transition-colors",
+                                    state?.slot === "HAMBURGUESA"
+                                      ? "bg-primary text-primary-foreground"
+                                      : "hover:bg-muted"
+                                  )}
+                                >
+                                  La hamburguesa
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setSlot(addon.id, "PERRO")}
+                                  className={cn(
+                                    "border-l px-3 py-1 text-xs font-semibold transition-colors",
+                                    state?.slot === "PERRO"
+                                      ? "bg-primary text-primary-foreground"
+                                      : "hover:bg-muted"
+                                  )}
+                                >
+                                  El perro
+                                </button>
+                              </div>
+                            </div>
+                          ) : null}
+
+                          {each ? (
+                            <p className="text-[11px] text-muted-foreground">
+                              {qty} {qty === 1 ? "unidad" : "unidades"} ×{" "}
+                              {components} productos ={" "}
+                              <span className="font-semibold text-foreground">
+                                {formatCOP(addon.price * qty * components)}
+                              </span>
+                            </p>
+                          ) : (
+                            <p className="text-[11px] text-muted-foreground">
+                              {qty} {qty === 1 ? "unidad" : "unidades"} ={" "}
+                              <span className="font-semibold text-foreground">
+                                {formatCOP(addon.price * qty)}
+                              </span>
+                            </p>
+                          )}
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+
+          <Button size="lg" className="h-11 w-full" onClick={addWithAddons}>
             <ShoppingCart className="size-4" />
             Agregar · {formatCOP(product.price + addonsTotal(product.addons))}
           </Button>

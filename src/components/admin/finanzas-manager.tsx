@@ -5,29 +5,16 @@ import { useRouter } from "next/navigation";
 import { AlertTriangle, DollarSign, Download, Package, TrendingDown, TrendingUp, Wallet } from "lucide-react";
 import { formatCOP, formatDate } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { KpiCard } from "@/components/admin/kpi-card";
+import { DateRangeFilter } from "@/components/admin/date-range-filter";
+import { splitExpenses } from "@/lib/sales-analytics";
+import { TablePagination, usePagination } from "@/components/admin/table-pagination";
 
 interface Filters {
   from: string;
   to: string;
-}
-
-function bogotaToday(): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Bogota", year: "numeric", month: "2-digit", day: "2-digit",
-  }).format(new Date());
-}
-
-function shiftDays(days: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Bogota", year: "numeric", month: "2-digit", day: "2-digit",
-  }).format(d);
 }
 
 export function FinanzasManager({
@@ -39,8 +26,8 @@ export function FinanzasManager({
   missingCostCount,
   filters,
 }: {
-  orders: { id: string; status: string; total: number | string; subtotal: number | string; delivery_fee: number | string; delivery_fee_retained: boolean; payment_method: string | null; origin: string; created_at: string }[];
-  expenses: { id: string; expense_date: string; amount: number | string; concept: string; category?: { name: string } | null }[];
+  orders: { id: string; status: string; total: number | string; subtotal: number | string; final_adjustment?: number | string | null; delivery_fee: number | string; delivery_fee_retained: boolean; payment_method: string | null; origin: string; created_at: string }[];
+  expenses: { id: string; expense_date: string; amount: number | string; concept: string; category?: { name: string } | null; includedInProductCost?: boolean }[];
   production: { id: string; record_date: string; total_cost: number | string }[];
   closings: { id: string; closing_date: string; orders_count: number; sales_total: number | string; expenses_total: number | string; estimated_profit: number | string; details?: Record<string, unknown> | null }[];
   cogsTotal: number;
@@ -48,7 +35,7 @@ export function FinanzasManager({
   filters: Filters;
 }) {
   const router = useRouter();
-  const [, startTransition] = useTransition();
+  const [isPending, startTransition] = useTransition();
 
   const stats = useMemo(() => {
     const validOrders = orders.filter((o) => o.status !== "CANCELADO");
@@ -57,11 +44,16 @@ export function FinanzasManager({
     // Las ventas del período son SOLO los pedidos ENTREGADO (máximo realismo).
     const deliveredOrders = orders.filter((o) => o.status === "ENTREGADO");
 
-    // Ingresos por ventas = SOLO el valor de los productos (subtotal).
-    // Los domicilios no se incluyen: ni retenidos ni externos.
-    const subtotalSales = deliveredOrders.reduce((s, o) => s + Number(o.subtotal), 0);
+    // Ingresos por ventas = valor neto de los productos (subtotal menos el
+    // ajuste del valor final, si lo hay). Los domicilios no se incluyen: ni
+    // retenidos ni externos.
+    const netProducts = (o: { subtotal: number | string; final_adjustment?: number | string | null }) =>
+      Number(o.subtotal) - Number(o.final_adjustment ?? 0);
+    const subtotalSales = deliveredOrders.reduce((s, o) => s + netProducts(o), 0);
     const sales = subtotalSales;
-    const expTotal = expenses.reduce((s, e) => s + Number(e.amount), 0);
+    // Los gastos de categorías ya incluidas en el costo de cada producto
+    // (Empaques) se muestran, pero no se restan otra vez de la utilidad.
+    const { operating: expTotal, includedInCost } = splitExpenses(expenses);
     const prodCost = production.reduce((s, p) => s + Number(p.total_cost), 0);
 
     const byMethod: Record<string, { count: number; total: number }> = {};
@@ -69,12 +61,12 @@ export function FinanzasManager({
       const m = o.payment_method ?? "EFECTIVO";
       if (!byMethod[m]) byMethod[m] = { count: 0, total: 0 };
       byMethod[m].count++;
-      byMethod[m].total += Number(o.subtotal);
+      byMethod[m].total += netProducts(o);
     });
 
     const byOrigin: Record<string, number> = {};
     deliveredOrders.forEach((o) => {
-      byOrigin[o.origin] = (byOrigin[o.origin] || 0) + Number(o.subtotal);
+      byOrigin[o.origin] = (byOrigin[o.origin] || 0) + netProducts(o);
     });
 
     // Gastos por categoría
@@ -96,6 +88,7 @@ export function FinanzasManager({
       sales,
       cogs: cogsTotal,
       expenses: expTotal,
+      includedInCost,
       prodCost,
       netProfit,
       margin,
@@ -122,12 +115,11 @@ export function FinanzasManager({
     }));
   }, [closings]);
 
-  function pushFrom(from: string) {
-    const q = new URLSearchParams({ from, to: filters.to });
-    startTransition(() => router.push(`/admin/finanzas?${q.toString()}`));
-  }
-  function pushTo(to: string) {
-    const q = new URLSearchParams({ from: filters.from, to });
+  const closingPages = usePagination(dailyData);
+  const expensePages = usePagination(expenses);
+
+  function pushRange(from: string, to: string) {
+    const q = new URLSearchParams({ from, to });
     startTransition(() => router.push(`/admin/finanzas?${q.toString()}`));
   }
 
@@ -139,42 +131,14 @@ export function FinanzasManager({
   return (
     <>
       {/* Filtros */}
-      <Card>
-        <CardContent className="flex flex-wrap items-end gap-3 py-4">
-          <div className="space-y-1.5">
-            <Label>Desde</Label>
-            <Input type="date" value={filters.from} onChange={(e) => pushFrom(e.target.value)} className="w-40" />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Hasta</Label>
-            <Input type="date" value={filters.to} onChange={(e) => pushTo(e.target.value)} className="w-40" />
-          </div>
-          <div className="flex gap-1.5">
-            {[
-              { label: "Hoy", from: bogotaToday(), to: bogotaToday() },
-              { label: "7 días", from: shiftDays(-6), to: bogotaToday() },
-              { label: "30 días", from: shiftDays(-29), to: bogotaToday() },
-              { label: "Este mes", from: `${bogotaToday().slice(0, 8)}01`, to: bogotaToday() },
-            ].map((r) => (
-              <button
-                key={r.label}
-                onClick={() => { pushFrom(r.from); }}
-                className="rounded-md border px-3 py-1.5 text-xs font-medium transition hover:bg-muted"
-              >
-                {r.label}
-              </button>
-            ))}
-          </div>
-          <div className="ml-auto">
-            <a href={exportHref}>
-              <Button variant="outline" size="sm">
-                <Download className="size-4" />
-                Exportar CSV
-              </Button>
-            </a>
-          </div>
-        </CardContent>
-      </Card>
+      <DateRangeFilter from={filters.from} to={filters.to} onChange={pushRange} pending={isPending}>
+        <Button asChild variant="outline" size="sm">
+          <a href={exportHref}>
+            <Download className="size-4" />
+            CSV
+          </a>
+        </Button>
+      </DateRangeFilter>
 
       {/* KPIs principales */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
@@ -187,8 +151,8 @@ export function FinanzasManager({
           valueClassName="text-xl text-emerald-600"
           caption={`Sin domicilios · ${stats.totalDelivered} pedidos entregados${stats.cancelled > 0 ? ` · ${stats.cancelled} cancelados` : ""}`}
           help={{
-            what: "Suma del subtotal de los pedidos ENTREGADOS en el período. No incluye domicilios (ni retenidos ni externos).",
-            formula: "Σ subtotal · solo estado ENTREGADO",
+            what: "Suma del valor neto de los productos (subtotal menos ajustes del valor final) de los pedidos ENTREGADOS en el período. No incluye domicilios (ni retenidos ni externos).",
+            formula: "Σ (subtotal − ajuste) · solo estado ENTREGADO",
             suggestion: "Compara el número de pedidos entregados vs. creados para medir cuánto se pierde entre pedido y entrega.",
           }}
         />
@@ -215,9 +179,14 @@ export function FinanzasManager({
           label="Gastos operativos"
           value={formatCOP(stats.expenses)}
           valueClassName="text-xl text-red-600"
+          caption={
+            stats.includedInCost > 0
+              ? `+ ${formatCOP(stats.includedInCost)} en empaques (ya en el costo de lo vendido)`
+              : undefined
+          }
           help={{
-            what: "Suma de los gastos registrados dentro del período de fechas.",
-            formula: "Σ monto · fecha en el filtro",
+            what: "Suma de los gastos registrados dentro del período. Los de categorías que ya forman parte del costo de cada producto (Empaques) no se suman aquí para no restarlos dos veces.",
+            formula: "Σ monto · fecha en el filtro · sin categorías incluidas en el costo",
           }}
         />
 
@@ -265,7 +234,7 @@ export function FinanzasManager({
       <div className="grid gap-4 sm:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm">Ingresos por método de pago</CardTitle>
+            <CardTitle>Ingresos por método de pago</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {Object.entries(stats.byMethod).map(([method, data]) => (
@@ -285,7 +254,7 @@ export function FinanzasManager({
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm">Gastos por categoría</CardTitle>
+            <CardTitle>Gastos por categoría</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {Object.entries(stats.expByCategory).sort((a, b) => b[1] - a[1]).map(([cat, total]) => (
@@ -304,7 +273,7 @@ export function FinanzasManager({
       {/* Ingresos por origen */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm">Ingresos por origen del pedido</CardTitle>
+          <CardTitle>Ingresos por origen del pedido</CardTitle>
         </CardHeader>
         <CardContent className="flex gap-6">
           {Object.entries(stats.byOrigin).map(([origin, total]) => (
@@ -323,7 +292,7 @@ export function FinanzasManager({
       {dailyData.length > 0 ? (
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm">Utilidad por día (cierres)</CardTitle>
+            <CardTitle>Utilidad por día (cierres)</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
@@ -339,7 +308,7 @@ export function FinanzasManager({
                   </tr>
                 </thead>
                 <tbody>
-                  {dailyData.map((d) => (
+                  {closingPages.visible.map((d) => (
                     <tr key={d.date} className="border-b last:border-0">
                       <td className="py-2 pr-4 font-medium">{formatDate(`${d.date}T12:00:00Z`)}</td>
                       <td className="py-2 pr-4 text-right text-muted-foreground">{d.orders}</td>
@@ -355,6 +324,7 @@ export function FinanzasManager({
                   ))}
                 </tbody>
               </table>
+              <TablePagination pager={closingPages} />
               <p className="mt-2 text-[11px] text-muted-foreground">
                 Los cierres anteriores al cambio de fórmula (sin costo de lo vendido) muestran &ldquo;—&rdquo; y conservan su
                 histórico inmutable.
@@ -367,7 +337,7 @@ export function FinanzasManager({
       {/* Historial de gastos */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm">Historial de gastos ({expenses.length})</CardTitle>
+          <CardTitle>Historial de gastos ({expenses.length})</CardTitle>
         </CardHeader>
         <CardContent>
           {expenses.length === 0 ? (
@@ -384,11 +354,14 @@ export function FinanzasManager({
                   </tr>
                 </thead>
                 <tbody>
-                  {expenses.map((e) => (
+                  {expensePages.visible.map((e) => (
                     <tr key={e.id} className="border-b last:border-0">
                       <td className="py-2 pr-4 whitespace-nowrap">{formatDate(`${e.expense_date}T12:00:00Z`)}</td>
                       <td className="py-2 pr-4">
                         <Badge variant="outline" className="text-[10px]">{e.category?.name ?? "Sin categoría"}</Badge>
+                        {e.includedInProductCost ? (
+                          <span className="ml-1.5 text-[10px] text-muted-foreground">en costo</span>
+                        ) : null}
                       </td>
                       <td className="py-2 pr-4 text-muted-foreground">{e.concept}</td>
                       <td className="py-2 text-right font-semibold text-red-600">{formatCOP(Number(e.amount))}</td>
@@ -397,11 +370,12 @@ export function FinanzasManager({
                 </tbody>
                 <tfoot>
                   <tr className="border-t font-bold">
-                    <td colSpan={3} className="py-2 pr-4 text-right">Total gastos</td>
+                    <td colSpan={3} className="py-2 pr-4 text-right">Total gastos operativos</td>
                     <td className="py-2 text-right text-red-600">{formatCOP(stats.expenses)}</td>
                   </tr>
                 </tfoot>
               </table>
+              <TablePagination pager={expensePages} />
             </div>
           )}
         </CardContent>
@@ -418,8 +392,8 @@ export function FinanzasManager({
             <span className="font-bold text-blue-600">Utilidad neta</span>
           </p>
           <p className="mt-1 text-[11px]">
-            Las compras de materia prima ya están dentro del costo de lo vendido
-            (no se restan por separado).
+            Las compras de materia prima y los gastos en empaques ya están dentro
+            del costo de lo vendido (no se restan por separado).
           </p>
         </CardContent>
       </Card>

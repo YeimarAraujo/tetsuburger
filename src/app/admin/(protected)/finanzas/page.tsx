@@ -1,12 +1,13 @@
 import { createClient } from "@/lib/supabase/server";
 import { getCogsForOrders, sumCogs } from "@/features/finance/cogs";
+import { fetchExpenses } from "@/features/finance/expenses";
 import { FinanzasManager } from "@/components/admin/finanzas-manager";
 import { PageHeader } from "@/components/admin/page-header";
 
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Finanzas · TETSUBURGER Admin",
+  title: "Finanzas · TETSU BURGER Admin",
 };
 
 function bogotaToday(): string {
@@ -35,15 +36,10 @@ export default async function FinanzasPage({
   const [ordersRes, expensesRes, productionRes, closingsRes] = await Promise.all([
     supabase
       .from("orders")
-      .select("id, status, total, subtotal, delivery_fee, delivery_fee_retained, payment_method, origin, created_at")
+      .select("id, status, total, subtotal, final_adjustment, delivery_fee, delivery_fee_retained, payment_method, origin, created_at")
       .gte("created_at", `${from}T00:00:00-05:00`)
       .lte("created_at", `${to}T23:59:59-05:00`),
-    supabase
-      .from("expenses")
-      .select("id, expense_date, amount, concept, category:expense_categories(name)")
-      .gte("expense_date", from)
-      .lte("expense_date", to)
-      .order("expense_date", { ascending: false }),
+    fetchExpenses(supabase, from, to),
     supabase
       .from("production_records")
       .select("id, record_date, total_cost")
@@ -59,17 +55,12 @@ export default async function FinanzasPage({
 
   const orders = (ordersRes.data ?? []) as {
     id: string; status: string; total: string | number; subtotal: string | number;
+    final_adjustment: string | number | null;
     delivery_fee: string | number; delivery_fee_retained: boolean;
     payment_method: string | null; origin: string; created_at: string;
   }[];
 
-  const expenses = ((expensesRes.data ?? []) as unknown as {
-    id: string; expense_date: string; amount: string | number; concept: string;
-    category?: { name: string }[] | { name: string } | null;
-  }[]).map((e) => ({
-    ...e,
-    category: Array.isArray(e.category) ? e.category[0] ?? null : e.category ?? null,
-  }));
+  const expenses = expensesRes;
 
   const production = (productionRes.data ?? []) as {
     id: string; record_date: string; total_cost: string | number;
@@ -83,13 +74,13 @@ export default async function FinanzasPage({
   }[];
 
   // Costo de lo vendido de los pedidos entregados en el período (misma
-  // fórmula que cierre/dashboard): Σ products.cost × cantidad.
+  // fórmula que cierre/dashboard): costo guardado en cada venta.
   const deliveredIds = orders.filter((o) => o.status === "ENTREGADO").map((o) => o.id);
   const { map: cogsByOrder, missingCostCount } = await getCogsForOrders(deliveredIds);
   const cogsTotal = sumCogs(cogsByOrder);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-4 lg:p-6">
+    <div className="mx-auto w-full max-w-6xl space-y-6 p-4 lg:p-6">
       <PageHeader
         title="Finanzas"
         description="Resumen financiero del período · ventas entregadas, costo de lo vendido, gastos y utilidad"

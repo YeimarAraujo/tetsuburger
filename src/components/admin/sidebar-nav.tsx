@@ -3,59 +3,28 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  BadgePercent,
-  BarChart3,
-  CalendarCheck,
-  ChefHat,
-  ClipboardList,
-  Clock,
-  Coins,
-  LayoutDashboard,
-  Package,
-  Plus,
-  ReceiptText,
-  Settings,
-  ShieldCheck,
-  Tags,
-  UtensilsCrossed,
-  Wallet,
-} from "lucide-react";
+  ADMIN_NAV,
+  isAdminNavItemActive,
+  type AdminBadges,
+} from "@/config/admin-nav";
+import { AdminNavBadge } from "@/components/admin/admin-nav-badge";
 import { cn } from "@/lib/utils";
 
-const NAV_ITEMS = [
-  { href: "/admin", label: "Dashboard", icon: LayoutDashboard, exact: true },
-  { href: "/admin/pedidos", label: "Pedidos", icon: ClipboardList },
-  { href: "/admin/productos", label: "Productos", icon: UtensilsCrossed },
-  { href: "/admin/adicionales", label: "Adicionales", icon: Plus },
-  { href: "/admin/categorias", label: "Categorías", icon: Tags },
-  { href: "/admin/horarios", label: "Horarios", icon: Clock },
-  { href: "/admin/gastos", label: "Gastos", icon: ReceiptText },
-  { href: "/admin/produccion", label: "Compras", icon: ChefHat },
-  { href: "/admin/inventario", label: "Inventario", icon: Package },
-  { href: "/admin/caja", label: "Caja y Pagos", icon: Coins },
-  { href: "/admin/finanzas", label: "Finanzas", icon: Wallet },
-  { href: "/admin/cierres", label: "Cierres diarios", icon: CalendarCheck },
-  { href: "/admin/reportes", label: "Reportes", icon: BarChart3 },
-  { href: "/admin/rentabilidad", label: "Rentabilidad", icon: BadgePercent },
-  { href: "/admin/configuracion", label: "Configuración", icon: Settings },
-  // { href: "/admin/auditoria", label: "Auditoría", icon: ShieldCheck },
-];
-
-export function SidebarNav() {
+export function SidebarNav({ badges }: { badges: AdminBadges }) {
   const pathname = usePathname();
 
   return (
     <nav className="space-y-1 px-3">
-      {NAV_ITEMS.map((item) => {
-        const active = item.exact
-          ? pathname === item.href
-          : pathname.startsWith(item.href);
+      {ADMIN_NAV.map((item) => {
+        const active = isAdminNavItemActive(item, pathname);
         const Icon = item.icon;
+        const badgeCount = item.badge ? badges[item.badge] : 0;
 
         return (
           <Link
             key={item.href}
             href={item.href}
+            aria-current={active ? "page" : undefined}
             className={cn(
               "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
               active
@@ -65,6 +34,7 @@ export function SidebarNav() {
           >
             <Icon className="size-4 shrink-0" />
             {item.label}
+            <AdminNavBadge count={badgeCount} active={active} />
           </Link>
         );
       })}

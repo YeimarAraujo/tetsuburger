@@ -21,22 +21,28 @@ export function grossProfit(price: number, cost: number): number {
 
 /* --------------------------- Simulador de costo completo --------------------------- */
 // Los costos fijos mensuales (nómina, arriendo, servicios y otros) se reparten
-// por unidad vendida, y el precio sugerido cubre: ingredientes + empaque +
-// comisión (porcentaje y/o fija) + costos fijos + la utilidad neta objetivo.
+// como un PORCENTAJE de las ventas del mes: cada producto aporta a los fijos en
+// proporción a su precio (una gaseosa no carga lo mismo que un combo). El
+// precio sugerido cubre: ingredientes + empaque + comisión (porcentaje y/o
+// fija) + su parte de los costos fijos + la utilidad neta objetivo, y se
+// redondea hacia arriba a un precio comercial.
 
 export interface BusinessCostsInput {
   nomina: number;
   arriendo: number;
   servicios: number;
   otrosFijos: number;
-  unidadesMes: number;
+  /** Ventas mensuales en COP sobre las que se reparten los costos fijos. */
+  ventasMes: number;
   utilidadObjetivo: number; // fracción (0.15 = 15%)
   comisionPct: number; // fracción (0.15 = 15% del precio bruto)
   comisionFija: number; // valor en COP por venta (mensajero externo)
+  /** Múltiplo al que se redondea el precio sugerido (100, 500, 1000). */
+  redondeo: number;
 }
 
 export interface UnitCostsInput {
-  ingredientes: number; // products.cost
+  ingredientes: number; // parte de products.cost sin empaque
   empaque: number; // packaging_cost
 }
 
@@ -44,32 +50,41 @@ export function totalCostosFijos(input: BusinessCostsInput): number {
   return input.nomina + input.arriendo + input.servicios + input.otrosFijos;
 }
 
-export function fixedCostPerUnit(input: BusinessCostsInput): number {
+/**
+ * Fracción de cada venta que se va en costos fijos (0.25 = 25 %).
+ * Sin ventas estimadas no se pueden repartir: se toma como 100 %.
+ */
+export function fixedCostShare(input: BusinessCostsInput): number {
   const fijos = totalCostosFijos(input);
-  if (input.unidadesMes <= 0) return fijos;
-  return fijos / input.unidadesMes;
+  if (fijos <= 0) return 0;
+  if (input.ventasMes <= 0) return 1;
+  return fijos / input.ventasMes;
+}
+
+/** Redondea hacia arriba al múltiplo comercial (p. ej. 15.237 → 15.500). */
+export function roundUpTo(value: number, step: number): number {
+  const s = step > 0 ? step : 100;
+  return Math.ceil(value / s) * s;
 }
 
 export function fullCostPrice(
   unit: UnitCostsInput,
   input: BusinessCostsInput
 ): { precio: number; denom: number } {
-  const denom = 1 - input.utilidadObjetivo - input.comisionPct;
+  const denom = 1 - input.utilidadObjetivo - input.comisionPct - fixedCostShare(input);
   if (denom <= 0.05) return { precio: 0, denom };
-  const base =
-    unit.ingredientes + unit.empaque + fixedCostPerUnit(input) + input.comisionFija;
-  return { precio: Math.ceil(base / denom / 100) * 100, denom };
+  const base = unit.ingredientes + unit.empaque + input.comisionFija;
+  return { precio: roundUpTo(base / denom, input.redondeo), denom };
 }
 
 export function breakEvenPrice(
   unit: UnitCostsInput,
   input: BusinessCostsInput
 ): number {
-  const denom = 1 - input.comisionPct;
+  const denom = 1 - input.comisionPct - fixedCostShare(input);
   if (denom <= 0.05) return 0;
-  const base =
-    unit.ingredientes + unit.empaque + fixedCostPerUnit(input) + input.comisionFija;
-  return Math.ceil(base / denom / 100) * 100;
+  const base = unit.ingredientes + unit.empaque + input.comisionFija;
+  return roundUpTo(base / denom, 100);
 }
 
 export interface Bucket {
@@ -101,7 +116,7 @@ export function fullCostBreakdown(
     };
   }
 
-  const fijoUnit = fixedCostPerUnit(input);
+  const fijoUnit = precio * fixedCostShare(input);
   const comisionPctPesos = precio * input.comisionPct;
   const utilidadPesos =
     precio -

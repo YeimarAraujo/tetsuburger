@@ -51,13 +51,19 @@ function DialogContent({
   className,
   children,
   showCloseButton = true,
+  closeButtonClassName,
+  bodyClassName,
+  overlayClassName,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
+  closeButtonClassName?: string
+  bodyClassName?: string
+  overlayClassName?: string
 }) {
   return (
     <DialogPortal>
-      <DialogOverlay />
+      <DialogOverlay className={overlayClassName} />
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
@@ -66,18 +72,23 @@ function DialogContent({
         )}
         {...props}
       >
-        <div className="max-h-[calc(100dvh-3rem)] w-full overflow-y-auto overscroll-contain rounded-xl p-4">
+        <div
+          className={cn(
+            "max-h-[calc(100dvh-3rem)] w-full overflow-y-auto overscroll-contain rounded-xl p-4",
+            bodyClassName
+          )}
+        >
           {children}
         </div>
         {showCloseButton && (
           <DialogPrimitive.Close data-slot="dialog-close" asChild>
             <Button
               variant="ghost"
-              className="absolute top-2 right-2 z-10"
+              className={cn("absolute top-2 right-2 z-10", closeButtonClassName)}
               size="icon-sm"
             >
               <X className="size-4 opacity-70 transition-opacity hover:opacity-100" />
-              <span className="sr-only">Close</span>
+              <span className="sr-only">Cerrar</span>
             </Button>
           </DialogPrimitive.Close>
         )}
@@ -116,7 +127,7 @@ function DialogFooter({
       {children}
       {showCloseButton && (
         <DialogPrimitive.Close asChild>
-          <Button variant="outline">Close</Button>
+          <Button variant="outline">Cerrar</Button>
         </DialogPrimitive.Close>
       )}
     </div>

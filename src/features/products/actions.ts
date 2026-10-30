@@ -54,7 +54,7 @@ async function uploadImage(
     return { error: "Formato de imagen no permitido (usa JPG, PNG o WebP)" };
   }
   if (file.size > MAX_IMAGE_SIZE) {
-    return { error: "La imagen supera el máximo de 3 MB" };
+    return { error: "La imagen supera el máximo de 1 MB" };
   }
 
   const ext = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";

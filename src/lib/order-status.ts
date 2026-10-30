@@ -66,6 +66,22 @@ export function nextStatusFor(
   return NEXT_STATUS[status];
 }
 
+/**
+ * ¿Se permite pasar de `from` a `to`? Avanza un paso según el flujo (LISTO va
+ * a EN_CAMINO solo en domicilios) o cancela desde cualquier estado activo.
+ * ENTREGADO y CANCELADO son finales (solo "Deshacer" los revierte).
+ * Debe coincidir con order_transition_allowed() de la migración 0032.
+ */
+export function canTransition(
+  from: OrderStatus,
+  to: OrderStatus,
+  deliveryType?: string | null
+): boolean {
+  if (from === "ENTREGADO" || from === "CANCELADO") return false;
+  if (to === "CANCELADO") return true;
+  return nextStatusFor(from, deliveryType) === to;
+}
+
 export const ACTIVE_STATUSES: OrderStatus[] = [
   "PENDIENTE",
   "CONFIRMADO",

@@ -3,7 +3,7 @@ import { ExpenseManager, type ExpenseRow } from "@/components/admin/expenses/exp
 import { PageHeader } from "@/components/admin/page-header";
 
 export const metadata = {
-  title: "Gastos · TETSUBURGER Admin",
+  title: "Gastos · TETSU BURGER Admin",
 };
 
 export const dynamic = "force-dynamic";
@@ -84,7 +84,7 @@ export default async function ExpensesPage({
   }));
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-4 lg:p-6">
+    <div className="mx-auto w-full max-w-6xl space-y-6 p-4 lg:p-6">
       <PageHeader
         title="Gastos"
         description="Control de egresos del negocio · alimenta el cierre diario y las finanzas"

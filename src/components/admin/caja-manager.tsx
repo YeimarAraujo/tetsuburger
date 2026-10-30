@@ -28,6 +28,8 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { KpiCard } from "@/components/admin/kpi-card";
+import { DateRangeFilter } from "@/components/admin/date-range-filter";
+import { TablePagination, usePagination } from "@/components/admin/table-pagination";
 
 export interface CajaRow {
   id: string;
@@ -56,12 +58,6 @@ const TIPO_META: Record<CajaTipo, { label: string; className: string }> = {
   RETIRO: { label: "Retiro", className: "bg-orange-500/10 text-orange-600" },
   AJUSTE: { label: "Ajuste", className: "bg-blue-500/10 text-blue-600" },
 };
-
-function moveMonth(days: number, from: string): string {
-  const d = new Date(`${from}T12:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
-}
 
 function addDays(dateStr: string, delta: number): string {
   const d = new Date(`${dateStr}T12:00:00Z`);
@@ -113,6 +109,7 @@ export function CajaManager({ rows, base }: { rows: CajaRow[]; base: number }) {
   const [from, setFrom] = useState(() => `${bogotaToday().slice(0, 8)}01`);
   const [to, setTo] = useState(bogotaToday());
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- usado por el bloque "Arqueo de caja" (comentado)
   const [arqueoDate, setArqueoDate] = useState(bogotaToday());
   const [contado, setContado] = useState("");
   const [manTipo, setManTipo] = useState<"INGRESO_EXTRA" | "RETIRO" | "AJUSTE">("INGRESO_EXTRA");
@@ -137,6 +134,7 @@ export function CajaManager({ rows, base }: { rows: CajaRow[]; base: number }) {
     () => rows.filter((r) => r.movement_date >= from && r.movement_date <= to),
     [rows, from, to]
   );
+  const pager = usePagination(filtered);
   const ingresos = filtered.filter((r) => r.amount > 0).reduce((s, r) => s + Number(r.amount), 0);
   const egresos = filtered.filter((r) => r.amount < 0).reduce((s, r) => s + Number(r.amount), 0);
 
@@ -214,6 +212,7 @@ export function CajaManager({ rows, base }: { rows: CajaRow[]; base: number }) {
     startTransition(() => router.refresh());
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- usado por el bloque "Arqueo de caja" (comentado)
   async function handleAjuste() {
     if (diff === 0) return;
     setSaving(true);
@@ -350,7 +349,7 @@ export function CajaManager({ rows, base }: { rows: CajaRow[]; base: number }) {
       {/* Arqueo del día */}
       {/* <Card className="border-primary/30 bg-primary/5">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-sm">
+          <CardTitle className="flex items-center gap-2">
             <Coins className="size-4 text-primary" />
             Arqueo de caja (efectivo)
           </CardTitle>
@@ -411,7 +410,7 @@ export function CajaManager({ rows, base }: { rows: CajaRow[]; base: number }) {
       {/* Base de caja */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-sm">
+          <CardTitle className="flex items-center gap-2">
             <Landmark className="size-4 text-primary" />
             Base de caja
           </CardTitle>
@@ -450,7 +449,7 @@ export function CajaManager({ rows, base }: { rows: CajaRow[]; base: number }) {
       {/* Saldo a una fecha */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-sm">
+          <CardTitle className="flex items-center gap-2">
             <CalendarDays className="size-4 text-primary" />
             Saldo a una fecha
           </CardTitle>
@@ -517,7 +516,7 @@ export function CajaManager({ rows, base }: { rows: CajaRow[]; base: number }) {
       {/* Ganancia por semana */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-sm">
+          <CardTitle className="flex items-center gap-2">
             <PiggyBank className="size-4 text-primary" />
             Ganancia por semana
           </CardTitle>
@@ -569,44 +568,20 @@ export function CajaManager({ rows, base }: { rows: CajaRow[]; base: number }) {
       </Card>
 
       {/* Filtros */}
-      <Card>
-        <CardContent className="flex flex-wrap items-end gap-3 py-4">
-          <div className="space-y-1.5">
-            <Label>Desde</Label>
-            <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-40" />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Hasta</Label>
-            <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-40" />
-          </div>
-          <div className="flex gap-1.5">
-            {[
-              { label: "Hoy", from: bogotaToday(), to: bogotaToday() },
-              { label: "7 días", from: moveMonth(-6, bogotaToday()), to: bogotaToday() },
-              { label: "Este mes", from: `${bogotaToday().slice(0, 8)}01`, to: bogotaToday() },
-            ].map((r) => (
-              <Button
-                key={r.label}
-                variant="outline"
-                size="sm"
-                disabled={isPending}
-                onClick={() => {
-                  setFrom(r.from);
-                  setTo(r.to);
-                }}
-              >
-                {r.label}
-              </Button>
-            ))}
-          </div>
-          <div className="ml-auto">
-            <Button size="sm" onClick={() => setDialogOpen(true)}>
-              <Plus className="size-4" />
-              Registrar movimiento
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      <DateRangeFilter
+        from={from}
+        to={to}
+        onChange={(f, t) => {
+          setFrom(f);
+          setTo(t);
+        }}
+        pending={isPending}
+      >
+        <Button size="sm" onClick={() => setDialogOpen(true)}>
+          <Plus className="size-4" />
+          Registrar movimiento
+        </Button>
+      </DateRangeFilter>
 
       {/* Movimientos */}
       <Card>
@@ -635,7 +610,7 @@ export function CajaManager({ rows, base }: { rows: CajaRow[]; base: number }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((r) => {
+                  {pager.visible.map((r) => {
                     const meta = TIPO_META[r.tipo];
                     const medio = METODO_META[r.metodo] ?? METODO_META.EFECTIVO;
                     return (
@@ -677,6 +652,7 @@ export function CajaManager({ rows, base }: { rows: CajaRow[]; base: number }) {
                   })}
                 </tbody>
               </table>
+              <TablePagination pager={pager} />
             </div>
           )}
         </CardContent>

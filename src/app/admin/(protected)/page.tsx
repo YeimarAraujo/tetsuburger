@@ -1,24 +1,18 @@
 import { formatDate } from "@/lib/format";
 import { createClient } from "@/lib/supabase/server";
 import { getCogsForOrders, sumCogs } from "@/features/finance/cogs";
+import { fetchExpenses } from "@/features/finance/expenses";
+import { splitExpenses } from "@/lib/sales-analytics";
 import { computeOpenStatus } from "@/lib/business-hours";
+import { bogotaToday } from "@/lib/bogota";
 import { DashboardStats } from "@/components/admin/dashboard-stats";
 import { PageHeader } from "@/components/admin/page-header";
 
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Dashboard · TETSUBURGER Admin",
+  title: "Dashboard · TETSU BURGER Admin",
 };
-
-function bogotaToday(): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Bogota",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date());
-}
 
 export default async function AdminDashboardPage() {
   const supabase = await createClient();
@@ -29,32 +23,32 @@ export default async function AdminDashboardPage() {
     expensesRes,
     settingsRes,
     hoursRes,
-    todayOrdersRes,
     inventoryRes,
+    reviewsRes,
+    pqrRes,
   ] = await Promise.all([
     supabase
       .from("orders")
-      .select("id, status, subtotal, total, delivery_fee, payment_method, origin, created_at")
-      .gte("created_at", `${today}T00:00:00-05:00`)
-      .lte("created_at", `${today}T23:59:59-05:00`),
-    supabase
-      .from("expenses")
-      .select("id, amount, expense_category_id, category:expense_categories(name)")
-      .eq("expense_date", today),
-    supabase.from("settings").select("key, value").eq("is_public", true),
-    supabase.from("business_hours").select("*"),
-    supabase
-      .from("orders")
-      .select("id, order_number, status, customer_name, total, payment_method, origin, created_at")
+      .select("id, order_number, status, customer_name, subtotal, final_adjustment, total, delivery_fee, payment_method, origin, created_at")
       .gte("created_at", `${today}T00:00:00-05:00`)
       .lte("created_at", `${today}T23:59:59-05:00`)
-      .order("created_at", { ascending: false })
-      .limit(8),
+      .order("created_at", { ascending: false }),
+    fetchExpenses(supabase, today, today),
+    supabase.from("settings").select("key, value").eq("is_public", true),
+    supabase.from("business_hours").select("*"),
     supabase
       .from("inventory_items")
       .select("id, name, current_stock, min_stock, unit")
       .eq("is_active", true)
       .order("name"),
+    supabase
+      .from("product_reviews")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "PENDIENTE"),
+    supabase
+      .from("pqr_requests")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "NUEVO"),
   ]);
 
   const settings = Object.fromEntries(
@@ -67,17 +61,22 @@ export default async function AdminDashboardPage() {
   );
 
   const orders = ordersRes.data ?? [];
-  const expenses = expensesRes.data ?? [];
 
   const validOrders = orders.filter((o) => o.status !== "CANCELADO");
   const deliveredOrders = orders.filter((o) => o.status === "ENTREGADO");
 
-  // Ventas del dashboard = SOLO el valor de los productos (subtotal) de los
-  // pedidos ENTREGADO. Los domicilios no se incluyen: ni retenidos ni externos.
-  const totalSales = deliveredOrders.reduce((s, o) => s + Number(o.subtotal), 0);
-  const totalExpenses = expenses.reduce((s, o) => s + Number(o.amount), 0);
+  // Ventas del dashboard = valor neto de los productos (subtotal menos el
+  // ajuste del valor final) de los pedidos ENTREGADO. Los domicilios no se
+  // incluyen: ni retenidos ni externos.
+  const totalSales = deliveredOrders.reduce(
+    (s, o) => s + Number(o.subtotal) - Number(o.final_adjustment ?? 0),
+    0
+  );
+  // Los gastos ya incluidos en el costo de cada producto (Empaques) no se
+  // restan otra vez.
+  const totalExpenses = splitExpenses(expensesRes).operating;
 
-  // Utilidad = ventas entregadas − costo de lo vendido − gastos.
+  // Utilidad = ventas entregadas − costo de lo vendido − gastos operativos.
   const { map: cogsByOrder, missingCostCount } = await getCogsForOrders(
     deliveredOrders.map((o) => o.id)
   );
@@ -104,7 +103,7 @@ export default async function AdminDashboardPage() {
   );
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 p-4 lg:p-6">
+    <div className="mx-auto w-full max-w-6xl space-y-6 p-4 lg:p-6">
       <PageHeader
         title="Dashboard"
         description={`Resumen de hoy · ${formatDate(`${today}T12:00:00Z`)}`}
@@ -122,7 +121,10 @@ export default async function AdminDashboardPage() {
           ordersByStatus,
           paymentsByMethod,
         }}
-        recentOrders={todayOrdersRes.data ?? []}
+        todayOrders={orders}
+        dateLabel={formatDate(`${today}T12:00:00Z`)}
+        pendingReviews={reviewsRes.count ?? 0}
+        newPqr={pqrRes.count ?? 0}
         lowStock={lowStock}
       />
     </div>

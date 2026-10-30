@@ -7,7 +7,7 @@ import { getAddonsAvailability } from "@/lib/consumption-availability";
 import { PageHeader } from "@/components/admin/page-header";
 
 export const metadata = {
-  title: "Nuevo pedido manual · TETSUBURGER Admin",
+  title: "Nuevo pedido manual · TETSU BURGER Admin",
 };
 
 export const dynamic = "force-dynamic";
@@ -64,7 +64,7 @@ export default async function ManualOrderPage() {
   ) as Record<string, unknown>;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-4 lg:p-6">
+    <div className="mx-auto w-full max-w-6xl space-y-6 p-4 lg:p-6">
       <PageHeader
         title="Nuevo pedido manual"
         description="Registra pedidos tomados por llamada, en mesa o por WhatsApp"

@@ -3,7 +3,7 @@ import { AddonManager } from "@/components/admin/addons/addon-manager";
 import { PageHeader } from "@/components/admin/page-header";
 
 export const metadata = {
-  title: "Adicionales · TETSUBURGER Admin",
+  title: "Adicionales · TETSU BURGER Admin",
 };
 
 export default async function AddonsPage() {
@@ -13,11 +13,11 @@ export default async function AddonsPage() {
     supabase.from("addons").select("*").order("name"),
     supabase
       .from("inventory_items")
-      .select("id, name, unit")
+      .select("id, name, unit, cost")
       .eq("is_active", true)
       .order("name"),
     supabase.from("addon_consumptions").select(
-      "id, addon_id, inventory_item_id, quantity, item:inventory_items(name, unit)"
+      "id, addon_id, inventory_item_id, quantity, item:inventory_items(name, unit, cost)"
     ),
   ]);
 
@@ -30,7 +30,7 @@ export default async function AddonsPage() {
   }));
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 p-4 lg:p-6">
+    <div className="mx-auto w-full max-w-6xl space-y-6 p-4 lg:p-6">
       <PageHeader
         title="Adicionales"
         description="Extras que el cliente puede agregar a los productos. Configura cuánto insumo descuenta cada adicional al entregar."

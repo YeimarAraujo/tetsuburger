@@ -2,8 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { checkStaff } from "@/features/auth/guard";
 
 export interface ActionResult {
   error?: string;
@@ -21,16 +21,13 @@ export interface ConsumptionBreakDownItem {
 /**
  * Devuelve el desglose de consumo que se aplicará a un pedido, combinando la
  * receta base + adiciones (autoNeeded) con los ajustes manuales (overrideQty).
- * Se usa para mostrar/editar los consumos en el board antes de ENTREGADO.
+ * Se usa para mostrar/editar los consumos en el board antes de EN_PREPARACION.
  */
 export async function getOrderConsumptionBreakdown(
   orderId: string
 ): Promise<{ items?: ConsumptionBreakDownItem[]; error?: string }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Sesión expirada. Vuelve a iniciar sesión." };
+  const check = await checkStaff();
+  if (!check.ok) return { error: check.error };
 
   const admin = createAdminClient();
 
@@ -198,25 +195,35 @@ export async function saveOrderConsumptionOverrides(
   const parsed = overrideSchema.safeParse({ orderId, items });
   if (!parsed.success) return { error: parsed.error.issues[0].message };
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Sesión expirada. Vuelve a iniciar sesión." };
+  const check = await checkStaff();
+  if (!check.ok) return { error: check.error };
+  const supabase = createAdminClient();
 
-  // Borra todos los overrides actuales del pedido y guarda los nuevos
+  // El inventario se descuenta una sola vez al pasar a EN_PREPARACION; después
+  // de eso los ajustes ya no tendrían efecto.
+  const { data: consumed } = await supabase
+    .from("order_consumption_logs")
+    .select("id")
+    .eq("order_id", parsed.data.orderId)
+    .limit(1);
+  if (consumed && consumed.length > 0) {
+    return { error: "Los insumos de este pedido ya se descontaron al pasar a preparación." };
+  }
+
+  // Borra todos los overrides actuales del pedido y guarda los nuevos.
+  // Se guardan también los quantity = 0: significan "no descontar este insumo"
+  // y el motor de consumo los interpreta así (consumeInventoryForOrder).
   const { error: delErr } = await supabase
     .from("order_consumption_overrides")
     .delete()
     .eq("order_id", parsed.data.orderId);
   if (delErr) return { error: "No se pudo actualizar los consumos" };
 
-  const nonZero = parsed.data.items.filter((i) => i.quantity > 0);
-  if (nonZero.length > 0) {
+  if (parsed.data.items.length > 0) {
     const { error: insErr } = await supabase
       .from("order_consumption_overrides")
       .insert(
-        nonZero.map((i) => ({
+        parsed.data.items.map((i) => ({
           order_id: parsed.data.orderId,
           inventory_item_id: i.inventoryItemId,
           quantity: i.quantity,

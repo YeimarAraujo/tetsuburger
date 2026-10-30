@@ -1,5 +1,11 @@
 const TIMEZONE = "America/Bogota";
 
+/** Convierte cualquier valor a número finito (0 si no lo es). */
+export function toFiniteNumber(value: unknown): number {
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
 /** Formatea montos en COP sin decimales: 68000 -> "$68.000" */
 export function formatCOP(amount: number | string): string {
   const value = typeof amount === "string" ? parseFloat(amount) : amount;
@@ -8,7 +14,19 @@ export function formatCOP(amount: number | string): string {
     currency: "COP",
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
-  }).format(value ?? 0);
+  }).format(Number.isFinite(value) ? value : 0);
+}
+
+/** Monto compacto para ejes y etiquetas de gráficas: 1250000 -> "$1,3 M" */
+export function formatCOPCompact(amount: number): string {
+  const value = Number.isFinite(amount) ? amount : 0;
+  if (Math.abs(value) < 1000) return formatCOP(value);
+  return new Intl.NumberFormat("es-CO", {
+    style: "currency",
+    currency: "COP",
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(value);
 }
 
 /** Fecha legible en hora de Colombia: "24/08/2026, 8:45 p.m." */
@@ -20,7 +38,7 @@ export function formatDateTime(date: string | Date): string {
   }).format(new Date(date));
 }
 
-/** Solo fecha: "24/08/2026" */
+/** Solo fecha: "24/08/26" */
 export function formatDate(date: string | Date): string {
   return new Intl.DateTimeFormat("es-CO", {
     dateStyle: "short",

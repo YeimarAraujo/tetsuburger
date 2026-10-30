@@ -5,9 +5,9 @@ export function Logo({ className }: { className?: string }) {
   return (
     <Image
       src="/images/logo.webp"
-      alt="TETSUBURGER"
-      width={240}
-      height={240}
+      alt="TETSU BURGER"
+      width={483}
+      height={180}
       className={cn("h-12 w-auto object-contain", className)}
       priority
     />

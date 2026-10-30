@@ -2,12 +2,15 @@
 
 import { headers } from "next/headers";
 import { z } from "zod";
+import { site } from "@/config/site";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { computeOpenStatus } from "@/lib/business-hours";
 import { formatCOP } from "@/lib/format";
 import { rateLimit, RATE_LIMITS } from "@/lib/rate-limit";
+import { verifyTurnstile } from "@/lib/turnstile";
 import { addonLabel } from "@/lib/addons";
 import { buildWhatsappMessage } from "@/lib/whatsapp";
+import { ADDRESS_MIN, CHECKOUT_MESSAGES, NAME_MIN, PHONE_RE } from "@/lib/checkout-validation";
 import {
   buildOrderFromItems,
   persistOrder,
@@ -22,19 +25,25 @@ export interface PlaceOrderResult {
 }
 
 const customerSchema = z.object({
-  customer_name: z.string().trim().min(2, "Ingresa tu nombre").max(80),
+  customer_name: z.string().trim().min(NAME_MIN, CHECKOUT_MESSAGES.name).max(80),
   customer_phone: z
     .string()
     .trim()
-    .regex(/^[0-9+\-\s()]{7,20}$/, "Teléfono inválido"),
+    .regex(PHONE_RE, CHECKOUT_MESSAGES.phone),
   customer_address: z.string().trim().max(200).default(""),
   delivery_type: z.enum(["DOMICILIO", "RECOGIDA"]).default("DOMICILIO"),
   notes: z.string().trim().max(300).default(""),
   payment_method: z.enum(["EFECTIVO", "TRANSFERENCIA"]),
+  accepted_terms: z.boolean().refine((value) => value === true, {
+    message: "Debes aceptar los términos y la política de privacidad",
+  }),
+  turnstile_token: z.string().trim().max(4000).default(""),
+  // Honeypot: debe llegar vacío; si trae algo es un bot.
+  website: z.string().max(500).default(""),
 })
   .refine(
-    (data) => data.delivery_type !== "DOMICILIO" || data.customer_address.length >= 5,
-    { message: "Ingresa una dirección válida para el domicilio", path: ["customer_address"] }
+    (data) => data.delivery_type !== "DOMICILIO" || data.customer_address.length >= ADDRESS_MIN,
+    { message: CHECKOUT_MESSAGES.address, path: ["customer_address"] }
   );
 
 export async function placeOrder(
@@ -46,15 +55,31 @@ export async function placeOrder(
     return { error: parsedCustomer.error.issues[0].message };
   }
 
+  // Honeypot: responde como enviado para no dar pistas al bot, sin registrar.
+  if (parsedCustomer.data.website) {
+    return { error: "No se pudo registrar el pedido. Intenta de nuevo." };
+  }
+
   // Rate limit: 10 pedidos / 10 min por IP
   const hdrs = await headers();
   const ip =
     hdrs.get("x-forwarded-for")?.split(",")[0]?.trim() ??
     hdrs.get("x-real-ip") ??
     "anonymous";
-  const { allowed } = rateLimit(`placeOrder:${ip}`, RATE_LIMITS.placeOrder);
+  const { allowed } = await rateLimit(`placeOrder:${ip}`, RATE_LIMITS.placeOrder);
   if (!allowed) {
     return { error: "Has hecho muchos pedidos recientemente. Intenta en unos minutos." };
+  }
+
+  const turnstile = await verifyTurnstile(
+    parsedCustomer.data.turnstile_token,
+    ip
+  );
+  if (!turnstile.ok) {
+    return {
+      error:
+        turnstile.error ?? "No se pudo verificar la seguridad. Intenta de nuevo.",
+    };
   }
 
   const built = await buildOrderFromItems(itemsRaw);
@@ -106,12 +131,15 @@ export async function placeOrder(
     total,
     customerName: customer.customer_name,
     customerPhone: customer.customer_phone,
-    customerAddress: isDelivery ? customer.customer_address : "",
+    // En recolecta la dirección se guarda como referencia (no se descarta).
+    customerAddress: customer.customer_address,
     notes: customer.notes,
     deliveryType: isDelivery ? "DOMICILIO" : "RECOGIDA",
     paymentMethod: customer.payment_method,
     createdBy: null,
     confirmedAt: null,
+    acceptedTermsAt: new Date().toISOString(),
+    policyVersion: site.legal.policyVersion,
   });
 
   if (persisted.error || !persisted.orderNumber) {

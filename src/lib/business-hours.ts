@@ -19,6 +19,11 @@ export interface OpenStatus {
   nextOpensAt: string | null;
 }
 
+/** Minuto actual (Date.now() / 60 000): unidad con la que se refresca el estado. */
+export function currentMinute(): number {
+  return Math.floor(Date.now() / 60_000);
+}
+
 /** Hora actual en Colombia como "HH:MM" */
 export function nowInBogota(date = new Date()): { time: string; dayOfWeek: number; now: Date } {
   const fmt = new Intl.DateTimeFormat("en-US", {
@@ -116,8 +121,8 @@ export function computeOpenStatus(
   const { time, dayOfWeek, now } = nowInBogota(date);
   const today = hours.find((h) => h.day_of_week === dayOfWeek);
 
-  if (!today || !today.is_active) {
-    // Busca el próximo día abierto para informar al cliente
+  // Próxima apertura en un día posterior al de hoy (el más cercano con atención).
+  const nextActiveDay = (): OpenStatus => {
     const next = [...Array(7).keys()]
       .map((offset) => ({
         day: (dayOfWeek + offset) % 7,
@@ -135,7 +140,9 @@ export function computeOpenStatus(
         : "Hoy no tenemos atención. Vuelve pronto.",
       nextOpensAt: next?.row ? nextOpensISO(next.day, next.row.opens_at, now) : null,
     };
-  }
+  };
+
+  if (!today || !today.is_active) return nextActiveDay();
 
   const open = isTimeInRange(time, today.opens_at, today.closes_at);
 
@@ -147,7 +154,10 @@ export function computeOpenStatus(
     };
   }
 
-  // Fuera de rango hoy
+  // Sin cruce de medianoche y ya pasó el cierre: abre el próximo día con atención.
+  if (today.opens_at < today.closes_at && time > today.closes_at) return nextActiveDay();
+
+  // Todavía no abre hoy
   return {
     isOpen: false,
     message: `Nuestro horario de atención inicia a las ${formatHour12(today.opens_at)}`,

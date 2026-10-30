@@ -1,15 +1,30 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import {
-  countSales,
-  productCountMap,
-  type SaleLine,
-} from "@/lib/sales-counting";
+import { bogotaDate, csvText } from "@/lib/csv";
+import { bogotaToday } from "@/lib/bogota";
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const PAGE = 1000;
+const money = (n: number) => String(Math.round(n * 100) / 100).replace(".", ",");
+
+interface OrderRow {
+  order_number: number;
+  customer_name: string | null;
+  subtotal: number | string;
+  final_adjustment: number | string | null;
+  payment_method: string | null;
+  origin: string;
+  created_at: string;
+  items?: {
+    quantity: number;
+    product?: { conteo_hamburguesas: number; conteo_perros: number } | null;
+  }[];
+}
 
 /**
- * Exportación CSV del historial de pedidos. Respeta los filtros from/to del módulo
- * Reportes, incluye el conteo de hamburguesas/perros por pedido y solo es
- * accesible para personal autenticado.
+ * CSV del historial de pedidos ENTREGADO del período (mismo criterio que
+ * Reportes), con el conteo de hamburguesas/perros por pedido. Se lee por
+ * páginas para no perder pedidos en períodos largos.
  */
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
@@ -20,94 +35,66 @@ export async function GET(request: NextRequest) {
   if (!user) return new NextResponse("No autorizado", { status: 401 });
 
   const params = request.nextUrl.searchParams;
-  const today = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Bogota",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date());
+  const today = bogotaToday();
+  const rawFrom = params.get("from") ?? "";
+  const rawTo = params.get("to") ?? "";
+  const from = DATE_RE.test(rawFrom) ? rawFrom : `${today.slice(0, 8)}01`;
+  const to = DATE_RE.test(rawTo) ? rawTo : today;
 
-  const from = params.get("from") || `${today.slice(0, 8)}01`;
-  const to = params.get("to") || today;
+  const orders: OrderRow[] = [];
+  for (let offset = 0; ; offset += PAGE) {
+    const { data, error } = await supabase
+      .from("orders")
+      .select(
+        "order_number, customer_name, subtotal, final_adjustment, payment_method, origin, created_at, items:order_items(quantity, product:products(conteo_hamburguesas, conteo_perros))"
+      )
+      .eq("status", "ENTREGADO")
+      .gte("created_at", `${from}T00:00:00-05:00`)
+      .lte("created_at", `${to}T23:59:59-05:00`)
+      .order("created_at")
+      .range(offset, offset + PAGE - 1);
 
-  const { data: orders } = await supabase
-    .from("orders")
-    .select("id, order_number, status, customer_name, subtotal, payment_method, origin, created_at")
-    .gte("created_at", `${from}T00:00:00-05:00`)
-    .lte("created_at", `${to}T23:59:59-05:00`)
-    .order("created_at");
-
-  const active = (orders ?? []).filter((o) => o.status !== "CANCELADO");
-  const activeIds = active.map((o) => o.id);
-
-  let perOrder: ReturnType<typeof countSales>["perOrder"] = {};
-  if (activeIds.length > 0) {
-    const [itemsRes, productsRes] = await Promise.all([
-      supabase
-        .from("order_items")
-        .select("order_id, product_id, product_name, quantity, line_total")
-        .in("order_id", activeIds),
-      supabase
-        .from("products")
-        .select("id, conteo_hamburguesas, conteo_perros"),
-    ]);
-
-    const saleLines: SaleLine[] = ((itemsRes.data ?? []) as unknown as {
-      order_id: string;
-      product_id: string | null;
-      product_name: string;
-      quantity: number;
-      line_total: number | string;
-    }[]).map((i) => ({
-      orderId: i.order_id,
-      productId: i.product_id,
-      productName: i.product_name,
-      quantity: Number(i.quantity),
-      lineTotal: Number(i.line_total),
-    }));
-
-    const productCounts = productCountMap(
-      ((productsRes.data ?? []) as unknown as {
-        id: string;
-        conteo_hamburguesas: number;
-        conteo_perros: number;
-      }[])
-    );
-
-    perOrder = countSales(saleLines, productCounts).perOrder;
+    if (error) return new NextResponse("No se pudo generar la exportación", { status: 500 });
+    orders.push(...((data ?? []) as unknown as OrderRow[]));
+    if (!data || data.length < PAGE) break;
   }
 
-  const esc = (v: string) => `"${v.replaceAll('"', '""')}"`;
-  const lines: string[] = [];
+  const lines: string[] = [
+    ["#", "Fecha", "Cliente", "Pago", "Origen", "Hamburguesas", "Perros", "Subtotal", "Total (sin domicilio)"].join(";"),
+  ];
   let total = 0;
   let totalH = 0;
   let totalP = 0;
 
-  lines.push(["#", "Fecha", "Cliente", "Estado", "Pago", "Hamburguesas", "Perros", "Subtotal", "Total (sin doms)"].join(";"));
-
-  for (const o of active) {
+  for (const o of orders) {
     const sub = Number(o.subtotal);
-    total += sub;
-    const c = perOrder[o.id] ?? { hamburguesas: 0, perros: 0 };
-    totalH += c.hamburguesas;
-    totalP += c.perros;
-    const fecha = o.created_at ? o.created_at.slice(0, 10) : "";
+    const net = sub - Number(o.final_adjustment ?? 0);
+    let h = 0;
+    let p = 0;
+    for (const i of o.items ?? []) {
+      const product = i.product && !Array.isArray(i.product) ? i.product : null;
+      h += (Number(product?.conteo_hamburguesas) || 0) * Number(i.quantity);
+      p += (Number(product?.conteo_perros) || 0) * Number(i.quantity);
+    }
+    total += net;
+    totalH += h;
+    totalP += p;
     lines.push([
       String(o.order_number),
-      fecha,
-      esc(o.customer_name ?? ""),
-      o.status,
+      bogotaDate(o.created_at),
+      csvText(o.customer_name ?? ""),
       o.payment_method ?? "EFECTIVO",
-      String(c.hamburguesas),
-      String(c.perros),
-      String(sub).replace(".", ","),
-      String(sub).replace(".", ","),
+      o.origin,
+      String(h),
+      String(p),
+      money(sub),
+      money(net),
     ].join(";"));
   }
 
-  lines.push(["", "", "", "", "", String(totalH), String(totalP), "TOTAL", String(total).replace(".", ",")].join(";"));
+  lines.push(["", "", "", "", "TOTAL", String(totalH), String(totalP), "", money(total)].join(";"));
 
-  const csv = "\uFEFF" + lines.join("\r\n");
+  const csv = "﻿" + lines.join("\r\n");
 
   return new NextResponse(csv, {
     status: 200,

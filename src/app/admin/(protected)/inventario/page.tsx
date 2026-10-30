@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/admin/page-header";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Inventario · TETSUBURGER Admin",
+  title: "Inventario · TETSU BURGER Admin",
 };
 
 export default async function InventoryPage() {
@@ -42,7 +42,7 @@ export default async function InventoryPage() {
   }));
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-4 lg:p-6">
+    <div className="mx-auto w-full max-w-6xl space-y-6 p-4 lg:p-6">
       <PageHeader
         title="Inventario"
         description="Control de insumos y stock del negocio"

@@ -96,6 +96,7 @@ export interface Order {
   payment_method: PaymentMethod;
   delivery_fee: number;
   subtotal: number;
+  final_adjustment: number;
   total: number;
   notes: string;
   created_by: string | null;
@@ -104,6 +105,8 @@ export interface Order {
   delivered_at: string | null;
   cancelled_at: string | null;
   cancellation_reason: string;
+  accepted_terms_at: string | null;
+  policy_version: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -286,5 +289,20 @@ export interface AuditLog {
   record_id: string;
   old_data: Record<string, unknown> | null;
   new_data: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export type ReviewStatus = "PENDIENTE" | "APROBADO" | "RECHAZADO";
+
+export interface ProductReview {
+  id: string;
+  product_id: string;
+  rating: number;
+  comment: string | null;
+  customer_name: string;
+  order_id: string | null;
+  status: ReviewStatus;
+  accepted_terms_at: string | null;
+  policy_version: string | null;
   created_at: string;
 }
