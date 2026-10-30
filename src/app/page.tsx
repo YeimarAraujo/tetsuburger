@@ -154,42 +154,41 @@ export default async function HomePage() {
           */}
           <BurgerPattern id="hero" opacity={0.18} />
 
-          {/* Mascota a un lado; el título deja espacio con su max-w */}
-          <div aria-hidden="true" className="pointer-events-none absolute inset-0">
-            <div className="relative mx-auto h-full max-w-5xl">
-              <Image
-                src="/images/tetsitoHero.webp"
-                alt=""
-                width={443}
-                height={432}
-                priority
-                fetchPriority="high"
-                sizes="(min-width: 1024px) 320px, (min-width: 640px) 256px, 144px"
-                className="absolute right-5 top-1/2 w-36 -translate-y-1/2 min-[480px]:right-8 min-[480px]:w-44 sm:right-14 sm:w-64 lg:right-28 lg:w-80"
-              />
+          {/* Texto y mascota lado a lado; en móvil el conjunto queda centrado en la pantalla.
+              Desde sm la mascota se posiciona aparte, a la derecha del contenedor. */}
+          <div className="relative mx-auto flex max-w-5xl items-center justify-center gap-3 px-4 py-10 sm:justify-start sm:py-24">
+            <div className="min-w-0 max-w-44 space-y-4 min-[480px]:max-w-64 sm:max-w-none">
+              <StoreStatusBadge />
+
+              <h1 className="font-display text-4xl leading-tight tracking-wide text-white sm:max-w-md sm:text-5xl lg:max-w-xl lg:text-6xl">
+                SAZÓN SOBRE LA PLANCHA
+              </h1>
+
+              <StoreStatusMessage className="max-w-xl text-[15px] leading-relaxed text-white sm:text-base lg:text-lg" />
+
+              <div className="flex flex-wrap items-center gap-3 pt-2">
+                {/* <a
+                  href="#menu"
+                  className="inline-flex h-11 items-center gap-2 rounded-full bg-primary px-6 text-sm font-bold text-primary-foreground shadow-lg shadow-black/20 transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-black/40 motion-reduce:transition-none"
+                >
+                  Ver menú
+                  <ChevronDown aria-hidden="true" className="size-4" />
+                </a> */}
+
+                <SocialLinks />
+              </div>
             </div>
-          </div>
 
-          <div className="relative mx-auto max-w-5xl space-y-4 px-4 py-14 sm:py-24">
-            <StoreStatusBadge />
-
-            <h1 className="max-w-[10.5rem] min-[480px]:max-w-60 font-display text-4xl leading-tight tracking-wide text-white sm:max-w-md sm:text-5xl lg:max-w-xl lg:text-6xl">
-              SAZÓN SOBRE LA PLANCHA
-            </h1>
-
-            <StoreStatusMessage className="max-w-xl text-[15px] leading-relaxed text-white sm:text-base lg:text-lg" />
-
-            <div className="flex flex-wrap items-center gap-3 pt-2">
-              {/* <a
-                href="#menu"
-                className="inline-flex h-11 items-center gap-2 rounded-full bg-primary px-6 text-sm font-bold text-primary-foreground shadow-lg shadow-black/20 transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-black/40 motion-reduce:transition-none"
-              >
-                Ver menú
-                <ChevronDown aria-hidden="true" className="size-4" />
-              </a> */}
-
-              <SocialLinks />
-            </div>
+            <Image
+              src="/images/tetsitoHero.webp"
+              alt=""
+              width={443}
+              height={432}
+              priority
+              fetchPriority="high"
+              sizes="(min-width: 1024px) 320px, (min-width: 640px) 256px, 144px"
+              className="pointer-events-none w-36 shrink-0 min-[480px]:w-44 sm:absolute sm:right-14 sm:top-1/2 sm:w-64 sm:-translate-y-1/2 lg:right-28 lg:w-80"
+            />
           </div>
         </section>
 
