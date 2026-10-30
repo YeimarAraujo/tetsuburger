@@ -4,7 +4,6 @@ import { useEffect } from "react";
 import Link from "next/link";
 import { Home, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Logo } from "@/components/ui/logo";
 
 export default function Error({
   error,

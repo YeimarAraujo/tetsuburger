@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { InfoTip } from "@/components/ui/info-tip";
 import { ReviewsTrigger } from "@/components/public/product-reviews";
+import { useStoreStatus } from "@/components/public/store-status";
 import {
   Dialog,
   DialogContent,
@@ -57,6 +58,9 @@ export function ProductCard({ product }: { product: ProductCardData }) {
   const [sel, setSel] = useState<Record<string, AddonSel>>({});
   const [adding, setAdding] = useState(false);
 
+  const store = useStoreStatus();
+  // Fuera de horario no se deja llenar un carrito que el checkout rechazaría.
+  const closed = store !== null && !store.canOrder;
   const soldOut = !product.isAvailable;
   const hasMix = product.isCombo && product.hamburguesas > 0 && product.perros > 0;
   const components = product.hamburguesas + product.perros;
@@ -169,14 +173,14 @@ export function ProductCard({ product }: { product: ProductCardData }) {
 
   return (
     <>
-      <div className="group flex gap-4 rounded-2xl border bg-card p-3 transition-all sm:p-4">
+      <div className="group flex min-w-0 gap-3 rounded-2xl border bg-card p-3 transition-all sm:gap-4 sm:p-4">
         {/* Imagen del producto */}
         {product.imageUrl ? (
           <button
             type="button"
             onClick={() => setImageOpen(true)}
             aria-label={`Ampliar imagen de ${product.name}`}
-            className="relative size-28 shrink-0 overflow-hidden rounded-xl border sm:size-36"
+            className="relative size-24 shrink-0 overflow-hidden rounded-xl border min-[400px]:size-28 sm:size-36"
           >
             <Image
               src={product.imageUrl}
@@ -194,7 +198,7 @@ export function ProductCard({ product }: { product: ProductCardData }) {
             )}
           </button>
         ) : (
-          <div className="size-28 shrink-0 rounded-xl border bg-muted sm:size-36" />
+          <div className="size-24 shrink-0 rounded-xl border bg-muted min-[400px]:size-28 sm:size-36" />
         )}
 
         {/* Contenido */}
@@ -223,7 +227,7 @@ export function ProductCard({ product }: { product: ProductCardData }) {
             rating={product.rating ?? null}
           />
 
-          <div className="mt-auto flex items-end justify-between gap-2 pt-3">
+          <div className="mt-auto flex flex-wrap items-end justify-between gap-x-2 gap-y-2 pt-3">
             <span className="text-lg font-bold text-price sm:text-xl">
               {formatCOP(product.price)}
             </span>
@@ -232,6 +236,10 @@ export function ProductCard({ product }: { product: ProductCardData }) {
               {soldOut ? (
                 <span className="rounded-full border border-red-200 bg-red-50 px-4 py-2 text-xs font-semibold text-red-600">
                   Agotado
+                </span>
+              ) : closed ? (
+                <span className="rounded-full border bg-muted px-4 py-2 text-xs font-semibold text-muted-foreground">
+                  Cerrado
                 </span>
               ) : (
                 <Button
@@ -302,6 +310,10 @@ export function ProductCard({ product }: { product: ProductCardData }) {
                 {soldOut ? (
                   <span className="rounded-full border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-600">
                     Agotado
+                  </span>
+                ) : closed ? (
+                  <span className="rounded-full border bg-muted px-4 py-2 text-sm font-semibold text-muted-foreground">
+                    Cerrado
                   </span>
                 ) : (
                   <Button

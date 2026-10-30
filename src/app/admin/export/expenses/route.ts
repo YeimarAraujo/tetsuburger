@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { csvText } from "@/lib/csv";
 
 /**
  * Exportación CSV de gastos. Respeta los filtros del módulo (from/to/cat)
@@ -49,7 +50,7 @@ export async function GET(request: NextRequest) {
 
   // BOM para que Excel respete UTF-8; separador ';' para Excel en español
   const header = ["Fecha", "Categoria", "Concepto", "Valor", "Descripcion"];
-  const escape = (v: string) => `"${v.replaceAll('"', '""')}"`;
+  const escape = csvText;
 
   const lines = [header.join(";")];
   let total = 0;

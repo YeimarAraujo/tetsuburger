@@ -150,6 +150,8 @@ export async function buildOrderFromItems(itemsRaw: unknown): Promise<BuildResul
   return { lines, subtotal };
 }
 
+const ORDER_SAVE_ERROR = "No se pudo registrar el pedido. Intenta de nuevo.";
+
 /** Inserta el pedido + líneas + adicionales con snapshots históricos */
 export async function persistOrder(params: {
   origin: "WEB" | "MANUAL";
@@ -207,9 +209,8 @@ export async function persistOrder(params: {
     .single();
 
   if (error || !order) {
-    return {
-      error: `No se pudo registrar el pedido: ${error?.message ?? "error desconocido"}`,
-    };
+    console.error("persistOrder: insert order failed", error);
+    return { error: ORDER_SAVE_ERROR };
   }
 
   for (const line of params.lines ?? []) {
@@ -226,10 +227,9 @@ export async function persistOrder(params: {
       .single();
 
     if (itemError || !insertedItem) {
+      console.error("persistOrder: insert order_item failed", itemError);
       await supabase.from("orders").delete().eq("id", order.id);
-      return {
-        error: `No se pudo registrar el pedido: ${itemError?.message ?? "no se pudo insertar el ítem"}`,
-      };
+      return { error: ORDER_SAVE_ERROR };
     }
 
     if (line.addons.length > 0) {
@@ -246,8 +246,9 @@ export async function persistOrder(params: {
       );
 
       if (addonsError) {
+        console.error("persistOrder: insert order_item_addons failed", addonsError);
         await supabase.from("orders").delete().eq("id", order.id);
-        return { error: `No se pudo registrar el pedido: ${addonsError.message}` };
+        return { error: ORDER_SAVE_ERROR };
       }
     }
   }

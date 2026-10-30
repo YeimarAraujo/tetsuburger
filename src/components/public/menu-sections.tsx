@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUp, Flame, Search, Star, TrendingUp, X } from "lucide-react";
+import { ArrowUp, Flame, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ProductCard, type ProductCardData } from "@/components/public/product-card";
 
@@ -10,32 +10,27 @@ export interface MenuSection {
   key: string;
   label: string;
   /** Icono opcional (solo para los filtros especiales). */
-  icon?: "flame" | "trending" | "star";
+  icon?: "flame";
   tagline?: string;
   items: ProductCardData[];
   /** Sección activa al cargar (normalmente Destacados). */
   default?: boolean;
-  /** Sección "especial" (Destacados / Más pedidos / Mejor valorados). */
+  /** Sección "especial" (Destacados): se oculta mientras se busca. */
   special?: boolean;
 }
 
 const ICONS = {
   flame: Flame,
-  trending: TrendingUp,
-  star: Star,
 } as const;
 
-/**
- * Secciones ocultas (se identifican por su icono).
- * "trending" = Los más pedidos, "star" = Mejor valorados.
- * Para volver a mostrarlas, borra el icono de esta lista.
- */
-const HIDDEN_ICONS: NonNullable<MenuSection["icon"]>[] = ["trending", "star"];
+/** Minúsculas y sin tildes: "piña" y "pina" coinciden. */
+function normalize(text: string): string {
+  return text.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+}
 
-/** Texto buscable de un producto (name + description si existen). */
+/** Texto buscable de un producto (nombre + descripción). */
 function searchText(p: ProductCardData): string {
-  const r = p as unknown as Record<string, unknown>;
-  return `${r.name ?? ""} ${r.description ?? ""}`.toLowerCase();
+  return normalize(`${p.name} ${p.description ?? ""}`);
 }
 
 /**
@@ -48,11 +43,7 @@ function searchText(p: ProductCardData): string {
  * - Buscador: filtra por categorías (las secciones especiales se ocultan
  *   mientras se busca para no duplicar resultados).
  */
-export function MenuSections({ sections: allSections }: { sections: MenuSection[] }) {
-  const sections = useMemo(
-    () => allSections.filter((s) => !s.icon || !HIDDEN_ICONS.includes(s.icon)),
-    [allSections]
-  );
+export function MenuSections({ sections }: { sections: MenuSection[] }) {
   const defaultSection = sections.find((s) => s.default) ?? sections[0] ?? null;
 
   const [activeKey, setActiveKey] = useState(() => defaultSection?.key ?? "");
@@ -66,7 +57,7 @@ export function MenuSections({ sections: allSections }: { sections: MenuSection[
   const lockRef = useRef(false); // evita parpadeo del scroll-spy tras un clic
   const lockTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const q = query.trim().toLowerCase();
+  const q = normalize(query.trim());
   const searching = q.length > 0;
 
   /** Secciones visibles según la búsqueda. */
@@ -335,7 +326,7 @@ export function MenuSections({ sections: allSections }: { sections: MenuSection[
                 ) : null}
               </header>
 
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {s.items.map((p) => (
                   <ProductCard key={p.id} product={p} />
                 ))}
@@ -351,7 +342,7 @@ export function MenuSections({ sections: allSections }: { sections: MenuSection[
         onClick={() => window.scrollTo({ top: 0, behavior: smoothBehavior() })}
         aria-label="Volver arriba"
         className={cn(
-          "fixed bottom-5 right-20 z-40 grid size-11 place-items-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30",
+          "fixed bottom-20 right-5.5 z-40 grid size-11 place-items-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30",
           "transition-all duration-300 hover:-translate-y-0.5 active:scale-95",
           showTop
             ? "translate-y-0 opacity-100"

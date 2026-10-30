@@ -31,25 +31,24 @@ export function DayHistory({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <form method="get" className="flex flex-wrap items-end gap-2">
-          <label className="space-y-1 text-xs font-medium text-muted-foreground">
-            Fecha
-            <input
-              type="date"
-              name="fecha"
-              defaultValue={selectedDate}
-              max={today}
-              className="block h-9 rounded-md border bg-background px-2 text-sm text-foreground"
-            />
-          </label>
+        <form method="get" className="flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2">
+          <CalendarDays className="size-4 text-muted-foreground" aria-hidden="true" />
+          <input
+            type="date"
+            name="fecha"
+            aria-label="Fecha"
+            defaultValue={selectedDate}
+            max={today}
+            className="h-8 rounded-md border bg-background px-2 text-sm text-foreground"
+          />
           <Button type="submit" variant="secondary" size="sm">
             <Search className="size-3.5" />
-            Ver historial
+            Ver
           </Button>
           {selectedDate !== today ? (
             <a
-              href="/admin/pedidos"
-              className="pb-1.5 text-xs font-medium text-primary hover:underline"
+              href={`/admin/pedidos?fecha=${today}`}
+              className="text-xs font-medium text-price hover:underline"
             >
               Volver a hoy
             </a>

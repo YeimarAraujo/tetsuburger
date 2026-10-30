@@ -12,6 +12,8 @@ import { formatCOP, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { KpiCard } from "@/components/admin/kpi-card";
+import { DateRangeFilter } from "@/components/admin/date-range-filter";
+import { TablePagination, usePagination } from "@/components/admin/table-pagination";
 import {
   Card,
   CardContent,
@@ -64,17 +66,6 @@ function bogotaToday(): string {
   }).format(new Date());
 }
 
-function shiftDays(days: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Bogota",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(d);
-}
-
 export function ExpenseManager({
   rows,
   categories,
@@ -96,6 +87,7 @@ export function ExpenseManager({
     () => rows.reduce((sum, r) => sum + Number(r.amount), 0),
     [rows]
   );
+  const pager = usePagination(rows);
 
   const byCategory = useMemo(() => {
     const map = new Map<string, number>();
@@ -180,105 +172,55 @@ export function ExpenseManager({
 
   return (
     <>
+      {/* Acciones */}
+      <div className="flex flex-wrap justify-end gap-2">
+        <Button variant="outline" size="sm" onClick={() => openQuick("Servicios públicos", "Energía / gas")}>
+          <Zap className="size-4" />
+          Luz / Gas
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => openQuick("Nómina", "Pago a trabajadores")}>
+          <Users className="size-4" />
+          Nómina
+        </Button>
+        <Button size="sm" onClick={openCreate}>
+          <Plus className="size-4" />
+          Nuevo gasto
+        </Button>
+      </div>
+
       {/* Filtros */}
-      <Card>
-        <CardContent className="flex flex-wrap items-end gap-3 py-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="f-from">Desde</Label>
-            <Input
-              id="f-from"
-              type="date"
-              value={filters.from}
-              onChange={(e) => pushFilter({ from: e.target.value })}
-              className="w-40"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="f-to">Hasta</Label>
-            <Input
-              id="f-to"
-              type="date"
-              value={filters.to}
-              onChange={(e) => pushFilter({ to: e.target.value })}
-              className="w-40"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Categoría</Label>
-            <Select
-              value={filters.category}
-              onValueChange={(v) => pushFilter({ category: v })}
-            >
-              <SelectTrigger className="w-44">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todas">Todas</SelectItem>
-                {categories.map((c) => (
-                  <SelectItem key={c.id} value={String(c.id)}>
-                    {c.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="flex flex-wrap gap-1.5">
-            {[
-              { label: "Hoy", from: bogotaToday(), to: bogotaToday() },
-              { label: "Ayer", from: shiftDays(-1), to: shiftDays(-1) },
-              { label: "7 días", from: shiftDays(-6), to: bogotaToday() },
-            ].map((r) => (
-              <Button
-                key={r.label}
-                variant="outline"
-                size="sm"
-                disabled={isPending}
-                onClick={() => pushFilter({ from: r.from, to: r.to })}
-              >
-                {r.label}
-              </Button>
+      <DateRangeFilter
+        from={filters.from}
+        to={filters.to}
+        onChange={(from, to) => pushFilter({ from, to })}
+        pending={isPending}
+      >
+        <Select value={filters.category} onValueChange={(v) => pushFilter({ category: v })}>
+          <SelectTrigger className="h-8 w-40" aria-label="Categoría">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todas">Todas las categorías</SelectItem>
+            {categories.map((c) => (
+              <SelectItem key={c.id} value={String(c.id)}>
+                {c.name}
+              </SelectItem>
             ))}
-            {filters.category !== "todas" || filters.from !== "" ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() =>
-                  pushFilter({
-                    category: "todas",
-                    from: `${bogotaToday().slice(0, 8)}01`,
-                    to: bogotaToday(),
-                  })
-                }
-              >
-                <X className="size-3.5" />
-                Limpiar
-              </Button>
-            ) : null}
-          </div>
-
-          <div className="ml-auto flex flex-wrap items-center gap-2">
-            <a href={exportHref}>
-              <Button variant="outline" size="sm">
-                <Download className="size-4" />
-                Exportar CSV
-              </Button>
-            </a>
-            <Button variant="outline" size="sm" onClick={() => openQuick("Servicios públicos", "Energía / gas")}>
-              <Zap className="size-4" />
-              Luz / Gas
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => openQuick("Nómina", "Pago a trabajadores")}>
-              <Users className="size-4" />
-              Nómina
-            </Button>
-            <Button size="sm" onClick={openCreate}>
-              <Plus className="size-4" />
-              Nuevo gasto
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+          </SelectContent>
+        </Select>
+        {filters.category !== "todas" ? (
+          <Button variant="ghost" size="sm" onClick={() => pushFilter({ category: "todas" })}>
+            <X className="size-3.5" />
+            Limpiar
+          </Button>
+        ) : null}
+        <Button asChild variant="outline" size="sm">
+          <a href={exportHref}>
+            <Download className="size-4" />
+            CSV
+          </a>
+        </Button>
+      </DateRangeFilter>
 
       {/* Total */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -367,7 +309,7 @@ export function ExpenseManager({
                     </td>
                   </tr>
                 ) : (
-                  rows.map((row) => (
+                  pager.visible.map((row) => (
                     <tr key={row.id} className="border-b last:border-0">
                       <td className="py-3 pr-2 whitespace-nowrap">{formatDate(`${row.expense_date}T12:00:00Z`)}</td>
                       <td className="py-3 pr-2">
@@ -412,6 +354,7 @@ export function ExpenseManager({
                 )}
               </tbody>
             </table>
+            <TablePagination pager={pager} />
           </div>
         </CardContent>
       </Card>

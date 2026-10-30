@@ -1,10 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { Plus } from "lucide-react";
-import { OrdersBoard, type BoardOrder } from "@/components/admin/orders/orders-board";
+import type { BoardOrder } from "@/components/admin/orders/orders-board";
 import type { ManualProduct } from "@/components/admin/orders/manual-order-form";
 import type { DayOrder } from "@/components/admin/order-day";
-import { DayHistory } from "@/components/admin/orders/day-history";
+import { OrdersTabs } from "@/components/admin/orders/orders-tabs";
 import { getAddonsAvailability } from "@/lib/consumption-availability";
 import { bogotaToday } from "@/lib/bogota";
 import { PageHeader } from "@/components/admin/page-header";
@@ -127,22 +127,24 @@ export default async function OrdersPage({
         title="Pedidos"
         description="Gestiona los pedidos en vivo y consulta el historial por día"
       >
-        <Link href="/admin/pedidos/nuevo">
-          <Button>
+        <Button asChild>
+          <Link href="/admin/pedidos/nuevo">
             <Plus className="size-4" />
             Pedido manual
-          </Button>
-        </Link>
+          </Link>
+        </Button>
       </PageHeader>
 
-
-      <OrdersBoard
+      <OrdersTabs
+        initialTab={requestedDate ? "history" : "live"}
         initialOrders={(orders.data ?? []) as unknown as BoardOrder[]}
         deliveryFeeBusiness={deliveryFeeBusiness}
         products={products}
         initialMuted={initialMuted}
+        historyOrders={(historyRes.data ?? []) as DayOrder[]}
+        selectedDate={selectedDate}
+        today={today}
       />
-
     </div>
   );
 }

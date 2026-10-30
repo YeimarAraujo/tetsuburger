@@ -4,6 +4,10 @@ import {
   type ProductRow,
 } from "@/components/admin/products/product-manager";
 import { PageHeader } from "@/components/admin/page-header";
+import { getBusinessCosts } from "@/features/rentabilidad/actions";
+import { bogotaToday } from "@/lib/bogota";
+import type { BusinessCostsInput } from "@/lib/pricing";
+import { addDays, parseSalesReport } from "@/lib/sales-analytics";
 
 export const metadata = {
   title: "Productos · TETSU BURGER Admin",
@@ -11,8 +15,9 @@ export const metadata = {
 
 export default async function ProductsPage() {
   const supabase = await createClient();
+  const today = bogotaToday();
 
-  const [productsRes, categoriesRes, addonsRes, inventoryRes, consumptionsRes] =
+  const [productsRes, categoriesRes, addonsRes, inventoryRes, consumptionsRes, reportRes, config] =
     await Promise.all([
       supabase
         .from("products")
@@ -33,7 +38,23 @@ export default async function ProductsPage() {
         .from("product_consumptions")
         .select("id, product_id, inventory_item_id, quantity, unit_cost, item:inventory_items(name, unit, cost)")
         .order("inventory_item_id"),
+      supabase.rpc("sales_report", { p_from: addDays(today, -29), p_to: today }),
+      getBusinessCosts(),
     ]);
+
+  // Misma cuenta que Rentabilidad: sin ventas estimadas se usan las reales de 30 días.
+  const sales30 = reportRes.error ? 0 : parseSalesReport(reportRes.data).totals.sales;
+  const businessCosts: BusinessCostsInput = {
+    nomina: config.nomina,
+    arriendo: config.arriendo,
+    servicios: config.servicios,
+    otrosFijos: config.otrosFijos,
+    ventasMes: config.ventasMes > 0 ? config.ventasMes : sales30,
+    utilidadObjetivo: config.utilidadPct / 100,
+    comisionPct: config.comisionPct / 100,
+    comisionFija: config.comisionFija,
+    redondeo: config.redondeo,
+  };
 
   const inventoryItems = (inventoryRes.data ?? []) as unknown as InventoryRow[];
   const costByItem = new Map(
@@ -55,6 +76,7 @@ export default async function ProductsPage() {
       return {
         ...p,
         autoCost: ingredientCost + (Number(p.packaging_cost) || 0),
+        hasRecipe: cons.length > 0,
       };
     }
   );
@@ -84,6 +106,7 @@ export default async function ProductsPage() {
         addons={addonsRes.data ?? []}
         inventoryItems={inventoryItems}
         consumptions={consumptions}
+        businessCosts={businessCosts}
       />
     </div>
   );

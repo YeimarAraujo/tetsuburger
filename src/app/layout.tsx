@@ -51,7 +51,10 @@ export const metadata: Metadata = {
     ? undefined
     : { index: false, follow: false },
   icons: {
-    icon: "/images/logo.webp",
+    icon: [
+      { url: "/favicon.ico", sizes: "48x48" },
+      { url: "/icons/tab-icon.png", type: "image/png", sizes: "256x256" },
+    ],
     apple: "/apple-touch-icon.png",
   },
   appleWebApp: {

@@ -18,6 +18,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { StarDisplay } from "@/components/ui/star-rating";
+import { TablePagination, usePagination } from "@/components/admin/table-pagination";
 import {
   deleteReview,
   setReviewStatus,
@@ -102,6 +103,7 @@ export function ReviewsManager({ reviews }: { reviews: AdminReview[] }) {
     }
     return [...map.values()].sort((a, b) => b.total - a.total);
   }, [rows]);
+  const productPager = usePagination(byProduct);
 
   const visible =
     filter === "TODAS" ? rows : rows.filter((r) => r.status === filter);
@@ -316,7 +318,7 @@ export function ReviewsManager({ reviews }: { reviews: AdminReview[] }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {byProduct.map((p) => (
+                  {productPager.visible.map((p) => (
                     <tr key={p.name} className="border-b last:border-0">
                       <td className="py-2 pr-4 font-medium">{p.name}</td>
                       <td className="py-2 pr-4">
@@ -338,6 +340,7 @@ export function ReviewsManager({ reviews }: { reviews: AdminReview[] }) {
                 </tbody>
               </table>
             </div>
+            <TablePagination pager={productPager} />
           </CardContent>
         </Card>
       ) : null}

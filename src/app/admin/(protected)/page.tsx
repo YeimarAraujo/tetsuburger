@@ -1,6 +1,8 @@
 import { formatDate } from "@/lib/format";
 import { createClient } from "@/lib/supabase/server";
 import { getCogsForOrders, sumCogs } from "@/features/finance/cogs";
+import { fetchExpenses } from "@/features/finance/expenses";
+import { splitExpenses } from "@/lib/sales-analytics";
 import { computeOpenStatus } from "@/lib/business-hours";
 import { bogotaToday } from "@/lib/bogota";
 import { DashboardStats } from "@/components/admin/dashboard-stats";
@@ -31,10 +33,7 @@ export default async function AdminDashboardPage() {
       .gte("created_at", `${today}T00:00:00-05:00`)
       .lte("created_at", `${today}T23:59:59-05:00`)
       .order("created_at", { ascending: false }),
-    supabase
-      .from("expenses")
-      .select("id, amount, expense_category_id, category:expense_categories(name)")
-      .eq("expense_date", today),
+    fetchExpenses(supabase, today, today),
     supabase.from("settings").select("key, value").eq("is_public", true),
     supabase.from("business_hours").select("*"),
     supabase
@@ -62,7 +61,6 @@ export default async function AdminDashboardPage() {
   );
 
   const orders = ordersRes.data ?? [];
-  const expenses = expensesRes.data ?? [];
 
   const validOrders = orders.filter((o) => o.status !== "CANCELADO");
   const deliveredOrders = orders.filter((o) => o.status === "ENTREGADO");
@@ -74,9 +72,11 @@ export default async function AdminDashboardPage() {
     (s, o) => s + Number(o.subtotal) - Number(o.final_adjustment ?? 0),
     0
   );
-  const totalExpenses = expenses.reduce((s, o) => s + Number(o.amount), 0);
+  // Los gastos ya incluidos en el costo de cada producto (Empaques) no se
+  // restan otra vez.
+  const totalExpenses = splitExpenses(expensesRes).operating;
 
-  // Utilidad = ventas entregadas − costo de lo vendido − gastos.
+  // Utilidad = ventas entregadas − costo de lo vendido − gastos operativos.
   const { map: cogsByOrder, missingCostCount } = await getCogsForOrders(
     deliveredOrders.map((o) => o.id)
   );

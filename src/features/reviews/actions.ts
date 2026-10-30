@@ -163,7 +163,7 @@ export async function submitProductReview(raw: unknown): Promise<SubmitReviewRes
     if (error.code === "23503") {
       return { error: "Producto no válido." };
     }
-    return { error: error.message || "No se pudo enviar la reseña. Intenta de nuevo." };
+    return { error: "No se pudo enviar la reseña. Intenta de nuevo." };
   }
 
   return { pending: true };

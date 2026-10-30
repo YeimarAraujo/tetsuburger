@@ -1,9 +1,8 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
-import { Home, MessageCircle } from "lucide-react";
+import { Home } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { whatsappContactUrl } from "@/lib/whatsapp";
 
 export const metadata: Metadata = {
   title: "Página no encontrada",

@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   TARGET_FOOD_COST,
   bucketState,
+  fixedCostShare,
   foodCostPct,
   fullCostPrice,
   grossProfit,
+  roundUpTo,
   suggestedPrice,
 } from "./pricing";
 
@@ -36,10 +38,11 @@ describe("fullCostPrice", () => {
     arriendo: 0,
     servicios: 0,
     otrosFijos: 0,
-    unidadesMes: 1000,
+    ventasMes: 10_000_000,
     utilidadObjetivo: 0.15,
     comisionPct: 0.05,
     comisionFija: 0,
+    redondeo: 100,
   };
 
   it("cubre costos y utilidad", () => {
@@ -47,6 +50,24 @@ describe("fullCostPrice", () => {
     expect(denom).toBeCloseTo(0.8);
     expect(precio).toBe(4400);
     expect(precio).toBeGreaterThan(3500);
+  });
+
+  it("reparte los costos fijos como porcentaje de las ventas", () => {
+    // 2.000.000 de fijos sobre 10.000.000 de ventas = 20 % de cada venta.
+    const withFixed = { ...costs, nomina: 2_000_000 };
+    expect(fixedCostShare(withFixed)).toBeCloseTo(0.2);
+    const { denom, precio } = fullCostPrice({ ingredientes: 3000, empaque: 500 }, withFixed);
+    expect(denom).toBeCloseTo(0.6);
+    expect(precio).toBe(5900); // 3500 / 0.6 = 5833 → 5900
+    // Sin ventas estimadas no hay cómo repartirlos.
+    expect(fixedCostShare({ ...withFixed, ventasMes: 0 })).toBe(1);
+  });
+
+  it("redondea a precios comerciales", () => {
+    expect(roundUpTo(15_237, 500)).toBe(15_500);
+    expect(roundUpTo(15_000, 500)).toBe(15_000);
+    const { precio } = fullCostPrice({ ingredientes: 3000, empaque: 500 }, { ...costs, redondeo: 1000 });
+    expect(precio).toBe(5000);
   });
 
   it("se protege con márgenes imposibles", () => {

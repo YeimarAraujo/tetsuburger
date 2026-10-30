@@ -1,176 +1,142 @@
 import Link from "next/link";
-import {
-  Camera,
-  Clock,
-  MapPin,
-  MessageCircleMore,
-  Phone,
-} from "lucide-react";
+import { Clock, MapPin } from "lucide-react";
 import { site } from "@/config/site";
 import { whatsappContactUrl } from "@/lib/whatsapp";
 import { formatHoursSummary, getPublicHours } from "@/lib/public-hours";
 import { Logo } from "@/components/ui/logo";
-import { ScrollToTopLink } from "@/components/ui/scroll-to-top-link";
+import { SocialLinks } from "@/components/public/social-links";
+
+interface FooterLink {
+  label: string;
+  href: string;
+  external?: boolean;
+}
+
+const linkClass =
+  "rounded-sm text-sm text-white/70 [overflow-wrap:anywhere] transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary";
+
+function FooterColumn({ title, links }: { title: string; links: FooterLink[] }) {
+  return (
+    <nav aria-label={title}>
+      <h2 className="text-xs font-bold uppercase tracking-[0.14em] text-primary">
+        {title}
+      </h2>
+      <ul className="mt-4 space-y-2.5">
+        {links.map((link) => (
+          <li key={link.label}>
+            {link.external ? (
+              <a
+                href={link.href}
+                target={link.href.startsWith("http") ? "_blank" : undefined}
+                rel={link.href.startsWith("http") ? "noopener noreferrer" : undefined}
+                className={linkClass}
+              >
+                {link.label}
+              </a>
+            ) : (
+              <Link href={link.href} className={linkClass}>
+                {link.label}
+              </Link>
+            )}
+          </li>
+        ))}
+      </ul>
+    </nav>
+  );
+}
 
 export async function SiteFooter() {
   const hours = formatHoursSummary(await getPublicHours());
   const phone = site.phone.replace(/\s/g, "");
 
-  const socials = [
+  const columns: { title: string; links: FooterLink[] }[] = [
     {
-      id: "whatsapp",
-      label: "WhatsApp",
-      href: whatsappContactUrl(),
-      icon: <MessageCircleMore aria-hidden="true" />,
+      title: "Pedir",
+      links: [
+        { label: "Ver menú", href: "/#menu" },
+        { label: "Mi pedido", href: "/checkout" },
+      ],
     },
-    ...(site.social.instagram
-      ? [
-        {
-          id: "instagram",
-          label: "Instagram",
-          href: site.social.instagram,
-          icon: <Camera aria-hidden="true" />,
-        },
-      ]
-      : []),
     {
-      id: "phone",
-      label: "Llamar",
-      href: `tel:${phone}`,
-      icon: <Phone aria-hidden="true" />,
+      title: "Ayuda",
+      links: [
+        { label: "WhatsApp", href: whatsappContactUrl(), external: true },
+        { label: "Llamar", href: `tel:${phone}`, external: true },
+        { label: site.email, href: `mailto:${site.email}`, external: true },
+        { label: "PQR y sugerencias", href: "/pqr" },
+      ],
+    },
+    {
+      title: "Legal",
+      links: [
+        { label: "Privacidad", href: "/privacidad" },
+        { label: "Términos y condiciones", href: "/terminos" },
+        { label: "Cookies", href: "/cookies" },
+      ],
     },
   ];
 
   return (
-    <footer className="border-t border-primary/20 bg-background text-foreground">
-      <div className="mx-auto w-full max-w-7xl px-6 py-12 lg:px-12">
-        {/* Zona superior: marca, horario, zona y redes sociales */}
-        <div className="grid gap-8 lg:grid-cols-[1fr_1fr] lg:items-start">
-          <div className="space-y-5 lg:pr-12">
-            <Link href="/" aria-label="Ir al inicio">
-              <Logo className="h-30 w-auto" />
+    <footer className="relative bg-[oklch(0.17_0.012_40)] text-white">
+      {/* Filo de marca */}
+      <div
+        aria-hidden="true"
+        className="h-1 bg-linear-to-r from-primary/0 via-primary to-primary/0"
+      />
+
+      <div className="mx-auto w-full max-w-5xl px-4 py-12 sm:px-6">
+        <div className="grid gap-10 md:grid-cols-[1.3fr_2fr]">
+          {/* Marca */}
+          <div className="space-y-4">
+            <Link
+              href="/"
+              aria-label="Ir al inicio"
+              className="-ml-3 inline-block rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            >
+              <Logo className="h-24 w-auto" />
             </Link>
-
-            {hours ? (
-              <p className="mt-4 flex items-center gap-2 text-sm text-foreground/70">
-                <Clock className="size-4 shrink-0 text-primary" />
-                <span>Horario: {hours}</span>
-              </p>
-            ) : null}
-
-            <p className="mt-2 flex items-center gap-2 text-sm text-foreground/70">
-              <MapPin className="size-4 shrink-0 text-primary" />
-              <span>{site.serviceArea}</span>
+            <p className="font-display text-lg tracking-wide text-white">
+              {site.tagline.toUpperCase()}
             </p>
 
-            <div className="mt-5 flex items-center gap-3">
-              {socials.map((social) => (
-                <a
-                  key={social.id}
-                  href={social.href}
-                  target={social.id === "phone" ? undefined : "_blank"}
-                  rel={social.id === "phone" ? undefined : "noopener noreferrer"}
-                  aria-label={social.label}
-                  className="grid size-9 place-items-center rounded-full border border-primary/20 bg-background text-primary motion-safe:transition-all motion-reduce:transition-none hover:bg-primary hover:text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                >
-                  {social.icon}
-                </a>
-              ))}
-            </div>
+            <ul className="space-y-2 text-sm text-white/70">
+              {hours ? (
+                <li className="flex items-start gap-2">
+                  <Clock aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-primary" />
+                  <span>{hours}</span>
+                </li>
+              ) : null}
+              <li className="flex items-start gap-2">
+                <MapPin aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-primary" />
+                <span>Domicilios en {site.serviceArea}</span>
+              </li>
+            </ul>
+
+            <SocialLinks className="pt-1" />
           </div>
+
           {/* Navegación */}
-          <div className="grid grid-cols-2 gap-8">
-            <nav aria-label="Sitio">
-              <h2 className="text-xs font-bold uppercase tracking-[0.14em] text-orange-500">
-                Sitio
-                <span className="mt-2 block h-[3px] w-8 rounded-full bg-orange-500" />
-              </h2>
-              <ul className="mt-3 space-y-2">
-                <li>
-                  <Link
-                    href="/pqr"
-                    className="text-sm text-foreground/80 transition-colors hover:text-primary"
-                  >
-                    PQR y sugerencias
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    href="/privacidad"
-                    className="text-sm text-foreground/80 transition-colors hover:text-primary"
-                  >
-                    Privacidad
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    href="/terminos"
-                    className="text-sm text-foreground/80 transition-colors hover:text-primary"
-                  >
-                    Términos y condiciones
-                  </Link>
-                </li>
-              </ul>
-            </nav>
-
-            <nav aria-label="Atención">
-              <h2 className="text-xs font-bold uppercase tracking-[0.14em] text-orange-500">
-                Atención
-                <span className="mt-2 block h-[3px] w-8 rounded-full bg-orange-500" />
-              </h2>
-              <ul className="mt-3 space-y-2">
-                <li>
-                  <a
-                    href={whatsappContactUrl()}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm text-foreground/80 transition-colors hover:text-primary"
-                  >
-                    WhatsApp
-                  </a>
-                </li>
-                <li>
-                  <a
-                    href={`mailto:${site.email}`}
-                    className="break-words text-sm text-foreground/80 transition-colors hover:text-primary"
-                  >
-                    {site.email}
-                  </a>
-                </li>
-                {site.social.instagram ? (
-                  <li>
-                    <a
-                      href={site.social.instagram}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm text-foreground/80 transition-colors hover:text-primary"
-                    >
-                      Instagram
-                    </a>
-                  </li>
-                ) : null}
-              </ul>
-            </nav>
-
+          <div className="grid grid-cols-1 gap-8 min-[420px]:grid-cols-2 sm:grid-cols-3">
+            {columns.map((column) => (
+              <FooterColumn key={column.title} {...column} />
+            ))}
           </div>
         </div>
 
         {/* Pie legal */}
-        <div className="mt-16 flex flex-col gap-2 border-t border-primary/10 pt-8 text-xs text-foreground/50 sm:flex-row sm:items-center sm:justify-between">
-          <div className="space-y-1">
+        <div className="mt-10 flex flex-col gap-1 border-t border-white/10 pt-6 text-xs text-white/55 sm:flex-row sm:items-center sm:justify-between">
+          <p>
+            © {new Date().getFullYear()} {site.name}. Todos los derechos reservados.
+          </p>
+          {site.taxId || site.publicAddress ? (
             <p>
-              © {new Date().getFullYear()} {site.name}. Todos los derechos
-              reservados.
+              {[site.taxId ? `NIT: ${site.taxId}` : null, site.publicAddress]
+                .filter(Boolean)
+                .join(" · ")}
             </p>
-            {site.taxId ? <p>NIT: {site.taxId}</p> : null}
-            {site.publicAddress ? <p>{site.publicAddress}</p> : null}
-          </div>
-
-          <div className="flex items-center gap-4">
-            <ScrollToTopLink />
-          </div>
+          ) : null}
         </div>
       </div>
-    </footer >
+    </footer>
   );
 }

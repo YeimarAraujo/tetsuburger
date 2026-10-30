@@ -20,6 +20,22 @@ Supabase, en orden:
    políticas RLS asociadas.
 2. `supabase/migrations/0028_rate_limits.sql` — rate limit persistente
    (`consume_rate_limit`).
+3. `supabase/migrations/0029_delivery_fee_a_convenir.sql` — domicilio "a
+   convenir" en el checkout.
+4. `supabase/migrations/0030_protect_profile_role.sql` — impide que un usuario
+   no ADMIN cambie su propio `role_id`.
+5. `supabase/migrations/0031_consume_order_inventory.sql` — descuento de
+   inventario por pedido en una sola transacción. Si aún no está aplicada, el
+   servidor usa el método anterior (sin protección ante pedidos simultáneos).
+6. `supabase/migrations/0032_order_status_transitions.sql` — valida las
+   transiciones de estado de los pedidos, registra quién hizo cada cambio y
+   habilita "Deshacer" (2 minutos). Sin ella, el tablero sigue funcionando
+   pero sin autor en el historial y sin "Deshacer".
+7. `supabase/migrations/0033_sales_analytics.sql` — costo automático de los
+   productos con receta, costo guardado en cada venta, "Empaques" como gasto
+   ya incluido en el costo y la función `sales_report` de Reportes y
+   Rentabilidad. **Recalcula el costo de todos los productos con receta** al
+   aplicarse. Sin ella, Reportes muestra un aviso y solo los historiales.
 
 Después verifica que todas las tablas tengan RLS:
 

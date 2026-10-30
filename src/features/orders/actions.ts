@@ -10,6 +10,7 @@ import { rateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { verifyTurnstile } from "@/lib/turnstile";
 import { addonLabel } from "@/lib/addons";
 import { buildWhatsappMessage } from "@/lib/whatsapp";
+import { ADDRESS_MIN, CHECKOUT_MESSAGES, NAME_MIN, PHONE_RE } from "@/lib/checkout-validation";
 import {
   buildOrderFromItems,
   persistOrder,
@@ -24,11 +25,11 @@ export interface PlaceOrderResult {
 }
 
 const customerSchema = z.object({
-  customer_name: z.string().trim().min(2, "Ingresa tu nombre").max(80),
+  customer_name: z.string().trim().min(NAME_MIN, CHECKOUT_MESSAGES.name).max(80),
   customer_phone: z
     .string()
     .trim()
-    .regex(/^[0-9+\-\s()]{7,20}$/, "Teléfono inválido"),
+    .regex(PHONE_RE, CHECKOUT_MESSAGES.phone),
   customer_address: z.string().trim().max(200).default(""),
   delivery_type: z.enum(["DOMICILIO", "RECOGIDA"]).default("DOMICILIO"),
   notes: z.string().trim().max(300).default(""),
@@ -41,8 +42,8 @@ const customerSchema = z.object({
   website: z.string().max(500).default(""),
 })
   .refine(
-    (data) => data.delivery_type !== "DOMICILIO" || data.customer_address.length >= 5,
-    { message: "Ingresa una dirección válida para el domicilio", path: ["customer_address"] }
+    (data) => data.delivery_type !== "DOMICILIO" || data.customer_address.length >= ADDRESS_MIN,
+    { message: CHECKOUT_MESSAGES.address, path: ["customer_address"] }
   );
 
 export async function placeOrder(

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   BadgePercent,
   Building2,
@@ -12,8 +13,8 @@ import {
   Home,
   Loader2,
   Settings2,
-  TrendingDown,
   TrendingUp,
+  TriangleAlert,
   Users,
   Wallet,
   Zap,
@@ -23,36 +24,54 @@ import { formatCOP } from "@/lib/format";
 import {
   breakEvenPrice,
   bucketState,
-  fixedCostPerUnit,
+  fixedCostShare,
   fullCostBreakdown,
   fullCostPrice,
   totalCostosFijos,
   type BusinessCostsInput,
 } from "@/lib/pricing";
+import type { FixedCostSuggestion } from "@/lib/sales-analytics";
 import { updateProductPrice } from "@/features/products/actions";
-import {
-  type BusinessConfig,
-} from "@/features/rentabilidad/config";
+import { ROUNDING_OPTIONS, type BusinessConfig } from "@/features/rentabilidad/config";
 import { saveBusinessCosts } from "@/features/rentabilidad/actions";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { KpiCard } from "@/components/admin/kpi-card";
+import { TablePagination, usePagination } from "@/components/admin/table-pagination";
 import { InfoTip } from "@/components/ui/info-tip";
+import { cn } from "@/lib/utils";
 
-interface RentabilidadRow {
+export interface RentabilidadRow {
+  id: string;
+  name: string;
+  price: number;
+  /** products.cost: ingredientes + empaque (automático si tiene receta). */
+  cost: number;
+  packaging_cost: number;
+  category: string | null;
+  hasRecipe: boolean;
+  /** Unidades vendidas (entregadas) en los últimos 30 días. */
+  sold30: number;
+}
+
+export interface AddonRow {
   id: string;
   name: string;
   price: number;
   cost: number;
-  packaging_cost: number;
-  category?: { name: string } | null;
-  /** Desglose derivado: products.cost ya incluye el empaque. */
-  ingredientes?: number;
-  empaque?: number;
+  hasRecipe: boolean;
+  sold30: number;
+}
+
+interface RealData {
+  sales30: number;
+  cost30: number;
+  orders30: number;
 }
 
 function num(v: string): number {
@@ -60,12 +79,22 @@ function num(v: string): number {
   return Number.isFinite(n) && n >= 0 ? n : 0;
 }
 
+function unitCosts(p: Pick<RentabilidadRow, "cost" | "packaging_cost">) {
+  return { ingredientes: Math.max(0, p.cost - p.packaging_cost), empaque: p.packaging_cost };
+}
+
 export function RentabilidadManager({
   products,
+  addons,
   initialConfig,
+  real,
+  suggestion,
 }: {
   products: RentabilidadRow[];
+  addons: AddonRow[];
   initialConfig: BusinessConfig;
+  real: RealData | null;
+  suggestion: FixedCostSuggestion;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -82,7 +111,7 @@ export function RentabilidadManager({
     };
   }, []);
 
-  function update<K extends keyof BusinessConfig>(key: K, value: number) {
+  function update<K extends keyof BusinessConfig>(key: K, value: BusinessConfig[K]) {
     const next = { ...latestConfig.current, [key]: value };
     latestConfig.current = next;
     setConfig(next);
@@ -94,62 +123,73 @@ export function RentabilidadManager({
     }, 700);
   }
 
+  const realSales = real?.sales30 ?? 0;
+  const ventasMes = config.ventasMes > 0 ? config.ventasMes : realSales;
+
   const input = useMemo<BusinessCostsInput>(
     () => ({
       nomina: config.nomina,
       arriendo: config.arriendo,
       servicios: config.servicios,
       otrosFijos: config.otrosFijos,
-      unidadesMes: config.unidadesMes,
+      ventasMes,
       utilidadObjetivo: config.utilidadPct / 100,
       comisionPct: config.comisionPct / 100,
       comisionFija: config.comisionFija,
+      redondeo: config.redondeo,
     }),
-    [config]
+    [config, ventasMes]
   );
 
+  const share = fixedCostShare(input);
+  const fijosTotales = totalCostosFijos(input);
+
   const rows = useMemo(() => {
-    return products.map((p) => {
-      // products.cost ya incluye el empaque (lo escribe el costo automático de
-      // productos); packaging_cost solo se desglosa, NUNCA se suma de nuevo.
-      const empaque = p.packaging_cost;
-      const ingredientes = Math.max(0, p.cost - empaque);
-      const unit = { ingredientes, empaque };
-      const costoVariable = p.cost;
-      const margin = p.price - costoVariable;
-      const pct = p.price > 0 ? (margin / p.price) * 100 : 0;
-      const sugg = fullCostPrice(unit, input).precio;
-      const be = breakEvenPrice(unit, input);
-      return { ...p, ingredientes, empaque, costoVariable, margin, pct, sugg, be };
-    });
+    return products
+      .map((p) => {
+        const unit = unitCosts(p);
+        const margin = p.price - p.cost;
+        const pct = p.price > 0 ? (margin / p.price) * 100 : 0;
+        const sugg = fullCostPrice(unit, input).precio;
+        const be = breakEvenPrice(unit, input);
+        return { ...p, margin, pct, sugg, be };
+      })
+      .sort((a, b) => b.sold30 - a.sold30 || a.name.localeCompare(b.name));
   }, [products, input]);
 
-  const fijosTotales = useMemo(() => totalCostosFijos(input), [input]);
-  const fijoUnit = useMemo(() => fixedCostPerUnit(input), [input]);
+  const sortedAddons = useMemo(
+    () => [...addons].sort((a, b) => b.sold30 - a.sold30 || a.name.localeCompare(b.name)),
+    [addons]
+  );
+  const productPages = usePagination(rows);
+  const addonPages = usePagination(sortedAddons);
 
-  const proj = useMemo(() => {
-    const avgSugg =
-      rows.length > 0 ? rows.reduce((s, r) => s + r.sugg, 0) / rows.length : 0;
-    const priced = rows.filter((r) => r.price > 0);
-    const avgNetCurrent =
-      priced.length > 0
-        ? priced.reduce((s, r) => s + (r.price - r.costoVariable - fijoUnit), 0) /
-        priced.length
-        : 0;
-    const units = config.unidadesMes;
-    return {
-      ingresoProyectado: avgSugg * units,
-      utilidadProyectada: avgSugg * units * (config.utilidadPct / 100),
-      avgNetCurrent,
-      utilidadActualEstimada: avgNetCurrent * units,
-    };
-  }, [rows, fijoUnit, config.unidadesMes, config.utilidadPct]);
+  const actionButtons = (p: (typeof rows)[number]) => (
+    <>
+      <Button variant="outline" size="sm" onClick={() => setBreakdownProduct(p)}>
+        <Eye className="size-3.5" />
+        Simular
+      </Button>
+      <Button
+        size="sm"
+        disabled={applying === p.id || isPending || p.sugg <= 0 || p.cost <= 0 || p.sugg === p.price}
+        onClick={() => applyPrice(p, p.sugg)}
+      >
+        {applying === p.id ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
+        Aplicar
+      </Button>
+    </>
+  );
 
-  async function applyPrice(p: RentabilidadRow) {
-    const { precio } = fullCostPrice(
-      { ingredientes: p.ingredientes ?? Math.max(0, p.cost - p.packaging_cost), empaque: p.empaque ?? p.packaging_cost },
-      input
-    );
+  const impactIfApplied = rows.reduce(
+    (s, r) => (r.sugg > 0 && r.sold30 > 0 ? s + (r.sugg - r.price) * r.sold30 : s),
+    0
+  );
+  const grossReal = real ? real.sales30 - real.cost30 : 0;
+  const commissionsReal = real ? real.sales30 * input.comisionPct + real.orders30 * input.comisionFija : 0;
+  const netReal = grossReal - commissionsReal - fijosTotales;
+
+  async function applyPrice(p: RentabilidadRow, precio: number) {
     if (precio <= 0) {
       toast.error("Completa los costos para poder sugerir un precio");
       return;
@@ -166,6 +206,25 @@ export function RentabilidadManager({
     startTransition(() => router.refresh());
   }
 
+  const fixedFields: {
+    key: "nomina" | "arriendo" | "servicios" | "otrosFijos";
+    label: string;
+    icon: typeof Users;
+    suggested: number;
+    hint?: string;
+  }[] = [
+    { key: "nomina", label: "Nómina mensual", icon: Users, suggested: suggestion.nomina },
+    { key: "arriendo", label: "Arriendo mensual", icon: Home, suggested: suggestion.arriendo },
+    { key: "servicios", label: "Servicios (luz, gas, agua, internet)", icon: Zap, suggested: suggestion.servicios },
+    {
+      key: "otrosFijos",
+      label: "Otros costos fijos",
+      icon: Building2,
+      suggested: suggestion.otrosFijos,
+      hint: suggestion.otrosCategorias.length > 0 ? suggestion.otrosCategorias.join(", ") : undefined,
+    },
+  ];
+
   return (
     <div className="space-y-4">
       {/* Datos del negocio */}
@@ -173,28 +232,48 @@ export function RentabilidadManager({
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Settings2 className="size-4" />
-            Datos del negocio (costos fijos mensuales y meta)
+            Datos del negocio
           </CardTitle>
           <CardDescription>
-            Se guardan en este navegador. El precio sugerido cubre ingredientes +
-            empaque + comisión + estos costos fijos + tu utilidad neta objetivo.
+            Se guardan para todo el equipo. Los costos fijos se reparten como un porcentaje de tus ventas:
+            cada producto aporta según su precio.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-2">
+        <CardContent className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <div className="space-y-1.5">
-              <Label>Ventas mensuales estimadas (unidades)</Label>
+              <Label htmlFor="rent-ventas">Ventas del mes (COP)</Label>
               <Input
+                id="rent-ventas"
                 type="number"
-                min={1}
+                min={0}
                 step="any"
-                value={config.unidadesMes}
-                onChange={(e) => update("unidadesMes", num(e.target.value) || 1)}
+                inputMode="decimal"
+                value={config.ventasMes || ""}
+                placeholder={realSales > 0 ? String(Math.round(realSales)) : "0"}
+                onChange={(e) => update("ventasMes", num(e.target.value))}
               />
+              <p className="text-xs text-muted-foreground">
+                {config.ventasMes > 0 ? (
+                  <>
+                    Estimado manual.{" "}
+                    {realSales > 0 ? (
+                      <button type="button" className="font-medium text-price hover:underline" onClick={() => update("ventasMes", 0)}>
+                        Usar ventas reales ({formatCOP(realSales)})
+                      </button>
+                    ) : null}
+                  </>
+                ) : realSales > 0 ? (
+                  `Usando tus ventas reales de los últimos 30 días: ${formatCOP(realSales)}.`
+                ) : (
+                  "Aún no hay ventas entregadas en 30 días: escribe un estimado."
+                )}
+              </p>
             </div>
             <div className="space-y-1.5">
-              <Label>Utilidad neta objetivo (%)</Label>
+              <Label htmlFor="rent-utilidad">Utilidad neta objetivo (%)</Label>
               <Input
+                id="rent-utilidad"
                 type="number"
                 min={0}
                 max={90}
@@ -202,153 +281,119 @@ export function RentabilidadManager({
                 value={config.utilidadPct}
                 onChange={(e) => update("utilidadPct", num(e.target.value))}
               />
-            </div>
-            {/* <div className="space-y-1.5">
-              <Label>Comisión plataforma (% del precio)</Label>
-              <Input
-                type="number"
-                min={0}
-                max={50}
-                step={0.5}
-                value={config.comisionPct}
-                onChange={(e) => update("comisionPct", num(e.target.value))}
-              />
+              <p className="text-xs text-muted-foreground">Lo que quieres que quede limpio de cada venta.</p>
             </div>
             <div className="space-y-1.5">
-              <Label>Comisión/domicilio fija por venta (COP)</Label>
-              <Input
-                type="number"
-                min={0}
-                step={100}
-                value={config.comisionFija}
-                onChange={(e) => update("comisionFija", num(e.target.value))}
-              />
-            </div> */}
-            <div className="space-y-1.5">
-              <Label className="flex items-center gap-1">
-                <Users className="size-3.5" /> Nómina mensual (COP)
-              </Label>
-              <Input
-                type="number"
-                min={0}
-                step="any"
-                inputMode="decimal"
-                value={config.nomina}
-                onChange={(e) => update("nomina", num(e.target.value))}
-              />
+              <Label>Redondear precios a</Label>
+              <Select value={String(config.redondeo)} onValueChange={(v) => update("redondeo", Number(v))}>
+                <SelectTrigger aria-label="Redondear precios a">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ROUNDING_OPTIONS.map((r) => (
+                    <SelectItem key={r} value={String(r)}>
+                      {formatCOP(r)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">El precio sugerido se sube al múltiplo más cercano.</p>
             </div>
-            <div className="space-y-1.5">
-              <Label className="flex items-center gap-1">
-                <Home className="size-3.5" /> Arriendo mensual (COP)
-              </Label>
-              <Input
-                type="number"
-                min={0}
-                step="any"
-                inputMode="decimal"
-                value={config.arriendo}
-                onChange={(e) => update("arriendo", num(e.target.value))}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="flex items-center gap-1">
-                <Zap className="size-3.5" /> Servicios mensuales (luz, gas,etc)
-              </Label>
-              <Input
-                type="number"
-                min={0}
-                step="any"
-                inputMode="decimal"
-                value={config.servicios}
-                onChange={(e) => update("servicios", num(e.target.value))}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Otros costos fijos mensuales</Label>
-              <Input
-                type="number"
-                min={0}
-                step="any"
-                inputMode="decimal"
-                value={config.otrosFijos}
-                onChange={(e) => update("otrosFijos", num(e.target.value))}
-              />
-            </div>
+
+            {fixedFields.map((f) => {
+              const Icon = f.icon;
+              const value = config[f.key];
+              const suggested = Math.round(f.suggested);
+              return (
+                <div key={f.key} className="space-y-1.5">
+                  <Label htmlFor={`rent-${f.key}`} className="flex items-center gap-1">
+                    <Icon className="size-3.5" /> {f.label}
+                  </Label>
+                  <Input
+                    id={`rent-${f.key}`}
+                    type="number"
+                    min={0}
+                    step="any"
+                    inputMode="decimal"
+                    value={value}
+                    onChange={(e) => update(f.key, num(e.target.value))}
+                  />
+                  {suggested > 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                      Tus gastos reales: {formatCOP(suggested)}/mes
+                      {f.hint ? ` (${f.hint})` : ""}.{" "}
+                      {Math.round(value) !== suggested ? (
+                        <button type="button" className="font-medium text-price hover:underline" onClick={() => update(f.key, suggested)}>
+                          Usar
+                        </button>
+                      ) : null}
+                    </p>
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             <KpiCard
               icon={Building2}
               label="Costos fijos/mes"
               value={formatCOP(fijosTotales)}
               help={{
-                what: "Los gastos que pagas cada mes sí o sí, vendas o no vendas: nómina, arriendo, servicios y otros costos fijos.",
+                what: "Lo que pagas cada mes vendas o no: nómina, arriendo, servicios y otros.",
                 formula: "nómina + arriendo + servicios + otros",
-                suggestion: "Son la base del precio: hay que repartirlos entre las unidades que vendes al mes.",
               }}
             />
-
             <KpiCard
               icon={Calculator}
-              label={`Fijo por unidad (${config.unidadesMes} ventas/mes)`}
-              value={formatCOP(fijoUnit)}
+              label="De cada venta, para fijos"
+              value={fijosTotales > 0 && ventasMes > 0 ? `${(share * 100).toFixed(1)}%` : "—"}
+              caption={ventasMes > 0 ? `sobre ${formatCOP(ventasMes)} de ventas/mes` : "Falta el dato de ventas"}
               help={{
-                what: "Cuánto de los costos fijos le toca a cada venta, repartido entre las unidades que estimas vender al mes.",
-                formula: "costos fijos ÷ ventas mensuales",
-                suggestion: "Si vendes menos de lo estimado, el fijo por unidad sube y tu margen real baja. Usa una estimación conservadora.",
+                what: "Qué parte de cada peso vendido se necesita para cubrir los costos fijos.",
+                formula: "costos fijos ÷ ventas del mes",
+                suggestion: "Si pasa de ~35%, tus fijos son altos para lo que vendes: sube ventas o baja fijos.",
               }}
             />
-
+            {real ? (
+              <KpiCard
+                icon={Wallet}
+                tileClassName={netReal >= 0 ? "bg-emerald-500/10" : "bg-red-500/10"}
+                iconClassName={netReal >= 0 ? "text-emerald-600" : "text-red-600"}
+                label="Utilidad neta estimada (30 días)"
+                value={formatCOP(netReal)}
+                valueClassName={netReal >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-red-700 dark:text-red-400"}
+                caption={`Ganancia bruta ${formatCOP(grossReal)} − fijos − comisiones`}
+                help={{
+                  what: "Lo que dejaron tus ventas reales del último mes después del costo de lo vendido, las comisiones y los costos fijos que escribiste aquí.",
+                  formula: "ventas − costo de lo vendido − comisiones − costos fijos",
+                }}
+              />
+            ) : null}
             <KpiCard
               icon={TrendingUp}
-              label="Ingreso proyectado con sugeridos"
-              value={formatCOP(proj.ingresoProyectado)}
+              label="Si aplicas los precios sugeridos"
+              value={`${impactIfApplied >= 0 ? "+" : ""}${formatCOP(impactIfApplied)}`}
+              caption="al mes, con las mismas unidades de los últimos 30 días"
               help={{
-                what: "Cuánto facturarías al mes si vendieras todas las unidades al precio sugerido.",
-                formula: "precio sugerido promedio × ventas mensuales",
-              }}
-            />
-
-            <KpiCard
-              icon={Wallet}
-              label="Utilidad neta proyectada"
-              value={formatCOP(proj.utilidadProyectada)}
-              help={{
-                what: "Ganancia neta mensual esperada si operas al precio sugerido y cumples tu % de utilidad objetivo.",
-                formula: "ingreso proyectado × utilidad neta objetivo %",
-                suggestion: "Es tu meta: lo que quedaría después de cubrir costos variables y costos fijos.",
-              }}
-            />
-
-            <KpiCard
-              icon={CircleDollarSign}
-              tileClassName={proj.utilidadActualEstimada >= 0 ? "bg-emerald-500/10" : "bg-red-500/10"}
-              iconClassName={proj.utilidadActualEstimada >= 0 ? "text-emerald-600" : "text-red-600"}
-              label="Con tus precios actuales"
-              value={formatCOP(proj.utilidadActualEstimada)}
-              valueClassName={proj.utilidadActualEstimada >= 0 ? "text-emerald-600" : "text-red-600"}
-              caption="/mes"
-              help={{
-                what: proj.utilidadActualEstimada >= 0
-                  ? "Cuánto ganarías al mes con tus precios actuales, descontando el costo variable y el fijo por unidad."
-                  : "Cuánto pierdes al mes con tus precios actuales: no alcanzas a cubrir los costos fijos.",
-                formula: "(precio actual − costo variable − fijo por unidad) × ventas mensuales",
-                suggestion: proj.utilidadActualEstimada >= 0
-                  ? "Estás cubriendo los fijos. Para llegar a tu meta, sube los productos cuyo precio sugerido es mayor al actual."
-                  : "No cubres los fijos: sube los precios hacia el sugerido o reduce gastos/costos fijos.",
+                what: "Diferencia de ingresos si cada producto vendido en el último mes hubiera tenido su precio sugerido.",
+                formula: "Σ (precio sugerido − precio actual) × unidades vendidas en 30 días",
+                suggestion: "Supone que vendes lo mismo; subir mucho un precio puede bajar las ventas.",
               }}
             />
           </div>
         </CardContent>
       </Card>
 
-      {/* Tabla */}
+      {/* Productos */}
       <Card>
-        <CardContent className="overflow-x-auto py-4">
+        <CardHeader>
+          <CardTitle>Productos</CardTitle>
+          <CardDescription>
+            Ordenados por lo que más se vendió en los últimos 30 días. El costo de los productos con receta se calcula solo.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="overflow-x-auto">
           {rows.length === 0 ? (
             <p className="text-sm text-muted-foreground">No hay productos activos</p>
           ) : (
@@ -356,83 +401,130 @@ export function RentabilidadManager({
               <thead>
                 <tr className="border-b text-left text-muted-foreground">
                   <th className="pb-2 pr-2 font-medium">Producto</th>
-                  <th className="pb-2 pr-2 font-medium">Categoría</th>
+                  <th className="hidden pb-2 pr-2 text-right font-medium lg:table-cell">Vendidos 30 d</th>
                   <th className="pb-2 pr-2 text-right font-medium">Precio</th>
-                  <th className="pb-2 pr-2 text-right font-medium">Costo variable</th>
-                  <th className="pb-2 pr-2 text-right font-medium">Margen</th>
-                  <th className="pb-2 pr-2 text-right font-medium">Precio sugerido</th>
-                  <th className="pb-2 text-right font-medium">Acciones</th>
+                  <th className="hidden pb-2 pr-2 text-right font-medium sm:table-cell">Costo</th>
+                  <th className="hidden pb-2 pr-2 text-right font-medium md:table-cell">Margen bruto</th>
+                  <th className="pb-2 pr-2 text-right font-medium">Sugerido</th>
+                  <th className="hidden pb-2 text-right font-medium sm:table-cell">Acciones</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((p) => (
-                  <tr key={p.id} className="border-b last:border-0">
-                    <td className="py-2 pr-2 font-medium">{p.name}</td>
-                    <td className="py-2 pr-2 text-muted-foreground">{p.category?.name ?? "—"}</td>
-                    <td className="py-2 pr-2 text-right">{formatCOP(p.price)}</td>
-                    <td className="py-2 pr-2 text-right text-muted-foreground">
-                      {formatCOP(p.costoVariable)}
-                      <span className="ml-1 text-[10px]">
-                        (ingr. {formatCOP(p.ingredientes ?? 0)}
-                        {p.empaque && p.empaque > 0 ? ` + emp. ${formatCOP(p.empaque)}` : ""})
-                      </span>
-                    </td>
-                    <td className="py-2 pr-2 text-right">
-                      <MarginBadge pct={p.pct} />
-                    </td>
-                    <td className="py-2 pr-2 text-right">
-                      {p.sugg > 0 ? (
-                        p.sugg > p.price ? (
-                          <span className="inline-flex items-center gap-1 font-medium text-red-600">
-                            <TrendingUp className="size-3.5" /> {formatCOP(p.sugg)}
+                {productPages.visible.map((p) => {
+                  const losing = p.cost > 0 && p.be > 0 && p.price < p.be;
+                  return (
+                    <tr key={p.id} className="border-b last:border-0">
+                      <td className="py-2 pr-2">
+                        <p className="font-medium">{p.name}</p>
+                        <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[11px] text-muted-foreground">
+                          {p.category ? <span>{p.category}</span> : null}
+                          {p.cost <= 0 ? (
+                            <Badge variant="outline" className="border-amber-300 text-[10px] text-amber-800 dark:text-amber-300">
+                              <TriangleAlert className="size-3" /> Sin costo
+                            </Badge>
+                          ) : !p.hasRecipe ? (
+                            <Badge variant="outline" className="text-[10px]">Costo manual</Badge>
+                          ) : null}
+                          {losing ? (
+                            <Badge variant="outline" className="border-red-300 text-[10px] text-red-700 dark:text-red-300">
+                              <TriangleAlert className="size-3" /> No cubre sus costos
+                            </Badge>
+                          ) : null}
+                        </div>
+                        <p className="mt-0.5 text-[11px] text-muted-foreground sm:hidden">
+                          Costo {p.cost > 0 ? formatCOP(p.cost) : "—"} · {p.sold30} vendidos
+                        </p>
+                        <div className="mt-1.5 flex gap-1 sm:hidden">{actionButtons(p)}</div>
+                      </td>
+                      <td className="hidden py-2 pr-2 text-right tabular-nums lg:table-cell">{p.sold30 || "—"}</td>
+                      <td className="py-2 pr-2 text-right tabular-nums">{formatCOP(p.price)}</td>
+                      <td className="hidden py-2 pr-2 text-right tabular-nums text-muted-foreground sm:table-cell">
+                        {p.cost > 0 ? formatCOP(p.cost) : "—"}
+                      </td>
+                      <td className="hidden py-2 pr-2 text-right md:table-cell">{p.cost > 0 ? <MarginBadge pct={p.pct} /> : "—"}</td>
+                      <td className="py-2 pr-2 text-right tabular-nums">
+                        {p.sugg > 0 && p.cost > 0 ? (
+                          <span className={cn("font-medium", p.sugg > p.price ? "text-red-700 dark:text-red-400" : "text-emerald-700 dark:text-emerald-400")}>
+                            {p.sugg > p.price ? "↑ " : "✓ "}
+                            {formatCOP(p.sugg)}
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 font-medium text-emerald-600">
-                            <TrendingDown className="size-3.5" /> {formatCOP(p.sugg)}
-                          </span>
-                        )
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
-                    </td>
-                    <td className="py-2 text-right">
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setBreakdownProduct(p)}
-                        >
-                          <Eye className="size-3.5" />
-                          Desglose
-                        </Button>
-                        <Button
-                          size="sm"
-                          disabled={applying === p.id || isPending || p.sugg <= 0}
-                          onClick={() => applyPrice(p)}
-                        >
-                          {applying === p.id ? (
-                            <Loader2 className="size-3.5 animate-spin" />
-                          ) : (
-                            <Check className="size-3.5" />
-                          )}
-                          Aplicar
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </td>
+                      <td className="hidden py-2 text-right sm:table-cell">
+                        <div className="flex justify-end gap-1">{actionButtons(p)}</div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
+          <TablePagination pager={productPages} />
           <p className="mt-3 text-xs text-muted-foreground">
-            Precio sugerido = (ingredientes + empaque + fijo por unidad + comisión fija) ÷
-            (1 − utilidad objetivo − comisión %). &quot;Aplicar&quot; guarda el precio en el catálogo.
+            ↑ el precio está por debajo del sugerido · ✓ ya lo cubre. Precio sugerido = (ingredientes + empaque + comisión fija) ÷
+            (1 − utilidad − comisión % − % para fijos), redondeado a {formatCOP(config.redondeo)}. Los productos con{" "}
+            <span className="font-medium">costo manual</span> no tienen receta: configúrala en{" "}
+            <Link href="/admin/productos" className="font-medium text-price hover:underline">Productos</Link> para que su costo se actualice solo.
           </p>
         </CardContent>
       </Card>
 
-      {/* Diálogo de desglose */}
-      <BreakdownDialog
+      {/* Adicionales */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Adicionales</CardTitle>
+          <CardDescription>Los extras suelen dejar más margen que los productos: conviene sugerirlos.</CardDescription>
+        </CardHeader>
+        <CardContent className="overflow-x-auto">
+          {addons.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No hay adicionales activos</p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left text-muted-foreground">
+                  <th className="pb-2 pr-2 font-medium">Adicional</th>
+                  <th className="hidden pb-2 pr-2 text-right font-medium sm:table-cell">Vendidos 30 d</th>
+                  <th className="pb-2 pr-2 text-right font-medium">Precio</th>
+                  <th className="hidden pb-2 pr-2 text-right font-medium sm:table-cell">Costo</th>
+                  <th className="pb-2 pr-2 text-right font-medium">Margen</th>
+                  <th className="hidden pb-2 text-right font-medium md:table-cell">Ganancia 30 d</th>
+                </tr>
+              </thead>
+              <tbody>
+                {addonPages.visible.map((a) => {
+                    const margin = a.price - a.cost;
+                    return (
+                      <tr key={a.id} className="border-b last:border-0">
+                        <td className="py-2 pr-2">
+                          <p className="font-medium">{a.name}</p>
+                          {!a.hasRecipe ? <p className="text-[11px] text-muted-foreground">Sin consumos configurados</p> : null}
+                          <p className="text-[11px] text-muted-foreground sm:hidden">
+                            Costo {a.cost > 0 ? formatCOP(a.cost) : "—"} · {a.sold30} vendidos
+                          </p>
+                        </td>
+                        <td className="hidden py-2 pr-2 text-right tabular-nums sm:table-cell">{a.sold30 || "—"}</td>
+                        <td className="py-2 pr-2 text-right tabular-nums">{formatCOP(a.price)}</td>
+                        <td className="hidden py-2 pr-2 text-right tabular-nums text-muted-foreground sm:table-cell">{a.cost > 0 ? formatCOP(a.cost) : "—"}</td>
+                        <td className="py-2 pr-2 text-right">
+                          {a.cost > 0 && a.price > 0 ? <MarginBadge pct={(margin / a.price) * 100} /> : "—"}
+                        </td>
+                        <td className="hidden py-2 text-right tabular-nums md:table-cell">
+                          {a.cost > 0 && a.sold30 > 0 ? formatCOP(margin * a.sold30) : "—"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+              </tbody>
+            </table>
+          )}
+          <TablePagination pager={addonPages} />
+        </CardContent>
+      </Card>
+
+      <SimulatorDialog
+        key={breakdownProduct?.id ?? "cerrado"}
         product={breakdownProduct}
         input={input}
         onClose={() => setBreakdownProduct(null)}
@@ -445,16 +537,16 @@ export function RentabilidadManager({
 }
 
 function MarginBadge({ pct }: { pct: number }) {
-  if (pct >= 50) {
-    return <Badge className="bg-emerald-500/15 text-emerald-600">{pct.toFixed(1)}%</Badge>;
+  if (pct >= 60) {
+    return <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400">{pct.toFixed(1)}%</Badge>;
   }
-  if (pct >= 30) {
-    return <Badge className="bg-amber-500/15 text-amber-600">{pct.toFixed(1)}%</Badge>;
+  if (pct >= 45) {
+    return <Badge className="bg-amber-500/15 text-amber-800 dark:text-amber-300">{pct.toFixed(1)}%</Badge>;
   }
-  return <Badge className="bg-red-500/15 text-red-600">{pct.toFixed(1)}%</Badge>;
+  return <Badge className="bg-red-500/15 text-red-700 dark:text-red-400">{pct.toFixed(1)}%</Badge>;
 }
 
-function BreakdownDialog({
+function SimulatorDialog({
   product,
   input,
   onClose,
@@ -465,75 +557,106 @@ function BreakdownDialog({
   product: RentabilidadRow | null;
   input: BusinessCostsInput;
   onClose: () => void;
-  onApply: (p: RentabilidadRow) => void;
+  onApply: (p: RentabilidadRow, precio: number) => void;
   applying: string | null;
   isPending: boolean;
 }) {
-  const breakdown = useMemo(() => {
-    if (!product) return null;
-    return fullCostBreakdown(
-      {
-        ingredientes: product.ingredientes ?? Math.max(0, product.cost - product.packaging_cost),
-        empaque: product.empaque ?? product.packaging_cost,
-      },
-      input
-    );
-  }, [product, input]);
-
-  const be = useMemo(() => {
-    if (!product) return 0;
-    return breakEvenPrice(
-      {
-        ingredientes: product.ingredientes ?? Math.max(0, product.cost - product.packaging_cost),
-        empaque: product.empaque ?? product.packaging_cost,
-      },
-      input
-    );
-  }, [product, input]);
+  const breakdown = useMemo(
+    () => (product ? fullCostBreakdown(unitCosts(product), input) : null),
+    [product, input]
+  );
+  const [testPrice, setTestPrice] = useState(() => String(product?.price ?? ""));
 
   if (!product) return null;
 
-  const varCost = product.cost;
-  const currentMargin = product.price - varCost;
+  const be = breakEvenPrice(unitCosts(product), input);
+  const share = fixedCostShare(input);
+  const test = num(testPrice);
+  const commission = (price: number) => price * input.comisionPct + input.comisionFija;
+  const netPerUnit = (price: number) => price - product.cost - commission(price) - price * share;
+  const currentNet = netPerUnit(product.price);
+  const testNet = netPerUnit(test);
+  const monthlyDiff = (test - product.price) * product.sold30;
 
   return (
-    <Dialog open={Boolean(product)} onOpenChange={(o) => !o && onClose()}>
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <BadgePercent className="size-4" />
-            Costo completo: {product.name}
+            {product.name}
           </DialogTitle>
+          <DialogDescription>
+            Costo {formatCOP(product.cost)} por unidad · {product.sold30} vendidos en los últimos 30 días
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-2 text-sm">
-            <div className="rounded-md bg-muted p-3">
-              <p className="text-xs text-muted-foreground">Costo variable por unidad (ingredientes + empaque)</p>
-              <p className="text-lg font-bold">{formatCOP(varCost)}</p>
+          {/* Simulador */}
+          <div className="rounded-lg border p-3">
+            <Label htmlFor="sim-price" className="text-sm font-semibold">¿Y si lo vendo a…?</Label>
+            <div className="mt-2 flex items-center gap-2">
+              <Input
+                id="sim-price"
+                type="number"
+                min={0}
+                step="any"
+                inputMode="decimal"
+                value={testPrice}
+                onChange={(e) => setTestPrice(e.target.value)}
+                className="max-w-40"
+              />
+              {breakdown && breakdown.precio > 0 ? (
+                <Button type="button" variant="outline" size="sm" onClick={() => setTestPrice(String(breakdown.precio))}>
+                  Probar sugerido
+                </Button>
+              ) : null}
             </div>
-            <div className="rounded-md bg-muted p-3">
-              <p className="flex items-center gap-1 text-xs text-muted-foreground">
-                Margen actual con tu precio
-                <InfoTip
-                  content={{
-                    what: "Lo que te queda de cada venta con el precio actual, descontando solo ingredientes y empaque (aún no descuenta el fijo por unidad).",
-                    formula: "precio actual − costo variable",
-                    suggestion: "Si este margen es negativo, cada venta te está haciendo perder plata: revisa el precio o el costo.",
-                  }}
-                />
+            <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
+              <div className="rounded-md bg-muted p-2.5">
+                <dt className="text-xs text-muted-foreground">Utilidad neta por unidad</dt>
+                <dd className={cn("text-lg font-bold", testNet >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-red-700 dark:text-red-400")}>
+                  {formatCOP(testNet)}
+                </dd>
+                <dd className="text-[11px] text-muted-foreground">Hoy: {formatCOP(currentNet)}</dd>
+              </div>
+              <div className="rounded-md bg-muted p-2.5">
+                <dt className="flex items-center gap-1 text-xs text-muted-foreground">
+                  Cambio al mes
+                  <InfoTip
+                    content={{
+                      what: "Cuánto más (o menos) ingresarías al mes con este precio si vendes las mismas unidades que en los últimos 30 días.",
+                      formula: "(precio de prueba − precio actual) × vendidos en 30 días",
+                    }}
+                  />
+                </dt>
+                <dd className={cn("text-lg font-bold", monthlyDiff >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-red-700 dark:text-red-400")}>
+                  {monthlyDiff >= 0 ? "+" : ""}
+                  {formatCOP(monthlyDiff)}
+                </dd>
+                <dd className="text-[11px] text-muted-foreground">con las mismas ventas</dd>
+              </div>
+            </dl>
+            {test > 0 && be > 0 && test < be ? (
+              <p className="mt-2 flex items-center gap-1 text-xs text-red-700 dark:text-red-400">
+                <TriangleAlert className="size-3.5" /> Por debajo de {formatCOP(be)} este producto no cubre sus costos.
               </p>
-              <p className={`text-lg font-bold ${currentMargin >= 0 ? "text-emerald-600" : "text-red-600"}`}>
-                {formatCOP(currentMargin)}
-                <span className="ml-1 text-xs font-normal text-muted-foreground">
-                  {product.price > 0 ? `${((currentMargin / product.price) * 100).toFixed(1)}%` : "—"}
-                </span>
-              </p>
-            </div>
+            ) : null}
+            <Button
+              className="mt-3 w-full"
+              variant="outline"
+              disabled={applying === product.id || isPending || test <= 0 || test === product.price}
+              onClick={() => onApply(product, Math.round(test))}
+            >
+              {applying === product.id ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
+              Guardar {test > 0 ? formatCOP(test) : ""} como precio
+            </Button>
           </div>
 
+          {/* Desglose del precio sugerido */}
           {breakdown && breakdown.precio > 0 ? (
             <>
+              <p className="text-sm font-semibold">Cómo se arma el precio sugerido ({formatCOP(breakdown.precio)})</p>
               <div className="space-y-2">
                 {breakdown.buckets.map((b) => {
                   const state = bucketState(b.pct, b.rangeMin, b.rangeMax);
@@ -542,84 +665,40 @@ function BreakdownDialog({
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-xs font-medium">{b.label}</span>
                         <span className="flex items-center gap-1.5">
-                          <span className="text-xs text-muted-foreground">rango {b.rangeMin}-{b.rangeMax}%</span>
-                          <Badge variant="outline" className={`text-[10px] ${state === "ok" ? "text-emerald-600" : state === "bajo" ? "text-amber-600" : "text-red-600"}`}>
-                            {b.pct.toFixed(1)}%
+                          <span className="text-xs text-muted-foreground">ideal {b.rangeMin}-{b.rangeMax}%</span>
+                          <Badge variant="outline" className="text-[10px]">
+                            {b.pct.toFixed(1)}% · {state === "ok" ? "en rango" : state === "bajo" ? "bajo" : "alto"}
                           </Badge>
                         </span>
                       </div>
-                      <div className="mt-1.5 flex items-center justify-between">
+                      <div className="mt-1.5 flex items-center justify-between gap-3">
                         <span className="text-sm font-semibold">{formatCOP(Math.round(b.pesos))}</span>
-                        <div className="h-2 w-2/3 overflow-hidden rounded-full bg-muted">
-                          <div
-                            className={`h-full ${state === "ok" ? "bg-emerald-500" : state === "bajo" ? "bg-amber-500" : "bg-red-500"}`}
-                            style={{ width: `${Math.min(100, b.pct)}%` }}
-                          />
+                        <div className="h-2 w-2/3 overflow-hidden rounded-r-[4px] bg-muted" aria-hidden="true">
+                          <div className="h-full rounded-r-[4px] bg-primary" style={{ width: `${Math.min(100, Math.max(0, b.pct))}%` }} />
                         </div>
                       </div>
                     </div>
                   );
                 })}
               </div>
-
-              <div className="flex items-center justify-between rounded-lg border border-primary/30 bg-primary/5 p-3">
-                <div>
-                  <p className="flex items-center gap-1 text-xs text-muted-foreground">
-                    Precio sugerido (costo completo)
-                    <InfoTip
-                      content={{
-                        what: "El precio que cubre costo variable + empaque + costos fijos repartidos + un % de utilidad neta objetivo por venta.",
-                        formula: "variable + empaque + comisión + fijo por unidad + utilidad objetivo",
-                      }}
-                    />
-                  </p>
-                  <p className="text-2xl font-bold text-primary">{formatCOP(breakdown.precio)}</p>
-                </div>
-                <div className="text-right text-xs text-muted-foreground">
-                  <p className="flex items-center justify-end gap-1">
-                    Punto de equilibrio (sin utilidad)
-                    <InfoTip
-                      content={{
-                        what: "El precio mínimo para no perder: cubre costos variable + costos fijos, pero deja cero utilidad.",
-                        formula: "variable + empaque + comisión + fijo por unidad",
-                        suggestion: "Tu precio de venta no debería bajar de aquí; entre este punto y el sugerido sigue estando tu margen.",
-                      }}
-                    />
-                  </p>
-                  <p className="text-base font-bold text-slate-800">{formatCOP(be)}</p>
-                </div>
-              </div>
-
               <p className="text-[11px] text-muted-foreground">
-                Simulación con {input.unidadesMes} ventas/mes y {formatCOP(fixedCostPerUnit(input))} de costos fijos
-                por unidad. La suma de los porcentajes da el precio. {breakdown.utilidadPesos > 0
-                  ? `Utilidad de este producto: ${formatCOP(Math.round(breakdown.utilidadPesos))} por unidad.`
-                  : "El precio sugerido no cubre la utilidad objetivo; revisa tus costos."}
+                Punto de equilibrio (sin utilidad): {formatCOP(be)}. Los fijos son el {(share * 100).toFixed(1)}% de cada venta.
               </p>
+              <Button
+                className="w-full"
+                disabled={applying === product.id || isPending || breakdown.precio === product.price}
+                onClick={() => onApply(product, breakdown.precio)}
+              >
+                {applying === product.id ? <Loader2 className="size-4 animate-spin" /> : <CircleDollarSign className="size-4" />}
+                Aplicar precio sugerido ({formatCOP(breakdown.precio)})
+              </Button>
             </>
           ) : (
             <p className="text-sm text-muted-foreground">
-              No se pudo calcular: la utilidad objetivo más la comisión se llevan más del 95%
-              del precio. Ajusta esos valores en Datos del negocio.
+              No se puede sugerir un precio: la utilidad objetivo, las comisiones y los costos fijos se llevan más del 95% de
+              cada venta. Revisa los datos del negocio.
             </p>
           )}
-
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={onClose}>
-              Cerrar
-            </Button>
-            <Button
-              disabled={applying === product.id || isPending || (breakdown?.precio ?? 0) <= 0}
-              onClick={() => onApply(product)}
-            >
-              {applying === product.id ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <Check className="size-4" />
-              )}
-              Aplicar precio sugerido ({breakdown && breakdown.precio > 0 ? formatCOP(breakdown.precio) : "—"})
-            </Button>
-          </div>
         </div>
       </DialogContent>
     </Dialog>

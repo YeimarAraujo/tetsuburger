@@ -66,6 +66,14 @@ describe("computeOpenStatus", () => {
     expect(status.nextOpensAt).not.toBeNull();
   });
 
+  it("después del cierre informa la apertura del día siguiente, no la de la semana próxima", () => {
+    const late = new Date("2026-10-23T04:30:00.000Z"); // jueves 23:30 en Bogotá
+    const status = computeOpenStatus(hours, false, undefined, late);
+    expect(status.isOpen).toBe(false);
+    expect(status.message).toContain("viernes");
+    expect(status.nextOpensAt).toBe("2026-10-23T16:00:00.000Z"); // viernes 11:00 en Bogotá
+  });
+
   it("respeta el cierre temporal y su mensaje", () => {
     const status = computeOpenStatus(
       hours,

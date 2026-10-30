@@ -17,6 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { BarcodeCameraButton } from "@/components/admin/barcode-camera";
+import { TablePagination, usePagination } from "@/components/admin/table-pagination";
 import { UNITS } from "@/lib/units";
 
 interface InventoryItem {
@@ -42,6 +43,56 @@ function bogotaToday(): string {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Bogota", year: "numeric", month: "2-digit", day: "2-digit",
   }).format(new Date());
+}
+
+function DayPurchasesTable({ records }: { records: ProdRow[] }) {
+  const pager = usePagination(records);
+  return (
+    <Card>
+      <CardContent className="overflow-x-auto py-2">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b text-left text-muted-foreground">
+              <th className="pb-2 pr-3 font-medium">Insumo</th>
+              <th className="pb-2 pr-3 font-medium">Descripción</th>
+              <th className="pb-2 pr-3 text-right font-medium">Cant.</th>
+              <th className="pb-2 pr-3 text-right font-medium">Costo/ud</th>
+              <th className="pb-2 pr-3 text-right font-medium">Total</th>
+              <th className="hidden pb-2 font-medium md:table-cell">Notas</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pager.visible.map((r) => (
+              <tr key={r.id} className="border-b last:border-0">
+                <td className="py-2 pr-3">
+                  {r.item?.name ? (
+                    <Badge variant="outline" className="gap-1 text-xs">
+                      <PackagePlus className="size-3" />
+                      {r.item.name}
+                    </Badge>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
+                </td>
+                <td className="py-2 pr-3 font-medium">{r.description}</td>
+                <td className="py-2 pr-3 text-right">{r.quantity} {r.unit}</td>
+                <td className="py-2 pr-3 text-right text-muted-foreground">
+                  {Number(r.unit_cost) > 0 ? formatCOP(Number(r.unit_cost)) : "—"}
+                </td>
+                <td className="py-2 pr-3 text-right font-semibold">
+                  {formatCOP(Number(r.total_cost))}
+                </td>
+                <td className="hidden max-w-[180px] truncate py-2 text-muted-foreground md:table-cell">
+                  {r.notes || "—"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <TablePagination pager={pager} />
+      </CardContent>
+    </Card>
+  );
 }
 
 export function ProductionManager({
@@ -191,49 +242,7 @@ export function ProductionManager({
               <h3 className="font-bold">{formatDate(`${date}T12:00:00Z`)}</h3>
               <Badge variant="secondary">{formatCOP(dayTotal)}</Badge>
             </div>
-            <Card>
-              <CardContent className="overflow-x-auto py-2">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b text-left text-muted-foreground">
-                      <th className="pb-2 pr-3 font-medium">Insumo</th>
-                      <th className="pb-2 pr-3 font-medium">Descripción</th>
-                      <th className="pb-2 pr-3 text-right font-medium">Cant.</th>
-                      <th className="pb-2 pr-3 text-right font-medium">Costo/ud</th>
-                      <th className="pb-2 pr-3 text-right font-medium">Total</th>
-                      <th className="hidden pb-2 font-medium md:table-cell">Notas</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {dayRecords.map((r) => (
-                      <tr key={r.id} className="border-b last:border-0">
-                        <td className="py-2 pr-3">
-                          {r.item?.name ? (
-                            <Badge variant="outline" className="gap-1 text-xs">
-                              <PackagePlus className="size-3" />
-                              {r.item.name}
-                            </Badge>
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
-                        </td>
-                        <td className="py-2 pr-3 font-medium">{r.description}</td>
-                        <td className="py-2 pr-3 text-right">{r.quantity} {r.unit}</td>
-                        <td className="py-2 pr-3 text-right text-muted-foreground">
-                          {Number(r.unit_cost) > 0 ? formatCOP(Number(r.unit_cost)) : "—"}
-                        </td>
-                        <td className="py-2 pr-3 text-right font-semibold">
-                          {formatCOP(Number(r.total_cost))}
-                        </td>
-                        <td className="hidden max-w-[180px] truncate py-2 text-muted-foreground md:table-cell">
-                          {r.notes || "—"}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </CardContent>
-            </Card>
+            <DayPurchasesTable records={dayRecords} />
           </div>
         );
       })}

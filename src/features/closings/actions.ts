@@ -4,6 +4,8 @@ import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { checkStaff } from "@/features/auth/guard";
 import { getCogsForOrders, sumCogs } from "@/features/finance/cogs";
+import { fetchExpenses } from "@/features/finance/expenses";
+import { splitExpenses } from "@/lib/sales-analytics";
 import { revalidatePath } from "next/cache";
 
 export interface ActionResult {
@@ -74,12 +76,11 @@ export async function closeDay(date: string): Promise<ActionResult> {
   );
   const cogsTotal = sumCogs(cogsByOrder);
 
-  const { data: expenses } = await admin
-    .from("expenses")
-    .select("id, amount")
-    .eq("expense_date", date);
-
-  const expensesTotal = (expenses ?? []).reduce((s, e) => s + Number(e.amount), 0);
+  // Los gastos ya incluidos en el costo de cada producto (Empaques) no se
+  // restan otra vez.
+  const { operating: expensesTotal, includedInCost } = splitExpenses(
+    await fetchExpenses(admin, date, date)
+  );
 
   // Caja esperada del día: solo efectivo físico (el arqueo compara contra la
   // plata contada en el cajón; las transferencias van al banco). Suma los
@@ -118,6 +119,7 @@ export async function closeDay(date: string): Promise<ActionResult> {
       cogs_total: cogsTotal,
       missing_cost_products: missingCostCount,
       caja_esperada: cajaEsperada,
+      expenses_in_product_cost: includedInCost,
       includes_domicilios: false,
     },
   });

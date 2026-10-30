@@ -61,8 +61,7 @@ export type AdminSectionKey =
   | "productos"
   | "inventario"
   | "finanzas"
-  | "configuracion"
-  | "pedidos";
+  | "configuracion";
 
 export function isAdminNavItemActive(
   item: AdminNavItem,
@@ -104,9 +103,5 @@ export const ADMIN_SECTIONS: Record<
     { href: "/admin/horarios", label: "Horarios" },
     { href: "/admin/pqr", label: "PQR" },
     { href: "/admin/auditoria", label: "Auditoría" },
-  ],
-  pedidos: [
-    { href: "/admin/pedidos", label: "Pedidos en vivo" },
-    { href: "/admin/pedidos", label: "Historial" },
   ],
 };

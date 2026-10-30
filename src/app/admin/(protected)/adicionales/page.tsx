@@ -13,11 +13,11 @@ export default async function AddonsPage() {
     supabase.from("addons").select("*").order("name"),
     supabase
       .from("inventory_items")
-      .select("id, name, unit")
+      .select("id, name, unit, cost")
       .eq("is_active", true)
       .order("name"),
     supabase.from("addon_consumptions").select(
-      "id, addon_id, inventory_item_id, quantity, item:inventory_items(name, unit)"
+      "id, addon_id, inventory_item_id, quantity, item:inventory_items(name, unit, cost)"
     ),
   ]);
 

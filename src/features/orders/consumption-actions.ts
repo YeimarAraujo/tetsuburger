@@ -21,7 +21,7 @@ export interface ConsumptionBreakDownItem {
 /**
  * Devuelve el desglose de consumo que se aplicará a un pedido, combinando la
  * receta base + adiciones (autoNeeded) con los ajustes manuales (overrideQty).
- * Se usa para mostrar/editar los consumos en el board antes de ENTREGADO.
+ * Se usa para mostrar/editar los consumos en el board antes de EN_PREPARACION.
  */
 export async function getOrderConsumptionBreakdown(
   orderId: string
@@ -198,6 +198,17 @@ export async function saveOrderConsumptionOverrides(
   const check = await checkStaff();
   if (!check.ok) return { error: check.error };
   const supabase = createAdminClient();
+
+  // El inventario se descuenta una sola vez al pasar a EN_PREPARACION; después
+  // de eso los ajustes ya no tendrían efecto.
+  const { data: consumed } = await supabase
+    .from("order_consumption_logs")
+    .select("id")
+    .eq("order_id", parsed.data.orderId)
+    .limit(1);
+  if (consumed && consumed.length > 0) {
+    return { error: "Los insumos de este pedido ya se descontaron al pasar a preparación." };
+  }
 
   // Borra todos los overrides actuales del pedido y guarda los nuevos.
   // Se guardan también los quantity = 0: significan "no descontar este insumo"

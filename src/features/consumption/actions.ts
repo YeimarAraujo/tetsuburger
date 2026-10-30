@@ -62,9 +62,10 @@ export async function setProductConsumption(
 }
 
 /**
- * Actualiza el valor unitario (COP) de un consumo ya asignado.
- * Si el valor es mayor a 0, también actualiza el costo global del insumo
- * para que los demás productos tomen el mismo precio.
+ * Cambia el costo unitario de un insumo (COP) desde un producto. El cambio es
+ * global: actualiza inventory_items.cost y por tanto el costo de todos los
+ * productos que usan ese insumo. Este consumo queda siguiendo el costo del
+ * inventario (unit_cost = 0) para no congelar un valor propio.
  */
 export async function updateProductConsumptionCost(
   id: string,
@@ -74,7 +75,7 @@ export async function updateProductConsumptionCost(
   const parsed = z
     .object({
       id: z.string().uuid("ID inválido"),
-      unitCost: z.coerce.number().min(0).max(1_000_000_000),
+      unitCost: z.coerce.number().positive("El valor debe ser mayor a 0").max(1_000_000_000),
       inventoryItemId: z.string().uuid("Insumo inválido"),
     })
     .safeParse({ id, unitCost, inventoryItemId });
@@ -82,19 +83,47 @@ export async function updateProductConsumptionCost(
 
   const supabase = await createClient();
 
+  const { error: itemError } = await supabase
+    .from("inventory_items")
+    .update({ cost: parsed.data.unitCost })
+    .eq("id", parsed.data.inventoryItemId);
+
+  if (itemError) return { error: "No se pudo actualizar el costo del insumo" };
+
   const { error } = await supabase
     .from("product_consumptions")
-    .update({ unit_cost: parsed.data.unitCost })
+    .update({ unit_cost: 0 })
     .eq("id", parsed.data.id);
 
   if (error) return { error: "No se pudo actualizar el valor" };
 
-  if (parsed.data.unitCost > 0) {
-    await supabase
-      .from("inventory_items")
-      .update({ cost: parsed.data.unitCost })
-      .eq("id", parsed.data.inventoryItemId);
-  }
+  revalidatePath("/admin/productos");
+  revalidatePath("/admin/inventario");
+  return {};
+}
+
+/**
+ * Cambia la cantidad de un insumo ya asignado a un producto, sin tocar su valor.
+ */
+export async function updateProductConsumptionQuantity(
+  id: string,
+  quantity: number
+): Promise<ActionResult> {
+  const parsed = z
+    .object({
+      id: z.string().uuid("ID inválido"),
+      quantity: z.coerce.number().positive("La cantidad debe ser mayor a 0"),
+    })
+    .safeParse({ id, quantity });
+  if (!parsed.success) return { error: parsed.error.issues[0].message };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("product_consumptions")
+    .update({ quantity: parsed.data.quantity })
+    .eq("id", parsed.data.id);
+
+  if (error) return { error: "No se pudo actualizar la cantidad" };
 
   revalidatePath("/admin/productos");
   return {};
@@ -206,6 +235,33 @@ export async function setAddonConsumption(
       error: `No se pudo agregar el insumo: ${error.message}. Verifica que la migración 0008 (tabla addon_consumptions) esté aplicada.`,
     };
   }
+
+  revalidatePath("/admin/adicionales");
+  return {};
+}
+
+/**
+ * Cambia la cantidad de un insumo ya asignado a una adición.
+ */
+export async function updateAddonConsumptionQuantity(
+  id: string,
+  quantity: number
+): Promise<ActionResult> {
+  const parsed = z
+    .object({
+      id: z.string().uuid("ID inválido"),
+      quantity: z.coerce.number().positive("La cantidad debe ser mayor a 0"),
+    })
+    .safeParse({ id, quantity });
+  if (!parsed.success) return { error: parsed.error.issues[0].message };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("addon_consumptions")
+    .update({ quantity: parsed.data.quantity })
+    .eq("id", parsed.data.id);
+
+  if (error) return { error: "No se pudo actualizar la cantidad" };
 
   revalidatePath("/admin/adicionales");
   return {};
