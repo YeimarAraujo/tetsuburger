@@ -6,11 +6,16 @@ export const alt = "TETSU BURGER — Hamburguesas en Valledupar";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
-export default async function OpengraphImage() {
-  const mascot = await readFile(
-    path.join(process.cwd(), "public", "images", "og-tetsito.png")
+async function toDataUri(file: string) {
+  const buffer = await readFile(
+    path.join(process.cwd(), "public", "images", file)
   );
-  const mascotSrc = `data:image/png;base64,${mascot.toString("base64")}`;
+  return `data:image/png;base64,${buffer.toString("base64")}`;
+}
+
+export default async function OpengraphImage() {
+  const logoSrc = await toDataUri("og-logo.png");
+  const mascotSrc = await toDataUri("og-tetsito.png");
 
   return new ImageResponse(
     (
@@ -23,53 +28,16 @@ export default async function OpengraphImage() {
           justifyContent: "space-between",
           padding: "0 40px 0 72px",
           background: "#ff6633",
-          color: "#ffffff",
         }}
       >
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: "28px",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "16px",
-              fontSize: 28,
-              fontWeight: 700,
-              letterSpacing: "0.18em",
-              textTransform: "uppercase",
-              color: "#1a0f08",
-            }}
-          >
-            <div
-              style={{
-                width: 22,
-                height: 22,
-                borderRadius: 999,
-                background: "#1a0f08",
-              }}
-            />
-            Valledupar, Cesar
-          </div>
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              fontSize: 124,
-              lineHeight: 0.92,
-              fontWeight: 800,
-              letterSpacing: "-0.03em",
-              textTransform: "uppercase",
-            }}
-          >
-            <div>TETSU</div>
-            <div>BURGER</div>
-          </div>
-        </div>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={logoSrc}
+          alt="TETSU BURGER"
+          width={520}
+          height={194}
+          style={{ width: 520, height: 194 }}
+        />
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={mascotSrc}
