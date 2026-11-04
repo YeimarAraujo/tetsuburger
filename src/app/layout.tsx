@@ -10,7 +10,7 @@ import "./globals.css";
 
 const siteUrl = getSiteUrl();
 const description =
-  "Hamburguesas, perros calientes y papas a domicilio en Valledupar. Pide por WhatsApp y paga en efectivo o por transferencia.";
+  "Hamburguesas, perros calientes y papas en Valledupar.";
 
 const jakarta = Plus_Jakarta_Sans({
   variable: "--font-jakarta",
@@ -28,7 +28,7 @@ const anton = Anton({
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
-    default: "TETSU BURGER | Hamburguesas a domicilio en Valledupar",
+    default: "TETSU BURGER | Hamburguesas en Valledupar",
     template: "%s | TETSU BURGER",
   },
   description,
@@ -39,12 +39,12 @@ export const metadata: Metadata = {
     locale: "es_CO",
     url: "/",
     siteName: "TETSU BURGER",
-    title: "TETSU BURGER | Hamburguesas a domicilio en Valledupar",
+    title: "TETSU BURGER | Hamburguesas en Valledupar",
     description,
   },
   twitter: {
     card: "summary_large_image",
-    title: "TETSU BURGER | Hamburguesas a domicilio en Valledupar",
+    title: "TETSU BURGER | Hamburguesas en Valledupar",
     description,
   },
   robots: isProductionDeployment()
