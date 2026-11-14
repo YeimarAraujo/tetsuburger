@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Banknote, Landmark, Loader2, Plus, Search, Truck, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import type { CartAddon } from "@/store/cart";
-import type { AddonTipo } from "@/types/db";
+import type { AddonTipo, PaymentMethod } from "@/types/db";
 import { itemKey } from "@/store/cart";
 import { createManualOrder } from "@/features/orders/manual-actions";
 import { addonCharged, addonLabel } from "@/lib/addons";
@@ -89,7 +89,10 @@ export function ManualOrderForm({
   const [deliveryFee, setDeliveryFee] = useState(String(defaultDeliveryFee));
   const [chargeDeliveryFee, setChargeDeliveryFee] = useState(false);
   const [deliveryRetained, setDeliveryRetained] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<"EFECTIVO" | "TRANSFERENCIA">("EFECTIVO");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("EFECTIVO");
+  // Pago mixto: el efectivo es la fuente de verdad; la transferencia es
+  // total − efectivo, así el desglose siempre suma el total aunque cambie.
+  const [cashAmount, setCashAmount] = useState("");
   const [notes, setNotes] = useState("");
   const [finalValue, setFinalValue] = useState("");
 
@@ -112,6 +115,19 @@ export function ManualOrderForm({
       ? null
       : Number(finalValue);
   const total = finalValueNum !== null ? finalValueNum : base;
+
+  const cashNum = Number(cashAmount);
+  const mixedValid =
+    cashAmount !== "" && Number.isFinite(cashNum) && cashNum > 0 && cashNum < total;
+  const transferShown =
+    cashAmount !== "" && Number.isFinite(cashNum) ? String(Math.round((total - cashNum) * 100) / 100) : "";
+
+  function setTransferAmount(value: string) {
+    const n = Number(value);
+    setCashAmount(
+      value === "" || !Number.isFinite(n) ? "" : String(Math.round((total - n) * 100) / 100)
+    );
+  }
 
   function openPicker(product: ManualProduct) {
     setPickerProduct(product);
@@ -152,6 +168,10 @@ export function ManualOrderForm({
       toast.error("Agrega al menos un producto");
       return;
     }
+    if (paymentMethod === "MIXTO" && !mixedValid) {
+      toast.error("En el pago mixto indica cuánto paga en efectivo (mayor que 0 y menor que el total)");
+      return;
+    }
 
     setSaving(true);
 
@@ -164,6 +184,7 @@ export function ManualOrderForm({
         delivery_fee: fee,
         delivery_fee_retained: chargeDeliveryFee && deliveryRetained,
         payment_method: paymentMethod,
+        ...(paymentMethod === "MIXTO" ? { cash_amount: cashNum } : {}),
         notes,
         ...(finalValueNum !== null ? { final_total: finalValueNum } : {}),
       },
@@ -399,27 +420,86 @@ export function ManualOrderForm({
 
             <div className="space-y-1.5">
               <Label>Medio de pago *</Label>
-              <div className="grid grid-cols-2 gap-2">
+              <div role="radiogroup" aria-label="Medio de pago" className="grid grid-cols-3 gap-2">
                 {([
-                  { value: "EFECTIVO", label: "Efectivo", Icon: Banknote },
-                  { value: "TRANSFERENCIA", label: "Transferencia", Icon: Landmark },
-                ] as const).map(({ value, label, Icon }) => (
+                  { value: "EFECTIVO", label: "Efectivo", icons: [Banknote] },
+                  { value: "TRANSFERENCIA", label: "Transferencia", icons: [Landmark] },
+                  { value: "MIXTO", label: "Mixto", icons: [Banknote, Landmark] },
+                ] as const).map(({ value, label, icons }) => (
                   <button
                     key={value}
                     type="button"
+                    role="radio"
+                    aria-checked={paymentMethod === value}
                     onClick={() => setPaymentMethod(value)}
                     className={cn(
-                      "flex items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors",
+                      "flex flex-col items-center justify-center gap-1 rounded-lg border px-2 py-2.5 text-sm font-medium transition-colors",
                       paymentMethod === value
                         ? "border-primary bg-primary/10 text-primary"
                         : "text-muted-foreground hover:border-foreground/30"
                     )}
                   >
-                    <Icon className="size-4" />
+                    <span className="flex items-center gap-1">
+                      {icons.map((Icon, i) => (
+                        <Icon key={i} className="size-4" aria-hidden />
+                      ))}
+                    </span>
                     {label}
                   </button>
                 ))}
               </div>
+
+              {paymentMethod === "MIXTO" ? (
+                <div className="space-y-2 rounded-lg border bg-muted/40 p-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="manual-cash">Efectivo</Label>
+                      <Input
+                        id="manual-cash"
+                        type="number"
+                        inputMode="decimal"
+                        min={0}
+                        step="any"
+                        value={cashAmount}
+                        onChange={(e) => setCashAmount(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="manual-transfer">Transferencia</Label>
+                      <Input
+                        id="manual-transfer"
+                        type="number"
+                        inputMode="decimal"
+                        min={0}
+                        step="any"
+                        value={transferShown}
+                        onChange={(e) => setTransferAmount(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <p
+                      className={cn(
+                        "text-xs",
+                        cashAmount !== "" && !mixedValid ? "text-destructive" : "text-muted-foreground"
+                      )}
+                    >
+                      {cashAmount !== "" && !mixedValid
+                        ? `Cada parte debe ser mayor que 0 y sumar ${formatCOP(total)}.`
+                        : `Suman el total: ${formatCOP(total)}. Al escribir una parte, la otra se completa sola.`}
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCashAmount(String(Math.round(total / 2)))}
+                      disabled={total <= 0}
+                    >
+                      50 / 50
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             <div className="space-y-1.5">
@@ -427,7 +507,7 @@ export function ManualOrderForm({
               <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} maxLength={300} placeholder="Sin cebolla, referencias…" />
             </div>
 
-            <Button size="lg" className="w-full" disabled={saving || lines.length === 0} onClick={handleSubmit}>
+            <Button size="lg" className="w-full" disabled={saving || lines.length === 0 || (paymentMethod === "MIXTO" && !mixedValid)} onClick={handleSubmit}>
               {saving ? (
                 <>
                   <Loader2 className="size-4 animate-spin" />

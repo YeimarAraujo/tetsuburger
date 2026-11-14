@@ -1,5 +1,6 @@
 import { ACTIVE_STATUSES, ORDER_STATUS_META } from "@/lib/order-status";
 import { formatCOP, formatOrderNumber, formatTime } from "@/lib/format";
+import { paymentLabel } from "@/lib/payments";
 import type { OrderStatus } from "@/types/db";
 import { cn } from "@/lib/utils";
 
@@ -108,10 +109,8 @@ export function OrderDayList({ orders }: { orders: DayOrder[] }) {
                 {meta.label}
               </span>
               <span className="text-[10px] text-muted-foreground">
-                {order.payment_method === "TRANSFERENCIA"
-                  ? "Transferencia"
-                  : "Efectivo"}{" "}
-                · {order.origin === "WEB" ? "Web" : "Manual"}
+                {paymentLabel(order.payment_method)}{" "}
+                ·{order.origin === "WEB" ? "Web" : "Manual"}
               </span>
               <span className="text-sm font-semibold tabular-nums">
                 {formatCOP(Number(order.total))}

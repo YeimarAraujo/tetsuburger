@@ -6,6 +6,7 @@ import {
   buildOrderFromItems,
   persistOrder,
 } from "@/features/orders/order-builder";
+import { deriveMixedAmounts } from "@/lib/payments";
 
 export interface ManualOrderResult {
   error?: string;
@@ -20,7 +21,10 @@ const manualSchema = z
     delivery_type: z.enum(["DOMICILIO", "RECOGIDA", "LOCAL"]),
     delivery_fee: z.coerce.number().min(0).max(999_999),
     delivery_fee_retained: z.boolean().default(false),
-    payment_method: z.enum(["EFECTIVO", "TRANSFERENCIA"]),
+    payment_method: z.enum(["EFECTIVO", "TRANSFERENCIA", "MIXTO"]),
+    // Solo en MIXTO: lo que paga en efectivo. La transferencia la calcula el
+    // servidor (total − efectivo) para que el desglose siempre sume el total.
+    cash_amount: z.coerce.number().min(0).max(10_000_000).optional(),
     notes: z.string().trim().max(300).default(""),
     // Valor final opcional a cobrar (puede subir o bajar el total calculado).
     final_total: z.coerce.number().min(0).max(10_000_000).optional(),
@@ -65,6 +69,13 @@ export async function createManualOrder(
     data.final_total !== undefined ? base - data.final_total : 0;
   const total = base - finalAdjustment;
 
+  let mixed: { cash: number; transfer: number } | null = null;
+  if (data.payment_method === "MIXTO") {
+    const amounts = deriveMixedAmounts(total, data.cash_amount);
+    if (!amounts.ok) return { error: amounts.error };
+    mixed = amounts;
+  }
+
   const persisted = await persistOrder({
     origin: "MANUAL",
     status: "CONFIRMADO",
@@ -81,6 +92,8 @@ export async function createManualOrder(
     notes: data.notes,
     deliveryType: data.delivery_type,
     paymentMethod: data.payment_method,
+    cashAmount: mixed?.cash ?? null,
+    transferAmount: mixed?.transfer ?? null,
     createdBy: check.userId ?? null,
     confirmedAt: new Date().toISOString(),
   });

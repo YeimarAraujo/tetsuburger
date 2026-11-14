@@ -5,6 +5,7 @@ import { bogotaToday } from "@/lib/bogota";
 import { getCogsForOrders, sumCogs } from "@/features/finance/cogs";
 import { fetchExpenses } from "@/features/finance/expenses";
 import { splitExpenses } from "@/lib/sales-analytics";
+import { splitOrderPayment } from "@/lib/payments";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const money = (n: number) => String(Math.round(n * 100) / 100).replace(".", ",");
@@ -33,7 +34,7 @@ export async function GET(request: NextRequest) {
   const [{ data: orders }, expenses, { data: production }] = await Promise.all([
     supabase
       .from("orders")
-      .select("id, order_number, customer_name, subtotal, final_adjustment, payment_method, created_at")
+      .select("id, order_number, customer_name, subtotal, final_adjustment, payment_method, transfer_amount, created_at")
       .eq("status", "ENTREGADO")
       .gte("created_at", `${from}T00:00:00-05:00`)
       .lte("created_at", `${to}T23:59:59-05:00`)
@@ -54,13 +55,19 @@ export async function GET(request: NextRequest) {
 
   const lines: string[] = [];
   let totalSales = 0;
+  let totalCash = 0;
+  let totalTransfer = 0;
 
   lines.push("=== VENTAS ENTREGADAS (productos, sin domicilios) ===");
-  lines.push(["#", "Fecha", "Cliente", "Pago", "Subtotal", "Total neto", "Costo de lo vendido"].join(";"));
+  lines.push(["#", "Fecha", "Cliente", "Pago", "Subtotal", "Total neto", "Costo de lo vendido", "Efectivo", "Transferencia"].join(";"));
   for (const o of delivered) {
     const sub = Number(o.subtotal);
     const net = sub - Number(o.final_adjustment ?? 0);
+    // Desglose por canal de la venta neta (en pagos mixtos, la transferencia va primero).
+    const split = splitOrderPayment(o);
     totalSales += net;
+    totalCash += split.efectivo;
+    totalTransfer += split.transferencia;
     lines.push([
       String(o.order_number),
       bogotaDate(o.created_at),
@@ -69,9 +76,13 @@ export async function GET(request: NextRequest) {
       money(sub),
       money(net),
       money(cogsByOrder.get(o.id) ?? 0),
+      money(split.efectivo),
+      money(split.transferencia),
     ].join(";"));
   }
-  lines.push(["", "", "", "", "TOTAL", money(totalSales), money(cogsTotal)].join(";"));
+  lines.push(
+    ["", "", "", "", "TOTAL", money(totalSales), money(cogsTotal), money(totalCash), money(totalTransfer)].join(";")
+  );
   lines.push("");
 
   lines.push("=== GASTOS ===");

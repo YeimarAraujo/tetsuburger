@@ -12,7 +12,7 @@ export type OrderStatus =
 export type OrderOrigin = "WEB" | "MANUAL";
 export type DeliveryType = "DOMICILIO" | "RECOGIDA" | "LOCAL";
 export type MovementType = "ENTRADA" | "SALIDA" | "AJUSTE" | "PRODUCCION";
-export type PaymentMethod = "EFECTIVO" | "TRANSFERENCIA";
+export type PaymentMethod = "EFECTIVO" | "TRANSFERENCIA" | "MIXTO";
 export type CajaTipo =
   | "VENTA_EFECTIVO"
   | "VENTA_TRANSFERENCIA"
@@ -94,6 +94,9 @@ export interface Order {
   customer_address: string;
   delivery_type: DeliveryType;
   payment_method: PaymentMethod;
+  /** Solo en pago MIXTO (suman el total del pedido); null en los demás medios. */
+  cash_amount: number | null;
+  transfer_amount: number | null;
   delivery_fee: number;
   subtotal: number;
   final_adjustment: number;

@@ -9,10 +9,28 @@ import { bogotaToday } from "@/lib/bogota";
 import { consumeInventoryForOrder } from "@/features/orders/consumption";
 import { buildOrderFromItems, orderItemsSchema } from "@/features/orders/order-builder";
 import { ORDER_STATUS_META, canTransition } from "@/lib/order-status";
-import type { OrderStatus } from "@/types/db";
+import { splitOrderPayment } from "@/lib/payments";
+import type { OrderStatus, PaymentMethod } from "@/types/db";
 
 export interface ActionResult {
   error?: string;
+}
+
+/** Campos de pago de un pedido tal como quedan guardados (incluye el desglose del mixto). */
+export interface PaymentFields {
+  payment_method: PaymentMethod;
+  cash_amount: number | null;
+  transfer_amount: number | null;
+}
+
+function toPaymentFields(row: Record<string, unknown> | null): PaymentFields | undefined {
+  if (!row || !row.payment_method) return undefined;
+  const num = (v: unknown) => (v === null || v === undefined ? null : Number(v));
+  return {
+    payment_method: row.payment_method as PaymentMethod,
+    cash_amount: num(row.cash_amount),
+    transfer_amount: num(row.transfer_amount),
+  };
 }
 
 /**
@@ -157,37 +175,55 @@ async function legacyUpdateOrderStatus(
   if (error) return { error: "No se pudo actualizar el pedido" };
 
   // Al entregar, la venta neta de productos entra a la caja (sin domicilios).
+  // En un pago mixto se registran dos movimientos: efectivo y transferencia.
   if (to === "ENTREGADO") {
+    // select("*"): este camino es para bases sin migraciones recientes, donde
+    // transfer_amount puede no existir todavía.
     const { data: delivered } = await supabase
       .from("orders")
-      .select("order_number, subtotal, final_adjustment, payment_method")
+      .select("*")
       .eq("id", orderId)
       .single();
 
-    const netSales = delivered
-      ? Number(delivered.subtotal) - Number(delivered.final_adjustment ?? 0)
-      : 0;
+    const split = delivered ? splitOrderPayment(delivered) : null;
 
-    if (delivered && netSales > 0) {
+    if (delivered && split && split.efectivo + split.transferencia > 0) {
       const { data: existingMovement } = await supabase
         .from("caja_movements")
         .select("id")
         .eq("ref_type", "order")
         .eq("ref_id", orderId)
+        .limit(1)
         .maybeSingle();
 
       if (!existingMovement) {
-        const isTransfer = delivered.payment_method === "TRANSFERENCIA";
-        await supabase.from("caja_movements").insert({
+        const mixed = delivered.payment_method === "MIXTO";
+        const base = {
           movement_date: bogotaToday(),
-          tipo: isTransfer ? "VENTA_TRANSFERENCIA" : "VENTA_EFECTIVO",
-          metodo: isTransfer ? "TRANSFERENCIA" : "EFECTIVO",
-          amount: netSales,
-          description: `Venta #${delivered.order_number} ${isTransfer ? "por transferencia" : "en efectivo"}`,
           fuente: `Pedido #${delivered.order_number}`,
           ref_type: "order",
           ref_id: orderId,
-        });
+        };
+        const rows = [];
+        if (split.efectivo > 0) {
+          rows.push({
+            ...base,
+            tipo: "VENTA_EFECTIVO",
+            metodo: "EFECTIVO",
+            amount: split.efectivo,
+            description: `Venta #${delivered.order_number} ${mixed ? "mixto · efectivo" : "en efectivo"}`,
+          });
+        }
+        if (split.transferencia > 0) {
+          rows.push({
+            ...base,
+            tipo: "VENTA_TRANSFERENCIA",
+            metodo: "TRANSFERENCIA",
+            amount: split.transferencia,
+            description: `Venta #${delivered.order_number} ${mixed ? "mixto · transferencia" : "por transferencia"}`,
+          });
+        }
+        await supabase.from("caja_movements").insert(rows);
       }
     }
   }
@@ -238,7 +274,7 @@ export async function undoOrderStatus(
 export async function addOrderItem(
   orderId: string,
   itemsRaw: unknown
-): Promise<ActionResult & { subtotal?: number; total?: number }> {
+): Promise<ActionResult & { subtotal?: number; total?: number; payment?: PaymentFields }> {
   const authError = await assertStaff();
   if (authError) return authError;
 
@@ -325,10 +361,14 @@ export async function addOrderItem(
   const adj = Number(order.final_adjustment ?? 0);
   const newTotal = newSubtotal + Number(order.delivery_fee) - adj;
 
-  const { error: updateError } = await supabase
+  // select("*") devuelve la fila ya ajustada por el trigger del pago mixto
+  // (el efectivo se recalcula al cambiar el total).
+  const { data: updated, error: updateError } = await supabase
     .from("orders")
     .update({ subtotal: newSubtotal, total: newTotal })
-    .eq("id", order.id);
+    .eq("id", order.id)
+    .select("*")
+    .maybeSingle();
 
   if (updateError) {
     await rollback();
@@ -337,7 +377,61 @@ export async function addOrderItem(
 
   revalidatePath("/admin/pedidos");
   revalidatePath("/admin");
-  return { subtotal: newSubtotal, total: newTotal };
+  return { subtotal: newSubtotal, total: newTotal, payment: toPaymentFields(updated) };
+}
+
+const paymentSchema = z.object({
+  orderId: z.string().uuid(),
+  method: z.enum(["EFECTIVO", "TRANSFERENCIA", "MIXTO"]),
+  cashAmount: z.number().min(0).max(10_000_000).optional(),
+});
+
+/**
+ * Cambia el medio de pago de un pedido (efectivo, transferencia o mixto).
+ * Solo se permite antes de ENTREGADO: al entregar se registra la caja con el
+ * medio vigente. La regla se valida en la base de datos bajo bloqueo de fila
+ * (update_order_payment, migración 0036), así no se cruza con una entrega
+ * simultánea. En mixto el cliente solo indica el efectivo; la transferencia
+ * se calcula como total − efectivo para que siempre sumen el total.
+ */
+export async function updatePaymentMethod(
+  orderId: string,
+  method: PaymentMethod,
+  cashAmount?: number
+): Promise<ActionResult & { payment?: PaymentFields }> {
+  const check = await checkStaff();
+  if (!check.ok) return { error: check.error };
+
+  const parsed = paymentSchema.safeParse({ orderId, method, cashAmount });
+  if (!parsed.success) return { error: "Datos inválidos" };
+
+  const supabase = createAdminClient();
+  const { error } = await supabase.rpc("update_order_payment", {
+    p_order_id: parsed.data.orderId,
+    p_method: parsed.data.method,
+    p_cash: parsed.data.method === "MIXTO" ? (parsed.data.cashAmount ?? null) : null,
+    p_actor: check.userId ?? null,
+  });
+
+  if (error) {
+    // PGRST202: función inexistente; 22P02: el enum aún no tiene MIXTO.
+    if (error.code === "PGRST202" || error.code === "22P02") {
+      return { error: "Para cambiar el medio de pago aplica las migraciones 0035 y 0036 en Supabase." };
+    }
+    if (error.code === "P0001") return { error: error.message };
+    console.error("update_order_payment failed", error);
+    return { error: "No se pudo cambiar el medio de pago" };
+  }
+
+  const { data: row } = await supabase
+    .from("orders")
+    .select("payment_method, cash_amount, transfer_amount")
+    .eq("id", parsed.data.orderId)
+    .single();
+
+  revalidateOrderViews();
+  revalidatePath("/admin/finanzas");
+  return { payment: toPaymentFields(row) };
 }
 
 /**
@@ -394,6 +488,7 @@ export async function updateOrderTotals(
     delivery_fee?: number;
     final_adjustment?: number;
     total?: number;
+    payment?: PaymentFields;
   }
 > {
   const authError = await assertStaff();
@@ -423,7 +518,9 @@ export async function updateOrderTotals(
 
   const newTotal = base - adj;
 
-  const { error } = await supabase
+  // select("*") devuelve la fila ya ajustada por el trigger del pago mixto
+  // (el efectivo se recalcula al cambiar el total).
+  const { data: updated, error } = await supabase
     .from("orders")
     .update({
       subtotal: newSubtotal,
@@ -431,7 +528,9 @@ export async function updateOrderTotals(
       final_adjustment: adj,
       total: newTotal,
     })
-    .eq("id", order.id);
+    .eq("id", order.id)
+    .select("*")
+    .maybeSingle();
 
   if (error) {
     console.error("updateOrderTotals failed", error);
@@ -446,5 +545,6 @@ export async function updateOrderTotals(
     delivery_fee: newFee,
     final_adjustment: adj,
     total: newTotal,
+    payment: toPaymentFields(updated),
   };
 }

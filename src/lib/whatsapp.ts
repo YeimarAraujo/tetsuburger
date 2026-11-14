@@ -1,5 +1,7 @@
 import { site } from "@/config/site";
 import { formatCOP, formatOrderNumber } from "@/lib/format";
+import { paymentLabel } from "@/lib/payments";
+import type { PaymentMethod } from "@/types/db";
 
 /** Enlace de contacto con mensaje prellenado (codificado). */
 export function whatsappContactUrl(
@@ -8,9 +10,7 @@ export function whatsappContactUrl(
   return `https://wa.me/${site.whatsapp}?text=${encodeURIComponent(message)}`;
 }
 
-export function paymentLabel(method: "EFECTIVO" | "TRANSFERENCIA"): string {
-  return method === "EFECTIVO" ? "Efectivo" : "Transferencia";
-}
+export { paymentLabel };
 
 export function buildWhatsappMessage(params: {
   orderNumber: number;
@@ -18,7 +18,7 @@ export function buildWhatsappMessage(params: {
   subtotal: number;
   deliveryFee: number;
   total: number;
-  paymentMethod: "EFECTIVO" | "TRANSFERENCIA";
+  paymentMethod: PaymentMethod;
   name: string;
   phone: string;
   address: string;
