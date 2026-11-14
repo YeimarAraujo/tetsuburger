@@ -123,7 +123,10 @@ export async function getOrderConfirmation(token: string): Promise<OrderConfirma
     // El ajuste del valor final es SOLO web: WhatsApp siempre muestra los
     // valores originales (subtotal + domicilio), sin línea de ajuste.
     total: toNum(order.subtotal) + toNum(order.delivery_fee),
-    paymentMethod: order.payment_method === "TRANSFERENCIA" ? "TRANSFERENCIA" : "EFECTIVO",
+    paymentMethod:
+      order.payment_method === "TRANSFERENCIA" || order.payment_method === "MIXTO"
+        ? order.payment_method
+        : "EFECTIVO",
     name: String(order.customer_name ?? ""),
     phone: String(order.customer_phone ?? ""),
     address: String(order.customer_address ?? ""),

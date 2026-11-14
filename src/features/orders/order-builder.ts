@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { CartAddon } from "@/store/cart";
+import type { PaymentMethod } from "@/types/db";
 
 /**
  * Lógica compartida por pedidos WEB y MANUALES:
@@ -167,7 +168,10 @@ export async function persistOrder(params: {
   customerAddress: string;
   notes: string;
   deliveryType: "DOMICILIO" | "RECOGIDA" | "LOCAL";
-  paymentMethod: "EFECTIVO" | "TRANSFERENCIA";
+  paymentMethod: PaymentMethod;
+  /** Solo para MIXTO: desglose que suma el total (lo deriva el servidor). */
+  cashAmount?: number | null;
+  transferAmount?: number | null;
   createdBy: string | null;
   confirmedAt: string | null;
   acceptedTermsAt?: string | null;
@@ -190,6 +194,11 @@ export async function persistOrder(params: {
       customer_address: params.customerAddress,
       delivery_type: params.deliveryType,
       payment_method: params.paymentMethod,
+      // Solo se envían en MIXTO: así los pedidos normales no dependen de las
+      // columnas nuevas (migración 0036).
+      ...(params.paymentMethod === "MIXTO"
+        ? { cash_amount: params.cashAmount ?? null, transfer_amount: params.transferAmount ?? null }
+        : {}),
       delivery_fee: params.deliveryFee,
       delivery_fee_retained: params.deliveryFeeRetained,
       subtotal: params.subtotal,

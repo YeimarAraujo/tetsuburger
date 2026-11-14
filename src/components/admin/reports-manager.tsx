@@ -23,6 +23,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { formatCOP, formatDate } from "@/lib/format";
+import { paymentLabel } from "@/lib/payments";
 import {
   classifyMenu,
   daysInRange,
@@ -944,7 +945,7 @@ function OrdersTab({
                       <span className="block text-[11px] text-muted-foreground sm:hidden">{formatDate(o.created_at)}</span>
                     </td>
                     <td className="hidden py-2 pr-2 text-xs md:table-cell">
-                      {o.payment_method === "TRANSFERENCIA" ? "Transferencia" : "Efectivo"}
+                      {paymentLabel(o.payment_method)}
                       <span className="text-muted-foreground"> · {o.origin === "WEB" ? "Web" : "Manual"}</span>
                     </td>
                     <td className="hidden py-2 pr-2 text-xs whitespace-nowrap lg:table-cell">

@@ -13,6 +13,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { formatCOP } from "@/lib/format";
+import { paymentLabel } from "@/lib/payments";
 import type { OpenStatus } from "@/lib/business-hours";
 import { ORDER_STATUS_META } from "@/lib/order-status";
 import {
@@ -194,12 +195,13 @@ export function DashboardStats({
               Object.entries(today.paymentsByMethod).map(([method, count]) => (
                 <div key={method} className="flex items-center justify-between">
                   <span className="flex items-center gap-2 text-sm">
-                    {method === "EFECTIVO" ? (
+                    {method !== "TRANSFERENCIA" ? (
                       <Banknote className="size-4 text-emerald-600" />
-                    ) : (
+                    ) : null}
+                    {method !== "EFECTIVO" ? (
                       <CreditCard className="size-4 text-blue-600" />
-                    )}
-                    {method === "EFECTIVO" ? "Efectivo" : "Transferencia"}
+                    ) : null}
+                    {paymentLabel(method)}
                   </span>
                   <Badge variant="secondary">{count}</Badge>
                 </div>

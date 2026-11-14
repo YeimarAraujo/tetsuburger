@@ -28,6 +28,7 @@ import {
   setDeliveryRetained,
   undoOrderStatus,
   updateOrderStatus,
+  updatePaymentMethod,
   updateOrderTotals,
 } from "@/features/orders/board-actions";
 import {
@@ -42,8 +43,9 @@ import {
 } from "@/lib/order-status";
 import { formatCOP, formatOrderNumber } from "@/lib/format";
 import { addonCharged, addonLabel } from "@/lib/addons";
+import { paymentLabel } from "@/lib/payments";
 import { cn } from "@/lib/utils";
-import type { OrderItemAddon, OrderStatus } from "@/types/db";
+import type { OrderItemAddon, OrderStatus, PaymentMethod } from "@/types/db";
 import type { ManualProduct } from "@/components/admin/orders/manual-order-form";
 import { Button } from "@/components/ui/button";
 import {
@@ -68,6 +70,9 @@ export interface BoardOrder {
   customer_address: string;
   delivery_type: string;
   payment_method: string;
+  /** Solo en pago MIXTO (suman el total); null en los demás medios. */
+  cash_amount: number | null;
+  transfer_amount: number | null;
   delivery_fee: number;
   delivery_fee_retained: boolean;
   subtotal: number;
@@ -151,6 +156,7 @@ export function OrdersBoard({
   const [cancelTarget, setCancelTarget] = useState<BoardOrder | null>(null);
   const [cancelReason, setCancelReason] = useState("");
   const [chargeTarget, setChargeTarget] = useState<BoardOrder | null>(null);
+  const [paymentTarget, setPaymentTarget] = useState<BoardOrder | null>(null);
   const [consumptionTarget, setConsumptionTarget] = useState<BoardOrder | null>(null);
   const [addItemTarget, setAddItemTarget] = useState<BoardOrder | null>(null);
   const [addItemSearch, setAddItemSearch] = useState("");
@@ -414,6 +420,11 @@ export function OrdersBoard({
     }
 
     toast.success("Producto agregado al pedido");
+    if (result.payment && result.payment.payment_method !== addItemTarget.payment_method) {
+      toast.info(
+        `El medio de pago pasó a ${paymentLabel(result.payment.payment_method)}: la transferencia ya cubre el total.`
+      );
+    }
     setAddItemTarget(null);
     setAddItemProduct(null);
     setAddItemAddons({});
@@ -537,6 +548,7 @@ export function OrdersBoard({
                     onAdvance={handleAdvance}
                     onToggleRetained={toggleDeliveryRetained}
                     onEditCharge={setChargeTarget}
+                    onEditPayment={setPaymentTarget}
                     onAddItem={openAddItem}
                     onConsumption={setConsumptionTarget}
                     onCancel={(o) => {
@@ -559,6 +571,17 @@ export function OrdersBoard({
         onSaved={(order) => {
           upsertOrder(order);
           setChargeTarget(null);
+        }}
+      />
+
+      {/* Medio de pago */}
+      <PaymentDialog
+        key={`pago-${paymentTarget?.id ?? "cerrado"}`}
+        order={paymentTarget}
+        onClose={() => setPaymentTarget(null)}
+        onSaved={(order) => {
+          upsertOrder(order);
+          setPaymentTarget(null);
         }}
       />
 
@@ -802,6 +825,7 @@ function OrderCard({
   onAdvance,
   onToggleRetained,
   onEditCharge,
+  onEditPayment,
   onAddItem,
   onConsumption,
   onCancel,
@@ -813,6 +837,7 @@ function OrderCard({
   onAdvance: (order: BoardOrder, next: OrderStatus) => void;
   onToggleRetained: (order: BoardOrder) => void;
   onEditCharge: (order: BoardOrder) => void;
+  onEditPayment: (order: BoardOrder) => void;
   onAddItem: (order: BoardOrder) => void;
   onConsumption: (order: BoardOrder) => void;
   onCancel: (order: BoardOrder) => void;
@@ -857,17 +882,18 @@ function OrderCard({
           {isDelivery ? <Truck className="size-3" /> : null}
           {DELIVERY_LABEL[order.delivery_type] ?? order.delivery_type}
         </span>
-        <span className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-muted-foreground">
-          {order.payment_method === "TRANSFERENCIA" ? (
-            <>
-              <Landmark className="size-3" /> Transferencia
-            </>
-          ) : (
-            <>
-              <Banknote className="size-3" /> Efectivo
-            </>
-          )}
-        </span>
+        <button
+          type="button"
+          onClick={() => onEditPayment(order)}
+          disabled={pending}
+          title="Cambiar medio de pago"
+          aria-label={`Medio de pago: ${paymentLabel(order.payment_method)}. Cambiar`}
+          className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground disabled:opacity-60"
+        >
+          <PaymentIcons method={order.payment_method} />
+          {paymentLabel(order.payment_method)}
+          <Pencil className="size-2.5 opacity-60" aria-hidden />
+        </button>
       </div>
 
       <div className="space-y-0.5 rounded-md bg-muted/60 p-2">
@@ -936,6 +962,12 @@ function OrderCard({
               {Number(order.delivery_fee) > 0
                 ? `Incluye domicilio ${formatCOP(Number(order.delivery_fee))}`
                 : "Sin cargo de domicilio"}
+            </p>
+          ) : null}
+          {order.payment_method === "MIXTO" ? (
+            <p className="text-xs font-medium text-muted-foreground tabular-nums">
+              Efectivo {formatCOP(Number(order.cash_amount ?? 0))} · Transferencia{" "}
+              {formatCOP(Number(order.transfer_amount ?? 0))}
             </p>
           ) : null}
         </div>
@@ -1026,6 +1058,224 @@ function OrderCard({
   );
 }
 
+/* ----------------------------- Medio de pago ------------------------------ */
+
+function PaymentIcons({ method }: { method: string }) {
+  if (method === "MIXTO") {
+    return (
+      <>
+        <Banknote className="size-3" aria-hidden />
+        <Landmark className="size-3" aria-hidden />
+      </>
+    );
+  }
+  return method === "TRANSFERENCIA" ? (
+    <Landmark className="size-3" aria-hidden />
+  ) : (
+    <Banknote className="size-3" aria-hidden />
+  );
+}
+
+const PAYMENT_OPTIONS: { value: PaymentMethod; label: string }[] = [
+  { value: "EFECTIVO", label: "Efectivo" },
+  { value: "TRANSFERENCIA", label: "Transferencia" },
+  { value: "MIXTO", label: "Mixto" },
+];
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/**
+ * Cambia el medio de pago de un pedido (solo mientras sigue activo). En mixto
+ * se indica cuánto paga en efectivo y cuánto por transferencia: al escribir
+ * uno, el otro se completa solo para que siempre sumen el total. El servidor
+ * recibe únicamente el efectivo y calcula la transferencia.
+ */
+function PaymentDialog({
+  order,
+  onClose,
+  onSaved,
+}: {
+  order: BoardOrder | null;
+  onClose: () => void;
+  onSaved: (order: BoardOrder) => void;
+}) {
+  const [method, setMethod] = useState<PaymentMethod>(
+    () => (order?.payment_method as PaymentMethod | undefined) ?? "EFECTIVO"
+  );
+  const [cash, setCash] = useState(() => (order?.cash_amount != null ? String(order.cash_amount) : ""));
+  const [transfer, setTransfer] = useState(() =>
+    order?.transfer_amount != null ? String(order.transfer_amount) : ""
+  );
+  const [saving, setSaving] = useState(false);
+
+  if (!order) return null;
+  const o = order;
+  const total = Number(o.total);
+  const cashNum = Number(cash);
+  const transferNum = Number(transfer);
+
+  const mixedValid =
+    cash !== "" && Number.isFinite(cashNum) && cashNum > 0 && cashNum < total &&
+    Number.isFinite(transferNum) && transferNum > 0;
+  const valid = method !== "MIXTO" || mixedValid;
+  const unchanged =
+    method === o.payment_method &&
+    (method !== "MIXTO" || (mixedValid && cashNum === Number(o.cash_amount)));
+
+  function setCashAmount(value: string) {
+    setCash(value);
+    const n = Number(value);
+    setTransfer(value === "" || !Number.isFinite(n) ? "" : String(round2(total - n)));
+  }
+
+  function setTransferAmount(value: string) {
+    setTransfer(value);
+    const n = Number(value);
+    setCash(value === "" || !Number.isFinite(n) ? "" : String(round2(total - n)));
+  }
+
+  async function handleSave() {
+    if (!valid || saving) return;
+    if (unchanged) {
+      onClose();
+      return;
+    }
+
+    setSaving(true);
+    const res = await updatePaymentMethod(
+      o.id,
+      method,
+      method === "MIXTO" ? cashNum : undefined
+    );
+    setSaving(false);
+
+    if (res.error) {
+      toast.error(res.error);
+      return;
+    }
+
+    toast.success(
+      `Pedido ${formatOrderNumber(o.order_number)}: pago ${paymentLabel(method).toLowerCase()}`
+    );
+    onSaved({
+      ...o,
+      payment_method: res.payment?.payment_method ?? method,
+      cash_amount: res.payment?.cash_amount ?? null,
+      transfer_amount: res.payment?.transfer_amount ?? null,
+    });
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Medio de pago · {formatOrderNumber(o.order_number)}</DialogTitle>
+          <DialogDescription>
+            Se puede cambiar hasta antes de entregar el pedido: al entregarlo la venta entra a caja con este medio.
+          </DialogDescription>
+        </DialogHeader>
+
+        <form
+          className="space-y-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void handleSave();
+          }}
+        >
+          <div role="radiogroup" aria-label="Medio de pago" className="grid grid-cols-3 gap-2">
+            {PAYMENT_OPTIONS.map(({ value, label }) => (
+              <button
+                key={value}
+                type="button"
+                role="radio"
+                aria-checked={method === value}
+                onClick={() => setMethod(value)}
+                className={cn(
+                  "flex min-h-14 flex-col items-center justify-center gap-1 rounded-lg border px-2 py-2 text-xs font-semibold transition-colors",
+                  method === value
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "text-muted-foreground hover:border-foreground/30"
+                )}
+              >
+                <span className="flex items-center gap-1">
+                  <PaymentIcons method={value} />
+                </span>
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {method === "MIXTO" ? (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="pay-cash">Efectivo</Label>
+                  <Input
+                    id="pay-cash"
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    step="any"
+                    value={cash}
+                    onChange={(e) => setCashAmount(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="pay-transfer">Transferencia</Label>
+                  <Input
+                    id="pay-transfer"
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    step="any"
+                    value={transfer}
+                    onChange={(e) => setTransferAmount(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <p
+                  className={cn(
+                    "text-xs",
+                    cash !== "" && !mixedValid ? "text-destructive" : "text-muted-foreground"
+                  )}
+                >
+                  {cash !== "" && !mixedValid
+                    ? "Cada parte debe ser mayor que 0 y sumar el total."
+                    : "Al escribir una parte, la otra se completa sola."}
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCashAmount(String(Math.round(total / 2)))}
+                >
+                  50 / 50
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="flex items-center justify-between rounded-lg bg-muted px-3 py-2.5">
+            <span className="text-sm text-muted-foreground">Total a cobrar</span>
+            <span className="text-lg font-bold tabular-nums text-price">{formatCOP(total)}</span>
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose}>
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={!valid || saving}>
+              {saving ? <Loader2 className="size-4 animate-spin" /> : null}
+              Guardar
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 /* ------------------------------ Editar cobro ------------------------------ */
 
 function ChargeDialog({
@@ -1085,8 +1335,16 @@ function ChargeDialog({
     }
 
     toast.success(`Cobro del pedido ${formatOrderNumber(o.order_number)}: ${formatCOP(res.total ?? previewTotal)}`);
+    // En un pago mixto el efectivo se recalcula con el nuevo total; si la
+    // transferencia ya cubre todo, el pedido pasa a Transferencia.
+    if (res.payment && res.payment.payment_method !== o.payment_method) {
+      toast.info(
+        `El medio de pago pasó a ${paymentLabel(res.payment.payment_method)}: la transferencia ya cubre el total.`
+      );
+    }
     onSaved({
       ...o,
+      ...(res.payment ?? {}),
       subtotal: res.subtotal ?? o.subtotal,
       delivery_fee: res.delivery_fee ?? o.delivery_fee,
       final_adjustment: res.final_adjustment ?? o.final_adjustment,

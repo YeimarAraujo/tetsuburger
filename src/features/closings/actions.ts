@@ -6,6 +6,7 @@ import { checkStaff } from "@/features/auth/guard";
 import { getCogsForOrders, sumCogs } from "@/features/finance/cogs";
 import { fetchExpenses } from "@/features/finance/expenses";
 import { splitExpenses } from "@/lib/sales-analytics";
+import { splitOrderPayment } from "@/lib/payments";
 import { revalidatePath } from "next/cache";
 
 export interface ActionResult {
@@ -49,7 +50,7 @@ export async function closeDay(date: string): Promise<ActionResult> {
 
   const { data: ordersResult } = await admin
     .from("orders")
-    .select("id, subtotal, final_adjustment, total, delivery_fee, delivery_fee_retained, status, payment_method")
+    .select("id, subtotal, final_adjustment, total, delivery_fee, delivery_fee_retained, status, payment_method, transfer_amount")
     .gte("created_at", `${date}T00:00:00-05:00`)
     .lte("created_at", `${date}T23:59:59-05:00`);
 
@@ -95,14 +96,21 @@ export async function closeDay(date: string): Promise<ActionResult> {
   // Utilidad = ventas de productos entregados − costo de lo vendido − gastos.
   const estimatedProfit = salesTotal - cogsTotal - expensesTotal;
 
-  const byPayment = deliveredOrders.reduce(
-    (acc, o) => {
-      const method = o.payment_method ?? "EFECTIVO";
-      acc[method] = (acc[method] || 0) + netProducts(o);
-      return acc;
-    },
-    {} as Record<string, number>
-  );
+  // by_payment conserva solo las claves EFECTIVO y TRANSFERENCIA (compatibles
+  // con los cierres históricos): un pedido mixto reparte su venta neta entre
+  // ambas con la misma regla que la caja. mixed_orders cuenta cuántos fueron.
+  const byPayment: Record<string, number> = {};
+  let mixedOrders = 0;
+  for (const o of deliveredOrders) {
+    const split = splitOrderPayment(o);
+    if (o.payment_method === "MIXTO") mixedOrders++;
+    if (split.efectivo > 0 || o.payment_method === "EFECTIVO" || !o.payment_method) {
+      byPayment.EFECTIVO = (byPayment.EFECTIVO || 0) + split.efectivo;
+    }
+    if (split.transferencia > 0 || o.payment_method === "TRANSFERENCIA") {
+      byPayment.TRANSFERENCIA = (byPayment.TRANSFERENCIA || 0) + split.transferencia;
+    }
+  }
 
   const { error } = await admin.from("daily_closings").insert({
     closing_date: date,
@@ -112,6 +120,7 @@ export async function closeDay(date: string): Promise<ActionResult> {
     estimated_profit: estimatedProfit,
     details: {
       by_payment: byPayment,
+      mixed_orders: mixedOrders,
       total_orders: allOrdersCount,
       cancelled_orders: cancelledOrders,
       subtotal_sales: subtotalSales,

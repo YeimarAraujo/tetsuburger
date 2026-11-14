@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { KpiCard } from "@/components/admin/kpi-card";
 import { DateRangeFilter } from "@/components/admin/date-range-filter";
 import { splitExpenses } from "@/lib/sales-analytics";
+import { paymentLabel, splitOrderPayment } from "@/lib/payments";
 import { TablePagination, usePagination } from "@/components/admin/table-pagination";
 
 interface Filters {
@@ -26,7 +27,7 @@ export function FinanzasManager({
   missingCostCount,
   filters,
 }: {
-  orders: { id: string; status: string; total: number | string; subtotal: number | string; final_adjustment?: number | string | null; delivery_fee: number | string; delivery_fee_retained: boolean; payment_method: string | null; origin: string; created_at: string }[];
+  orders: { id: string; status: string; total: number | string; subtotal: number | string; final_adjustment?: number | string | null; delivery_fee: number | string; delivery_fee_retained: boolean; payment_method: string | null; transfer_amount?: number | string | null; origin: string; created_at: string }[];
   expenses: { id: string; expense_date: string; amount: number | string; concept: string; category?: { name: string } | null; includedInProductCost?: boolean }[];
   production: { id: string; record_date: string; total_cost: number | string }[];
   closings: { id: string; closing_date: string; orders_count: number; sales_total: number | string; expenses_total: number | string; estimated_profit: number | string; details?: Record<string, unknown> | null }[];
@@ -56,12 +57,25 @@ export function FinanzasManager({
     const { operating: expTotal, includedInCost } = splitExpenses(expenses);
     const prodCost = production.reduce((s, p) => s + Number(p.total_cost), 0);
 
+    // Ingresos por canal. Un pedido mixto reparte su venta neta entre efectivo
+    // y transferencia (misma regla que la caja) y cuenta en cada canal que
+    // recibió dinero.
     const byMethod: Record<string, { count: number; total: number }> = {};
-    deliveredOrders.forEach((o) => {
-      const m = o.payment_method ?? "EFECTIVO";
+    const addToMethod = (m: string, amount: number) => {
       if (!byMethod[m]) byMethod[m] = { count: 0, total: 0 };
       byMethod[m].count++;
-      byMethod[m].total += netProducts(o);
+      byMethod[m].total += amount;
+    };
+    let mixedCount = 0;
+    deliveredOrders.forEach((o) => {
+      const split = splitOrderPayment(o);
+      if (o.payment_method === "MIXTO") {
+        mixedCount++;
+        if (split.efectivo > 0) addToMethod("EFECTIVO", split.efectivo);
+        if (split.transferencia > 0) addToMethod("TRANSFERENCIA", split.transferencia);
+      } else {
+        addToMethod(o.payment_method ?? "EFECTIVO", split.efectivo + split.transferencia);
+      }
     });
 
     const byOrigin: Record<string, number> = {};
@@ -94,6 +108,7 @@ export function FinanzasManager({
       margin,
       missingCostCount,
       byMethod,
+      mixedCount,
       byOrigin,
       expByCategory,
       totalDelivered: deliveredOrders.length,
@@ -240,7 +255,7 @@ export function FinanzasManager({
             {Object.entries(stats.byMethod).map(([method, data]) => (
               <div key={method} className="flex items-center justify-between">
                 <span className="flex items-center gap-2 text-sm">
-                  {method === "EFECTIVO" ? "Efectivo" : "Transferencia"}
+                  {paymentLabel(method)}
                   <Badge variant="outline" className="text-[10px]">{data.count}</Badge>
                 </span>
                 <span className="font-semibold">{formatCOP(data.total)}</span>
@@ -248,6 +263,11 @@ export function FinanzasManager({
             ))}
             {Object.keys(stats.byMethod).length === 0 && (
               <p className="text-sm text-muted-foreground">Sin datos</p>
+            )}
+            {stats.mixedCount > 0 && (
+              <p className="text-xs text-muted-foreground">
+                Incluye {stats.mixedCount} {stats.mixedCount === 1 ? "pedido" : "pedidos"} con pago mixto, repartido entre efectivo y transferencia.
+              </p>
             )}
           </CardContent>
         </Card>
