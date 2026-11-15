@@ -131,6 +131,10 @@ export async function getOrderConfirmation(token: string): Promise<OrderConfirma
     phone: String(order.customer_phone ?? ""),
     address: String(order.customer_address ?? ""),
     notes: String(order.notes ?? ""),
+    deliveryType:
+      order.delivery_type === "RECOGIDA" || order.delivery_type === "LOCAL"
+        ? order.delivery_type
+        : "DOMICILIO",
   });
 
   return {
