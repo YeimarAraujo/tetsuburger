@@ -172,8 +172,9 @@ export async function placeOrder(
     paymentMethod: customer.payment_method,
     name: customer.customer_name,
     phone: customer.customer_phone,
-    address: customer.customer_address,
+    address: isDelivery ? customer.customer_address : "",
     notes: customer.notes,
+    deliveryType: isDelivery ? "DOMICILIO" : "RECOGIDA",
   });
 
   const whatsappUrl = `https://wa.me/${waNumber}?text=${encodeURIComponent(message)}`;
