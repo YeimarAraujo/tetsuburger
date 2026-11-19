@@ -11,6 +11,12 @@ import { Logo } from "@/components/ui/logo";
 import { Button } from "@/components/ui/button";
 import { WhatsappFab } from "@/components/public/whatsapp-fab";
 import {
+  PromoDeliveryProgress,
+  PromoGiftProgress,
+} from "@/components/public/promo-progress";
+import { unlockedBenefits } from "@/lib/promotions";
+import { usePromotions } from "@/lib/use-promotions";
+import {
   Sheet,
   SheetContent,
   SheetFooter,
@@ -99,8 +105,10 @@ function CartLines() {
 export function Header() {
   const [open, setOpen] = useState(false);
   const items = useCart((s) => s.items);
+  const promos = usePromotions();
   const count = cartCount(items);
   const subtotal = cartSubtotal(items);
+  const freeDelivery = unlockedBenefits(promos, subtotal).freeDelivery;
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -141,16 +149,24 @@ export function Header() {
         <SheetHeader>
           <SheetTitle>Tu pedido</SheetTitle>
         </SheetHeader>
+        {items.length > 0 ? (
+          <div className="px-4 pb-1">
+            <PromoGiftProgress promos={promos} subtotal={subtotal} compact />
+          </div>
+        ) : null}
         <CartLines />
         {items.length > 0 ? (
           <SheetFooter className="border-t">
             <div className="w-full space-y-3">
+              <PromoDeliveryProgress promos={promos} subtotal={subtotal} compact />
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Subtotal</span>
                 <span className="font-semibold">{formatCOP(subtotal)}</span>
               </div>
               <p className="-mt-1 text-xs text-muted-foreground">
-                El costo de domicilio se suma en el siguiente paso.
+                {freeDelivery
+                  ? "Si es a domicilio, va por nuestra cuenta."
+                  : "El costo de domicilio se suma en el siguiente paso."}
               </p>
               <Button asChild className="w-full" size="lg">
                 <Link href="/resumen" onClick={() => setOpen(false)}>

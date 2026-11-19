@@ -15,6 +15,7 @@ import {
   buildOrderFromItems,
   persistOrder,
 } from "@/features/orders/order-builder";
+import { resolveOrderPromotions } from "@/features/promotions/server";
 
 export interface PlaceOrderResult {
   error?: string;
@@ -118,7 +119,16 @@ export async function placeOrder(
   const customer = parsedCustomer.data;
   const settingsDeliveryFee = Number(settings.delivery_fee ?? 0);
   const isDelivery = customer.delivery_type === "DOMICILIO";
-  const deliveryFee = isDelivery ? settingsDeliveryFee : 0;
+
+  // Promociones por monto (domicilio gratis / regalo sorpresa): se deciden aquí,
+  // en el servidor, con el subtotal ya recalculado.
+  const promo = await resolveOrderPromotions({
+    subtotal,
+    deliveryType: customer.delivery_type,
+    lines: built.lines,
+  });
+
+  const deliveryFee = isDelivery && !promo.freeDelivery ? settingsDeliveryFee : 0;
   const total = subtotal + deliveryFee;
 
   const persisted = await persistOrder({
@@ -140,6 +150,8 @@ export async function placeOrder(
     confirmedAt: null,
     acceptedTermsAt: new Date().toISOString(),
     policyVersion: site.legal.policyVersion,
+    freeDelivery: promo.freeDelivery,
+    gift: promo.gift,
   });
 
   if (persisted.error || !persisted.orderNumber) {
@@ -175,6 +187,8 @@ export async function placeOrder(
     address: isDelivery ? customer.customer_address : "",
     notes: customer.notes,
     deliveryType: isDelivery ? "DOMICILIO" : "RECOGIDA",
+    freeDelivery: promo.freeDelivery,
+    gifts: (persisted.giftsSaved ?? []).map((name) => `1x ${name}`),
   });
 
   const whatsappUrl = `https://wa.me/${waNumber}?text=${encodeURIComponent(message)}`;

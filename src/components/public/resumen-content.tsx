@@ -11,6 +11,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ProductCard, type ProductCardData } from "@/components/public/product-card";
 import { TrackView } from "@/components/public/track-view";
+import {
+  PromoDeliveryProgress,
+  PromoGiftProgress,
+} from "@/components/public/promo-progress";
+import type { PublicPromotion } from "@/lib/promotions";
 
 export interface CatalogEntry {
   card: ProductCardData;
@@ -47,10 +52,12 @@ export function ResumenContent({
   deliveryFee,
   deliveryFeeAconvenir,
   catalog,
+  promos = [],
 }: {
   deliveryFee: number;
   deliveryFeeAconvenir?: boolean;
   catalog: CatalogEntry[];
+  promos?: PublicPromotion[];
 }) {
   const items = useCart((s) => s.items);
   const removeItem = useCart((s) => s.removeItem);
@@ -96,6 +103,8 @@ export function ResumenContent({
           </p>
         </div>
       </div>
+
+      <PromoGiftProgress promos={promos} subtotal={subtotal} />
 
       {/* Productos */}
       <Card>
@@ -165,6 +174,8 @@ export function ResumenContent({
           ))}
         </CardContent>
       </Card>
+
+      <PromoDeliveryProgress promos={promos} subtotal={subtotal} />
 
       {/* Totales */}
       <Card>

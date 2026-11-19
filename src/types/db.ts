@@ -98,6 +98,8 @@ export interface Order {
   cash_amount: number | null;
   transfer_amount: number | null;
   delivery_fee: number;
+  /** El domicilio fue gratis por una promoción (migración 0037). */
+  free_delivery: boolean;
   subtotal: number;
   final_adjustment: number;
   total: number;
@@ -123,6 +125,8 @@ export interface OrderItem {
   quantity: number;
   notes: string;
   line_total: number;
+  /** Regalo de una promoción (precio 0). No cuenta como unidad vendida. */
+  is_gift: boolean;
 }
 
 export interface OrderItemAddon {

@@ -14,6 +14,8 @@ export const site = {
   legalName: "Yeimar Araujo" as string | null,
   taxId: null as string | null,
   publicAddress: null as string | null,
+  /** Dirección donde el cliente recoge su pedido (solo se usa en el mensaje de WhatsApp). */
+  pickupAddress: "Calle 38 #24-38, barrio Las Manuelitas",
 
   city: "Valledupar",
   region: "Cesar",

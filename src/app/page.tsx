@@ -10,6 +10,8 @@ import {
   StoreStatusProvider,
 } from "@/components/public/store-status";
 import { FloatingCartButton } from "@/components/public/floating-cart-button";
+import { PromoBanner } from "@/components/public/promo-banner";
+import { parsePublicPromotions } from "@/lib/promotions";
 import { type ProductCardData } from "@/components/public/product-card";
 import {
   MenuSections,
@@ -31,7 +33,14 @@ export const revalidate = 300;
 export default async function HomePage() {
   const supabase = createPublicClient();
 
-  const [categoriesRes, productsRes, settingsRes, hoursRes, outsideHoursRes] =
+  const [
+    categoriesRes,
+    productsRes,
+    settingsRes,
+    hoursRes,
+    outsideHoursRes,
+    promosRes,
+  ] =
     await Promise.all([
       supabase.from("categories").select("*").eq("is_active", true).order("display_order"),
       supabase
@@ -50,7 +59,11 @@ export default async function HomePage() {
         .select("value")
         .eq("key", "allow_orders_outside_hours")
         .maybeSingle(),
+      // Montos y beneficios de las promociones (nunca cuál es el regalo).
+      supabase.rpc("get_public_promotions"),
     ]);
+
+  const promos = parsePublicPromotions(promosRes.data);
 
   const settings = Object.fromEntries(
     (settingsRes.data ?? []).map((r) => [r.key, r.value])
@@ -133,7 +146,7 @@ export default async function HomePage() {
       >
         <Header />
         <ClosedOverlay />
-        <FloatingCartButton />
+        <FloatingCartButton promos={promos} />
 
         {/* Hero */}
         <section className="relative isolate overflow-hidden border-b bg-primary">
@@ -191,6 +204,8 @@ export default async function HomePage() {
             />
           </div>
         </section>
+
+        <PromoBanner promos={promos} />
 
         {/* Filtros + menú */}
         <div id="menu" className="scroll-mt-28" />

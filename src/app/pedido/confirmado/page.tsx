@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { AlertTriangle, CheckCircle2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Gift, Truck } from "lucide-react";
 import { getOrderConfirmation } from "@/features/orders/confirmation-actions";
 import { formatCOP, formatOrderNumber } from "@/lib/format";
 import { Button } from "@/components/ui/button";
@@ -47,6 +47,36 @@ export default async function OrderConfirmedPage({
           {order.error ?? "Este enlace no corresponde a un pedido válido."}
         </p>
       )}
+
+      {valid && (order.gifts?.length || order.freeDelivery) ? (
+        <div
+          role="status"
+          className="mt-6 w-full max-w-sm space-y-2 rounded-2xl border-2 border-primary/30 bg-primary/5 p-4 text-left"
+        >
+          {order.gifts?.length ? (
+            <div className="flex items-start gap-3">
+              <Gift className="mt-0.5 size-6 shrink-0 text-price" aria-hidden="true" />
+              <div>
+                <p className="font-bold">¡Te ganaste un regalo!</p>
+                <p className="text-sm text-muted-foreground">
+                  {order.gifts.join(", ")} de cortesía. Te lo entregamos junto con tu pedido.
+                </p>
+              </div>
+            </div>
+          ) : null}
+          {order.freeDelivery ? (
+            <div className="flex items-start gap-3">
+              <Truck className="mt-0.5 size-6 shrink-0 text-price" aria-hidden="true" />
+              <div>
+                <p className="font-bold">¡Domicilio gratis!</p>
+                <p className="text-sm text-muted-foreground">
+                  Por tu compra, el domicilio va por nuestra cuenta.
+                </p>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="mt-8 flex w-full max-w-xs flex-col gap-3">
         {order.whatsappUrl ? (

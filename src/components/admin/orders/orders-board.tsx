@@ -15,6 +15,7 @@ import {
   Search,
   SlidersHorizontal,
   Store,
+  Trash2,
   TriangleAlert,
   Truck,
   X,
@@ -24,6 +25,7 @@ import { createClient } from "@/lib/supabase/client";
 import { playNewOrderSound } from "@/lib/sound";
 import {
   addOrderItem,
+  removeOrderItem,
   setBoardMuted,
   setDeliveryRetained,
   undoOrderStatus,
@@ -43,6 +45,7 @@ import {
 } from "@/lib/order-status";
 import { formatCOP, formatOrderNumber } from "@/lib/format";
 import { addonCharged, addonLabel } from "@/lib/addons";
+import { lineUnitValue, maxRemovableUnits } from "@/lib/order-edit";
 import { paymentLabel } from "@/lib/payments";
 import { cn } from "@/lib/utils";
 import type { OrderItemAddon, OrderStatus, PaymentMethod } from "@/types/db";
@@ -75,18 +78,29 @@ export interface BoardOrder {
   transfer_amount: number | null;
   delivery_fee: number;
   delivery_fee_retained: boolean;
+  /** Domicilio gratis por promoción. */
+  free_delivery?: boolean;
   subtotal: number;
   final_adjustment: number;
   total: number;
   notes: string;
   created_at: string;
-  items: {
-    id: string;
-    product_name: string;
-    quantity: number;
-    unit_price: number;
-    order_item_addons: OrderItemAddon[];
-  }[];
+  items: BoardItem[];
+}
+
+export interface BoardItem {
+  id: string;
+  product_name: string;
+  quantity: number;
+  unit_price: number;
+  /** Regalo de promoción (a $0): hay que entregarlo con el pedido. */
+  is_gift?: boolean;
+  order_item_addons: OrderItemAddon[];
+}
+
+/** Cuántas unidades se pueden quitar: no se puede dejar el pedido sin nada que cobrar. */
+function maxRemovable(order: BoardOrder, item: BoardItem): number {
+  return maxRemovableUnits(order.items, item.id);
 }
 
 const BOARD_COLUMNS: OrderStatus[] = [
@@ -164,6 +178,12 @@ export function OrdersBoard({
   const [addItemQty, setAddItemQty] = useState(1);
   const [addItemAddons, setAddItemAddons] = useState<Record<string, number>>({});
   const [addingItem, setAddingItem] = useState(false);
+  const [removeTarget, setRemoveTarget] = useState<{
+    order: BoardOrder;
+    item: BoardItem;
+  } | null>(null);
+  const [removeQty, setRemoveQty] = useState(1);
+  const [removingItem, setRemovingItem] = useState(false);
   const mutedRef = useRef(initialMuted);
   const pendingRef = useRef<Set<string>>(new Set());
 
@@ -431,6 +451,37 @@ export function OrdersBoard({
     await refreshAll();
   }
 
+  function openRemoveItem(order: BoardOrder, item: BoardItem) {
+    setRemoveTarget({ order, item });
+    setRemoveQty(1);
+  }
+
+  async function confirmRemoveItem() {
+    if (!removeTarget || removingItem) return;
+    const { order, item } = removeTarget;
+    setRemovingItem(true);
+
+    const result = await removeOrderItem(order.id, item.id, removeQty);
+
+    setRemovingItem(false);
+
+    if (result.error) {
+      toast.error(result.error);
+      return;
+    }
+
+    toast.success(
+      removeQty >= item.quantity
+        ? `${item.product_name} se quitó del pedido`
+        : `Se quitó ${removeQty} de ${item.product_name}`
+    );
+    if (result.payment && result.payment.payment_method !== order.payment_method) {
+      toast.info(`El medio de pago pasó a ${paymentLabel(result.payment.payment_method)} al cambiar el total.`);
+    }
+    setRemoveTarget(null);
+    await refreshAll();
+  }
+
   const filteredAddItems = useMemo(() => {
     const q = addItemSearch.trim().toLowerCase();
     if (!q) return products;
@@ -550,6 +601,7 @@ export function OrdersBoard({
                     onEditCharge={setChargeTarget}
                     onEditPayment={setPaymentTarget}
                     onAddItem={openAddItem}
+                    onRemoveItem={openRemoveItem}
                     onConsumption={setConsumptionTarget}
                     onCancel={(o) => {
                       setCancelReason("");
@@ -595,28 +647,30 @@ export function OrdersBoard({
       {/* Agregar producto a pedido */}
       <Dialog open={addItemTarget !== null} onOpenChange={(o) => { if (!o) setAddItemTarget(null); }}>
         <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>
-              Agregar producto {addItemTarget ? `a ${formatOrderNumber(addItemTarget.order_number)}` : ""}
-            </DialogTitle>
+          <DialogHeader className="mb-4 pr-8">
+            <DialogTitle className="text-lg">Agregar producto</DialogTitle>
+            <DialogDescription>
+              {addItemTarget ? `Pedido ${formatOrderNumber(addItemTarget.order_number)}` : ""}
+              {!addItemProduct ? " · elige el producto que quieres añadir" : ""}
+            </DialogDescription>
           </DialogHeader>
 
           {!addItemProduct ? (
             <div className="space-y-3">
               <div className="relative">
-                <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
+                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   value={addItemSearch}
                   onChange={(e) => setAddItemSearch(e.target.value)}
                   placeholder="Buscar producto…"
                   aria-label="Buscar producto"
-                  className="pl-8"
+                  className="pl-9 focus-visible:ring-2"
                   autoFocus
                 />
               </div>
-              <div className="max-h-72 space-y-1 overflow-y-auto">
+              <div className="-mr-1 max-h-[min(22rem,50dvh)] space-y-1.5 overflow-y-auto pr-2">
                 {filteredAddItems.length === 0 ? (
-                  <p className="py-6 text-center text-sm text-muted-foreground">Sin resultados</p>
+                  <p className="py-8 text-center text-sm text-muted-foreground">Sin resultados</p>
                 ) : (
                   filteredAddItems.map((p) => (
                     <button
@@ -629,17 +683,26 @@ export function OrdersBoard({
                         setAddItemAddons({});
                       }}
                       className={cn(
-                        "flex w-full items-center justify-between gap-2 rounded-lg border p-2 text-left transition-colors",
-                        p.is_available ? "hover:border-primary hover:bg-muted/50" : "cursor-not-allowed opacity-50"
+                        "flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors",
+                        p.is_available ? "hover:border-primary hover:bg-muted/50" : "cursor-not-allowed opacity-60"
                       )}
                     >
                       <span className="min-w-0">
                         <span className="block truncate text-sm font-medium">{p.name}</span>
-                        <span className="text-xs text-muted-foreground">
+                        <span
+                          className={cn(
+                            "text-xs",
+                            p.is_available ? "text-muted-foreground" : "font-medium text-destructive"
+                          )}
+                        >
                           {p.is_available ? formatCOP(p.price) : "Agotado"}
                         </span>
                       </span>
-                      {p.is_available ? <Plus className="size-4 shrink-0 text-primary" /> : null}
+                      {p.is_available ? (
+                        <span className="grid size-7 shrink-0 place-items-center rounded-full bg-primary/10 text-primary">
+                          <Plus className="size-4" />
+                        </span>
+                      ) : null}
                     </button>
                   ))
                 )}
@@ -748,7 +811,7 @@ export function OrdersBoard({
                 <p className="text-xl font-bold text-price">{formatCOP(addItemCost())}</p>
               </div>
 
-              <div className="flex justify-end gap-2">
+              <div className="flex justify-end gap-2 pt-1">
                 <Button type="button" variant="outline" onClick={() => setAddItemProduct(null)}>
                   Volver
                 </Button>
@@ -759,6 +822,28 @@ export function OrdersBoard({
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Quitar producto de un pedido */}
+      <Dialog
+        open={removeTarget !== null}
+        onOpenChange={(o) => {
+          if (!o && !removingItem) setRemoveTarget(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-sm">
+          {removeTarget ? (
+            <RemoveItemBody
+              order={removeTarget.order}
+              item={removeTarget.item}
+              qty={removeQty}
+              setQty={setRemoveQty}
+              busy={removingItem}
+              onCancel={() => setRemoveTarget(null)}
+              onConfirm={confirmRemoveItem}
+            />
+          ) : null}
         </DialogContent>
       </Dialog>
 
@@ -827,6 +912,7 @@ function OrderCard({
   onEditCharge,
   onEditPayment,
   onAddItem,
+  onRemoveItem,
   onConsumption,
   onCancel,
 }: {
@@ -839,6 +925,7 @@ function OrderCard({
   onEditCharge: (order: BoardOrder) => void;
   onEditPayment: (order: BoardOrder) => void;
   onAddItem: (order: BoardOrder) => void;
+  onRemoveItem: (order: BoardOrder, item: BoardItem) => void;
   onConsumption: (order: BoardOrder) => void;
   onCancel: (order: BoardOrder) => void;
 }) {
@@ -882,6 +969,14 @@ function OrderCard({
           {isDelivery ? <Truck className="size-3" /> : null}
           {DELIVERY_LABEL[order.delivery_type] ?? order.delivery_type}
         </span>
+        {order.free_delivery ? (
+          <span
+            className="inline-flex items-center gap-1 rounded bg-pink-100 px-1.5 py-0.5 font-semibold text-pink-800 dark:bg-pink-500/15 dark:text-pink-300"
+            title="Domicilio gratis por promoción: el cliente no paga domicilio."
+          >
+            Domicilio gratis
+          </span>
+        ) : null}
         <button
           type="button"
           onClick={() => onEditPayment(order)}
@@ -914,24 +1009,43 @@ function OrderCard({
 
       <ul className="space-y-1 text-[13px]">
         {order.items?.map((item) => (
-          <li key={item.id}>
-            <span className="font-bold">{item.quantity}×</span>{" "}
-            {item.product_name}
-            {item.order_item_addons?.length > 0 ? (
-              <span className="block pl-4 text-xs text-muted-foreground">
-                +{" "}
-                {item.order_item_addons
-                  .map((a) =>
-                    addonLabel({
-                      id: a.addon_id ?? a.addon_name,
-                      name: a.addon_name,
-                      price: a.addon_price,
-                      quantity: a.quantity,
-                      target: a.target as "EACH" | "HAMBURGUESA" | "PERRO" | undefined,
-                    })
-                  )
-                  .join(", ")}
-              </span>
+          <li key={item.id} className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <span className="font-bold">{item.quantity}×</span>{" "}
+              {item.product_name}
+              {item.is_gift ? (
+                <span className="ml-1.5 rounded bg-pink-100 px-1 text-[10px] font-bold uppercase text-pink-800 dark:bg-pink-500/15 dark:text-pink-300">
+                  🎁 Regalo
+                </span>
+              ) : null}
+              {item.order_item_addons?.length > 0 ? (
+                <span className="block pl-4 text-xs text-muted-foreground">
+                  +{" "}
+                  {item.order_item_addons
+                    .map((a) =>
+                      addonLabel({
+                        id: a.addon_id ?? a.addon_name,
+                        name: a.addon_name,
+                        price: a.addon_price,
+                        quantity: a.quantity,
+                        target: a.target as "EACH" | "HAMBURGUESA" | "PERRO" | undefined,
+                      })
+                    )
+                    .join(", ")}
+                </span>
+              ) : null}
+            </div>
+            {canAddItems && maxRemovable(order, item) >= 1 ? (
+              <button
+                type="button"
+                onClick={() => onRemoveItem(order, item)}
+                disabled={pending}
+                title="Quitar producto"
+                aria-label={`Quitar ${item.product_name} del pedido`}
+                className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
+              >
+                <Trash2 className="size-3.5" />
+              </button>
             ) : null}
           </li>
         ))}
@@ -1055,6 +1169,127 @@ function OrderCard({
         ) : null}
       </footer>
     </article>
+  );
+}
+
+/* --------------------------- Quitar un producto --------------------------- */
+
+/**
+ * Contenido del diálogo para quitar un producto (o parte de sus unidades) de un
+ * pedido. Muestra cómo cambia el total antes de confirmar.
+ */
+function RemoveItemBody({
+  order,
+  item,
+  qty,
+  setQty,
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  order: BoardOrder;
+  item: BoardItem;
+  qty: number;
+  setQty: (qty: number) => void;
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const max = maxRemovable(order, item);
+  const unit = lineUnitValue(item);
+  const amount = unit * qty;
+  const newTotal = Math.max(0, Number(order.total) - amount);
+  const removesAll = qty >= item.quantity;
+
+  return (
+    <>
+      <DialogHeader className="mb-4 pr-8">
+        <DialogTitle className="text-lg">Quitar producto</DialogTitle>
+        <DialogDescription>
+          Pedido {formatOrderNumber(order.order_number)}
+        </DialogDescription>
+      </DialogHeader>
+
+      <div className="space-y-4">
+        <div className="rounded-lg border p-3">
+          <p className="font-semibold">{item.product_name}</p>
+          <p className="text-xs text-muted-foreground">
+            {item.quantity} en el pedido
+            {unit > 0 ? ` · ${formatCOP(unit)} c/u` : ""}
+          </p>
+          {item.order_item_addons?.length > 0 ? (
+            <p className="mt-1 text-xs text-muted-foreground">
+              + {item.order_item_addons.map((a) => a.addon_name).join(", ")}
+            </p>
+          ) : null}
+        </div>
+
+        {max > 1 ? (
+          <div className="space-y-2">
+            <Label>¿Cuántas unidades quitar?</Label>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                aria-label="Quitar una unidad menos"
+                disabled={qty <= 1 || busy}
+                onClick={() => setQty(Math.max(1, qty - 1))}
+              >
+                −
+              </Button>
+              <span className="w-10 text-center font-bold">{qty}</span>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                aria-label="Quitar una unidad más"
+                disabled={qty >= max || busy}
+                onClick={() => setQty(Math.min(max, qty + 1))}
+              >
+                +
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={qty >= max || busy}
+                onClick={() => setQty(max)}
+              >
+                Todas
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
+        <div className="space-y-1 rounded-lg bg-muted p-3 text-sm">
+          <div className="flex justify-between text-muted-foreground">
+            <span>Total actual</span>
+            <span className="tabular-nums">{formatCOP(Number(order.total))}</span>
+          </div>
+          {amount > 0 ? (
+            <div className="flex justify-between text-muted-foreground">
+              <span>Se descuenta</span>
+              <span className="tabular-nums">− {formatCOP(amount)}</span>
+            </div>
+          ) : null}
+          <div className="flex justify-between border-t pt-1 font-bold">
+            <span>Nuevo total</span>
+            <span className="tabular-nums text-price">{formatCOP(newTotal)}</span>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 pt-1">
+          <Button type="button" variant="outline" onClick={onCancel} disabled={busy}>
+            Cancelar
+          </Button>
+          <Button type="button" variant="destructive" onClick={onConfirm} disabled={busy}>
+            {busy ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+            {removesAll ? "Quitar producto" : `Quitar ${qty}`}
+          </Button>
+        </div>
+      </div>
+    </>
   );
 }
 

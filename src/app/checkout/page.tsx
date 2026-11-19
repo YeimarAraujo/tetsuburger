@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Header } from "@/components/public/header";
 import { SiteFooter } from "@/components/public/site-footer";
 import { CheckoutForm } from "@/components/public/checkout-form";
+import { parsePublicPromotions } from "@/lib/promotions";
 
 export const metadata: Metadata = {
   title: "Finalizar pedido",
@@ -17,6 +18,9 @@ export default async function CheckoutPage() {
     .select("key, value")
     .eq("is_public", true);
 
+  const { data: promosRaw } = await supabase.rpc("get_public_promotions");
+  const promos = parsePublicPromotions(promosRaw);
+
   const settings = Object.fromEntries(
     (settingsRows ?? []).map((r) => [r.key, r.value])
   ) as Record<string, unknown>;
@@ -29,7 +33,11 @@ export default async function CheckoutPage() {
       <Header />
       <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-8">
 
-        <CheckoutForm deliveryFee={deliveryFee} deliveryFeeAconvenir={deliveryFeeAconvenir} />
+        <CheckoutForm
+          deliveryFee={deliveryFee}
+          deliveryFeeAconvenir={deliveryFeeAconvenir}
+          promos={promos}
+        />
       </main>
       <SiteFooter />
     </div>
