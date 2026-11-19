@@ -9,6 +9,7 @@ import { bogotaToday } from "@/lib/bogota";
 import { consumeInventoryForOrder } from "@/features/orders/consumption";
 import { buildOrderFromItems, orderItemsSchema } from "@/features/orders/order-builder";
 import { ORDER_STATUS_META, canTransition } from "@/lib/order-status";
+import { planItemRemoval, type EditableLine } from "@/lib/order-edit";
 import { splitOrderPayment } from "@/lib/payments";
 import type { OrderStatus, PaymentMethod } from "@/types/db";
 
@@ -373,6 +374,111 @@ export async function addOrderItem(
   if (updateError) {
     await rollback();
     return { error: "No se pudieron actualizar los totales" };
+  }
+
+  revalidatePath("/admin/pedidos");
+  revalidatePath("/admin");
+  return { subtotal: newSubtotal, total: newTotal, payment: toPaymentFields(updated) };
+}
+
+/**
+ * Quita un producto (o algunas de sus unidades) de un pedido existente. Misma
+ * regla que agregar: solo en PENDIENTE o CONFIRMADO, antes de la preparación.
+ *
+ * - Sin `quantity` quita la línea completa; con `quantity` menor a la cantidad
+ *   de la línea, solo resta esas unidades.
+ * - El pedido no puede quedar sin productos (para eso se cancela).
+ * - Los totales se recalculan: el ajuste del valor final se conserva, así que
+ *   si el nuevo total quedaría por debajo de ese ajuste se pide editarlo antes.
+ * - Las promociones (regalo, domicilio gratis) se decidieron al registrar el
+ *   pedido y no se vuelven a evaluar al editarlo.
+ */
+export async function removeOrderItem(
+  orderId: string,
+  itemId: string,
+  quantity?: number
+): Promise<ActionResult & { subtotal?: number; total?: number; payment?: PaymentFields }> {
+  const authError = await assertStaff();
+  if (authError) return authError;
+
+  const parsed = z
+    .object({
+      orderId: z.string().uuid(),
+      itemId: z.string().uuid(),
+      quantity: z.number().int().min(1).max(50).optional(),
+    })
+    .safeParse({ orderId, itemId, quantity });
+
+  if (!parsed.success) return { error: "Datos inválidos" };
+
+  const supabase = createAdminClient();
+
+  const { data: order } = await supabase
+    .from("orders")
+    .select("id, status, subtotal, delivery_fee, final_adjustment")
+    .eq("id", parsed.data.orderId)
+    .single();
+
+  if (!order) return { error: "Pedido no encontrado" };
+  if (order.status !== "PENDIENTE" && order.status !== "CONFIRMADO") {
+    return {
+      error: "El pedido ya está en preparación o posterior; ya no se pueden quitar productos.",
+    };
+  }
+
+  // "*" para no depender de que la columna is_gift (migración 0037) exista.
+  const { data: rawItems, error: itemsError } = await supabase
+    .from("order_items")
+    .select("*, order_item_addons(*)")
+    .eq("order_id", order.id);
+
+  if (itemsError || !rawItems) return { error: "No se pudo leer el pedido" };
+
+  const items = rawItems as unknown as EditableLine[];
+  const item = items.find((i) => i.id === parsed.data.itemId);
+
+  const adj = Number(order.final_adjustment ?? 0);
+  const fee = Number(order.delivery_fee);
+
+  const plan = planItemRemoval({
+    subtotal: Number(order.subtotal),
+    deliveryFee: fee,
+    finalAdjustment: adj,
+    lines: items,
+    lineId: parsed.data.itemId,
+    quantity: parsed.data.quantity,
+  });
+  if (!plan.ok || !item) return { error: plan.ok ? "Ese producto ya no está en el pedido" : plan.error };
+
+  const { removeQty, removesWholeLine, newSubtotal, newTotal } = plan;
+
+  // Primero los totales, luego la línea: si la línea falla se restauran los totales.
+  const { data: updated, error: updateError } = await supabase
+    .from("orders")
+    .update({ subtotal: newSubtotal, total: newTotal })
+    .eq("id", order.id)
+    .select("*")
+    .maybeSingle();
+
+  if (updateError) {
+    console.error("removeOrderItem: update totals failed", updateError);
+    return { error: "No se pudieron actualizar los totales" };
+  }
+
+  const { error: lineError } = removesWholeLine
+    ? await supabase.from("order_items").delete().eq("id", item.id)
+    : await supabase
+        .from("order_items")
+        .update({ quantity: item.quantity - removeQty })
+        .eq("id", item.id);
+
+  if (lineError) {
+    console.error("removeOrderItem: change line failed", lineError);
+    await supabase
+      .from("orders")
+      .update({ subtotal: Number(order.subtotal), total: Number(order.subtotal) + fee - adj })
+      .eq("id", order.id);
+    return { error: "No se pudo quitar el producto. Intenta de nuevo." };
   }
 
   revalidatePath("/admin/pedidos");

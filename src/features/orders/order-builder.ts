@@ -176,11 +176,17 @@ export async function persistOrder(params: {
   confirmedAt: string | null;
   acceptedTermsAt?: string | null;
   policyVersion?: string | null;
+  /** Domicilio gratis por promoción (solo pedidos web). */
+  freeDelivery?: boolean;
+  /** Regalo por promoción: se guarda como línea a $0 marcada is_gift. */
+  gift?: { productId: string; productName: string } | null;
 }): Promise<{
   error?: string;
   orderId?: string;
   orderNumber?: number;
   confirmationToken?: string;
+  /** Regalos que realmente quedaron guardados en el pedido. */
+  giftsSaved?: string[];
 }> {
   const supabase = createAdminClient();
 
@@ -200,6 +206,9 @@ export async function persistOrder(params: {
         ? { cash_amount: params.cashAmount ?? null, transfer_amount: params.transferAmount ?? null }
         : {}),
       delivery_fee: params.deliveryFee,
+      // Solo se envía cuando aplica, así los pedidos normales no dependen de la
+      // columna nueva (migración 0037).
+      ...(params.freeDelivery ? { free_delivery: true } : {}),
       delivery_fee_retained: params.deliveryFeeRetained,
       subtotal: params.subtotal,
       final_adjustment: params.finalAdjustment ?? 0,
@@ -262,9 +271,29 @@ export async function persistOrder(params: {
     }
   }
 
+  // El regalo es un extra: si no se puede guardar, el pedido sigue válido.
+  const giftsSaved: string[] = [];
+  if (params.gift) {
+    const { error: giftError } = await supabase.from("order_items").insert({
+      order_id: order.id,
+      product_id: params.gift.productId,
+      product_name: params.gift.productName,
+      unit_price: 0,
+      quantity: 1,
+      is_gift: true,
+    });
+
+    if (giftError) {
+      console.error("persistOrder: insert gift failed", giftError);
+    } else {
+      giftsSaved.push(params.gift.productName);
+    }
+  }
+
   return {
     orderId: order.id,
     orderNumber: order.order_number,
     confirmationToken: order.confirmation_token,
+    giftsSaved,
   };
 }

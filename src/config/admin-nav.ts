@@ -83,6 +83,7 @@ export const ADMIN_SECTIONS: Record<
   productos: [
     { href: "/admin/productos", label: "Productos" },
     { href: "/admin/adicionales", label: "Adicionales" },
+    { href: "/admin/promociones", label: "Promociones" },
     { href: "/admin/categorias", label: "Categorías" },
     { href: "/admin/resenas", label: "Reseñas" },
     { href: "/admin/rentabilidad", label: "Rentabilidad" },

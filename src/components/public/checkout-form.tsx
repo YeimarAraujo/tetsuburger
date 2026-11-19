@@ -34,12 +34,21 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { TrackView } from "@/components/public/track-view";
+import { unlockedBenefits, type PublicPromotion } from "@/lib/promotions";
 import {
   isTurnstileEnabled,
   TurnstileWidget,
 } from "@/components/public/turnstile-widget";
 
-export function CheckoutForm({ deliveryFee, deliveryFeeAconvenir }: { deliveryFee: number; deliveryFeeAconvenir?: boolean }) {
+export function CheckoutForm({
+  deliveryFee,
+  deliveryFeeAconvenir,
+  promos = [],
+}: {
+  deliveryFee: number;
+  deliveryFeeAconvenir?: boolean;
+  promos?: PublicPromotion[];
+}) {
   const router = useRouter();
   const items = useCart((s) => s.items);
   const clear = useCart((s) => s.clear);
@@ -69,7 +78,9 @@ export function CheckoutForm({ deliveryFee, deliveryFeeAconvenir }: { deliveryFe
 
   const subtotal = cartSubtotal(items);
   const isDelivery = deliveryType === "DOMICILIO";
-  const fee = isDelivery && !deliveryFeeAconvenir ? deliveryFee : 0;
+  // Promoción por monto: el servidor es quien decide; aquí solo se anticipa.
+  const freeDelivery = unlockedBenefits(promos, subtotal, deliveryType).freeDelivery;
+  const fee = isDelivery && !deliveryFeeAconvenir && !freeDelivery ? deliveryFee : 0;
   const total = subtotal + fee;
 
   if (items.length === 0 && !submitting) {
@@ -253,11 +264,13 @@ export function CheckoutForm({ deliveryFee, deliveryFeeAconvenir }: { deliveryFe
                 {
                   value: "DOMICILIO",
                   label: "Domicilio",
-                  hint: deliveryFeeAconvenir
-                    ? "Valor a convenir"
-                    : deliveryFee > 0
-                      ? `+ ${formatCOP(deliveryFee)}`
-                      : "Sin costo",
+                  hint: unlockedBenefits(promos, subtotal, "DOMICILIO").freeDelivery
+                    ? "¡Gratis!"
+                    : deliveryFeeAconvenir
+                      ? "Valor a convenir"
+                      : deliveryFee > 0
+                        ? `+ ${formatCOP(deliveryFee)}`
+                        : "Sin costo",
                   Icon: Truck,
                 },
                 { value: "RECOGIDA", label: "Pasar a recoger", hint: "Sin costo", Icon: MapPin },
@@ -362,7 +375,12 @@ export function CheckoutForm({ deliveryFee, deliveryFeeAconvenir }: { deliveryFe
             <span>Subtotal</span>
             <span>{formatCOP(subtotal)}</span>
           </div>
-          {deliveryFeeAconvenir ? (
+          {isDelivery && freeDelivery ? (
+            <div className="flex justify-between text-sm text-muted-foreground">
+              <span>Domicilio</span>
+              <span className="font-semibold text-emerald-600">¡Gratis!</span>
+            </div>
+          ) : deliveryFeeAconvenir ? (
             <div className="flex justify-between text-sm text-muted-foreground">
               <span>Domicilio</span>
               <span className="font-medium">Valor a convenir</span>
@@ -380,16 +398,18 @@ export function CheckoutForm({ deliveryFee, deliveryFeeAconvenir }: { deliveryFe
           <div
             className={cn(
               "rounded-lg border px-3 py-2.5 text-sm",
-              isDelivery && deliveryFeeAconvenir
+              isDelivery && deliveryFeeAconvenir && !freeDelivery
                 ? "border-amber-500/30 bg-amber-500/5 text-orange-900 dark:text-amber-400"
                 : "border-transparent bg-muted/40 text-muted-foreground"
             )}
           >
             {isDelivery
-              ? deliveryFeeAconvenir
-                ? "El valor del domicilio está sujeto a cambios según tu zona, la distancia y la hora. Lo confirmamos contigo por WhatsApp antes de enviar tu pedido. No está incluido en el total."
-                : "El domicilio se confirma por WhatsApp según distancia y hora."
-              : "Paga al pasar a recoger tu pedido."}
+              ? freeDelivery
+                ? "Por tu compra el domicilio va por nuestra cuenta, sin costo para ti."
+                : deliveryFeeAconvenir
+                  ? "El valor del domicilio está sujeto a cambios según tu zona, la distancia y la hora. Lo confirmamos contigo por WhatsApp antes de enviar tu pedido. No está incluido en el total."
+                  : "El domicilio se confirma por WhatsApp según distancia y hora."
+              : "Te avisaremos por WhatsApp para que puedas pasar a recoger tu pedido."}
           </div>
         </CardContent>
       </Card>

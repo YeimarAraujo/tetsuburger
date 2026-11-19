@@ -11,8 +11,12 @@ export interface OrderConfirmation {
   total: number;
   whatsappUrl: string;
   customerName?: string;
-  /** Productos del pedido (con id) para invitar a calificar. */
+  /** Productos del pedido (con id) para invitar a calificar. Sin regalos. */
   items?: { productId: string; productName: string }[];
+  /** Regalos de promoción, ej. "1x Gaseosa 250ml". Se revelan aquí al confirmar. */
+  gifts?: string[];
+  /** El domicilio fue gratis por promoción. */
+  freeDelivery?: boolean;
   error?: string;
 }
 
@@ -21,6 +25,7 @@ interface ConfirmationItem {
   product_name: string;
   quantity: number;
   unit_price: number;
+  is_gift?: boolean;
   addons: {
     name: string;
     price: number;
@@ -62,9 +67,15 @@ export async function getOrderConfirmation(token: string): Promise<OrderConfirma
     return { orderNumber: 0, total: 0, whatsappUrl: "", error: "No encontramos el pedido." };
   }
 
-  const items = Array.isArray(order.items)
+  const allItems = Array.isArray(order.items)
     ? (order.items as ConfirmationItem[])
     : [];
+  // Los regalos van aparte: no se calculan como producto ni se invita a calificarlos.
+  const items = allItems.filter((line) => !line.is_gift);
+  const gifts = allItems
+    .filter((line) => line.is_gift)
+    .map((line) => `${line.quantity}x ${line.product_name}`);
+  const freeDelivery = order.free_delivery === true;
 
   // Productos únicos con id (para invitar a calificar tras el pedido).
   const seenProductIds = new Set<string>();
@@ -92,6 +103,8 @@ export async function getOrderConfirmation(token: string): Promise<OrderConfirma
       whatsappUrl: "",
       customerName: String(order.customer_name ?? ""),
       items: reviewItems,
+      gifts,
+      freeDelivery,
       error: "El pedido está registrado, pero falta configurar el número de WhatsApp.",
     };
   }
@@ -135,6 +148,8 @@ export async function getOrderConfirmation(token: string): Promise<OrderConfirma
       order.delivery_type === "RECOGIDA" || order.delivery_type === "LOCAL"
         ? order.delivery_type
         : "DOMICILIO",
+    freeDelivery,
+    gifts,
   });
 
   return {
@@ -143,5 +158,7 @@ export async function getOrderConfirmation(token: string): Promise<OrderConfirma
     whatsappUrl: `https://wa.me/${waNumber}?text=${encodeURIComponent(message)}`,
     customerName: String(order.customer_name ?? ""),
     items: reviewItems,
+    gifts,
+    freeDelivery,
   };
 }

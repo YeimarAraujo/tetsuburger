@@ -218,7 +218,7 @@ export function ClosedOverlay() {
         ) : null}
 
         <Button size="lg" className="h-11 w-full font-bold" onClick={() => setDismissed(true)}>
-          Explorar catálogo
+          Ver menú
         </Button>
       </DialogContent>
     </Dialog>

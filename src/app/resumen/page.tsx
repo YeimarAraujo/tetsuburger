@@ -7,6 +7,7 @@ import {
 } from "@/components/public/resumen-content";
 import { createPublicClient } from "@/lib/supabase/public";
 import { buildProductCards } from "@/lib/product-cards";
+import { parsePublicPromotions } from "@/lib/promotions";
 
 export const metadata: Metadata = {
   title: "Resumen del pedido",
@@ -19,7 +20,7 @@ export const revalidate = 300;
 export default async function ResumenPage() {
   const supabase = createPublicClient();
 
-  const [settingsRes, categoriesRes, productsRes] = await Promise.all([
+  const [settingsRes, categoriesRes, productsRes, promosRes] = await Promise.all([
     supabase.from("settings").select("key, value").eq("is_public", true),
     supabase.from("categories").select("id").eq("is_active", true).order("display_order"),
     supabase
@@ -30,6 +31,7 @@ export default async function ResumenPage() {
       .eq("is_active", true)
       .eq("is_available", true)
       .order("name"),
+    supabase.rpc("get_public_promotions"),
   ]);
 
   const settings = Object.fromEntries(
@@ -59,6 +61,7 @@ export default async function ResumenPage() {
           deliveryFee={deliveryFee}
           deliveryFeeAconvenir={deliveryFeeAconvenir}
           catalog={catalog}
+          promos={parsePublicPromotions(promosRes.data)}
         />
       </div>
       <SiteFooter />
