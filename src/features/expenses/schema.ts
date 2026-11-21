@@ -11,6 +11,8 @@ export const expenseSchema = z.object({
   from_caja: z.string().transform((v) => v === "true").default(false),
   /** Canal por el que salió la plata si el gasto salió de caja. */
   metodo: z.enum(["EFECTIVO", "TRANSFERENCIA"]).default("EFECTIVO"),
+  /** Base de la que salió la plata si el gasto salió de caja. */
+  bolsillo: z.enum(["COMPRAS", "GANANCIA"]).default("GANANCIA"),
 });
 
 export type ExpenseInput = z.infer<typeof expenseSchema>;

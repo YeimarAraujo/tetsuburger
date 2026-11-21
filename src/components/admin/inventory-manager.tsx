@@ -340,22 +340,22 @@ export function InventoryManager({
                 </Select>
               </div>
               <div className="space-y-2">
+                <Label>Stock actual</Label>
+                <Input name="current_stock" type="number" min={0} step="any" defaultValue={editing?.current_stock ?? 0} />
+              </div>
+              <div className="space-y-2">
                 <Label>Stock mínimo</Label>
                 <Input name="min_stock" type="number" min={0} step="any" defaultValue={editing?.min_stock ?? 5} />
               </div>
+              <div className="space-y-2">
+                <Label>Costo / unidad (COP)</Label>
+                <Input name="cost" type="number" min={0} step="any" inputMode="decimal" defaultValue={editing?.cost ?? 0} placeholder="0" />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label>Stock actual</Label>
-              <Input name="current_stock" type="number" min={0} step="any" defaultValue={editing?.current_stock ?? 0} />
-            </div>
-            <div className="space-y-2">
-              <Label>Costo / unidad (COP)</Label>
-              <Input name="cost" type="number" min={0} step="any" inputMode="decimal" defaultValue={editing?.cost ?? 0} placeholder="0" />
-              <p className="text-xs text-muted-foreground">
-                Se actualiza solo al registrar compras. Se usa para calcular el costo
-                de los productos según sus consumos.
-              </p>
-            </div>
+            <p className="-mt-2 text-xs text-muted-foreground">
+              El costo se actualiza solo al registrar compras. Se usa para calcular
+              el costo de los productos según sus consumos.
+            </p>
             <div className="space-y-2">
               <Label>Código de barras</Label>
               <div className="flex gap-2">

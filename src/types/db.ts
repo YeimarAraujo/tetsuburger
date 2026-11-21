@@ -20,10 +20,14 @@ export type CajaTipo =
   | "GASTO"
   | "INGRESO_EXTRA"
   | "RETIRO"
-  | "AJUSTE";
+  | "AJUSTE"
+  | "TRASLADO";
 
 /** Canal por el que entra/sale el dinero en un movimiento de caja. */
 export type CajaMetodo = "EFECTIVO" | "TRANSFERENCIA";
+
+/** Base a la que pertenece un movimiento de caja (migración 0038). */
+export type CajaBolsillo = "COMPRAS" | "GANANCIA";
 
 export interface Role {
   id: number;

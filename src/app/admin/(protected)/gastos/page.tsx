@@ -54,12 +54,15 @@ export default async function ExpensesPage({
       .order("name"),
     supabase
       .from("caja_movements")
-      .select("ref_id, metodo")
+      .select("ref_id, metodo, bolsillo")
       .eq("ref_type", "expense"),
   ]);
 
   const metodoByExpense = new Map<string, "EFECTIVO" | "TRANSFERENCIA">(
     (movementsRes.data ?? []).map((m) => [m.ref_id, m.metodo])
+  );
+  const bolsilloByExpense = new Map<string, "COMPRAS" | "GANANCIA">(
+    (movementsRes.data ?? []).map((m) => [m.ref_id, m.bolsillo])
   );
 
   const rows: ExpenseRow[] = ((expensesRes.data ?? []) as unknown as {
@@ -80,6 +83,7 @@ export default async function ExpensesPage({
     description: r.description,
     from_caja: Boolean(r.from_caja),
     movimiento_metodo: metodoByExpense.get(r.id) ?? null,
+    movimiento_bolsillo: bolsilloByExpense.get(r.id) ?? null,
     category_name: r.category?.name ?? null,
   }));
 

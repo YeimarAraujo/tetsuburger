@@ -190,7 +190,7 @@ export function ClosedOverlay() {
       >
         <Logo className="h-12" />
 
-        <DialogHeader className="items-center gap-2">
+        <DialogHeader className="mb-0 items-center gap-2 border-b-0 pr-0 pb-0">
           <DialogTitle className="font-display text-3xl uppercase tracking-wide">
             Estamos cerrados
           </DialogTitle>

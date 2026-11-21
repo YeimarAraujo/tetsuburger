@@ -5,13 +5,14 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import {
   cajaManualMovementSchema,
+  cajaTransferSchema,
 } from "@/features/caja/schema";
+import { BOLSILLO_LABEL } from "@/lib/caja-bolsillos";
+import type { CajaBolsillo } from "@/types/db";
 
 export interface ActionResult {
   error?: string;
 }
-
-const BASE_KEY = "caja_base";
 
 const MANUAL_LABEL: Record<string, string> = {
   INGRESO_EXTRA: "Ingreso adicional",
@@ -55,6 +56,7 @@ export async function createCajaMovement(
     .insert({
       movement_date: data.movement_date,
       tipo: data.tipo,
+      bolsillo: data.bolsillo,
       // El ajuste del arqueo siempre es efectivo físico (nace de la caja contada).
       metodo: data.tipo === "AJUSTE" ? "EFECTIVO" : data.metodo,
       amount: sign * data.amount,
@@ -72,9 +74,58 @@ export async function createCajaMovement(
 }
 
 /**
- * Elimina un movimiento manual (ingreso extra, retiro o ajuste). Los
- * movimientos automáticos (venta en efectivo, compra, gasto) no se pueden
- * borrar desde aquí: se corrigen en su origen.
+ * Traslada plata de una base a la otra (mismo medio). Se guardan dos filas
+ * ligadas por ref_id: sale de una base y entra a la otra, en una sola
+ * inserción (o se guardan las dos o ninguna).
+ */
+export async function createCajaTransfer(input: unknown): Promise<ActionResult> {
+  const authError = await assertAuth();
+  if (authError) return { error: authError };
+
+  const parsed = cajaTransferSchema.safeParse(input);
+  if (!parsed.success) return { error: parsed.error.issues[0].message };
+  const data = parsed.data;
+
+  const hacia: CajaBolsillo = data.desde === "COMPRAS" ? "GANANCIA" : "COMPRAS";
+  const refId = crypto.randomUUID();
+  const nota = data.description ? ` · ${data.description}` : "";
+  const common = {
+    movement_date: data.movement_date,
+    tipo: "TRASLADO" as const,
+    metodo: data.metodo,
+    fuente: "Traslado entre bases",
+    ref_type: "traslado",
+    ref_id: refId,
+  };
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("caja_movements").insert([
+    {
+      ...common,
+      bolsillo: data.desde,
+      amount: -data.amount,
+      description: `Traslado a ${BOLSILLO_LABEL[hacia]}${nota}`,
+    },
+    {
+      ...common,
+      bolsillo: hacia,
+      amount: data.amount,
+      description: `Traslado desde ${BOLSILLO_LABEL[data.desde]}${nota}`,
+    },
+  ]);
+
+  if (error) return { error: "No se pudo registrar el traslado" };
+
+  revalidatePath("/admin/caja");
+  revalidatePath("/admin");
+  return {};
+}
+
+/**
+ * Elimina un movimiento manual (ingreso extra, retiro, ajuste o traslado). Los
+ * movimientos automáticos (venta, compra, gasto) no se pueden borrar desde
+ * aquí: se corrigen en su origen. Un traslado se elimina completo (sus dos
+ * filas).
  */
 export async function deleteCajaMovement(id: string): Promise<ActionResult> {
   const authError = await assertAuth();
@@ -85,70 +136,25 @@ export async function deleteCajaMovement(id: string): Promise<ActionResult> {
   const supabase = await createClient();
   const { data: existing } = await supabase
     .from("caja_movements")
-    .select("tipo")
+    .select("tipo, ref_id")
     .eq("id", id)
     .maybeSingle();
 
   if (!existing) return {};
 
-  if (!["INGRESO_EXTRA", "RETIRO", "AJUSTE"].includes(existing.tipo)) {
+  if (!["INGRESO_EXTRA", "RETIRO", "AJUSTE", "TRASLADO"].includes(existing.tipo)) {
     return { error: "Este movimiento lo genera el sistema y no se puede eliminar" };
   }
 
-  const { error } = await supabase
-    .from("caja_movements")
-    .delete()
-    .eq("id", id);
+  const query = supabase.from("caja_movements").delete();
+  const { error } =
+    existing.tipo === "TRASLADO" && existing.ref_id
+      ? await query.eq("ref_type", "traslado").eq("ref_id", existing.ref_id)
+      : await query.eq("id", id);
 
   if (error) return { error: "No se pudo eliminar el movimiento" };
 
   revalidatePath("/admin/caja");
   revalidatePath("/admin");
-  return {};
-}
-
-/** Lee la base de caja (dinero que no se toca) desde settings. */
-export async function getCajaBase(): Promise<number> {
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("settings")
-    .select("value")
-    .eq("key", BASE_KEY)
-    .maybeSingle();
-
-  const n = Number(data?.value ?? 0);
-  return Number.isFinite(n) && n >= 0 ? n : 0;
-}
-
-/** Persiste la base de caja en settings (valor único y no público). */
-export async function saveCajaBase(input: unknown): Promise<ActionResult> {
-  const authError = await assertAuth();
-  if (authError) return { error: authError };
-
-  const raw = (input as { base?: unknown } | null)?.base;
-  const n = Number(raw);
-  if (!Number.isFinite(n) || n < 0 || n > 1_000_000_000_000) {
-    return { error: "Base inválida: debe ser un monto mayor o igual a 0" };
-  }
-
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Sesión expirada" };
-
-  const { error } = await supabase.from("settings").upsert(
-    {
-      key: BASE_KEY,
-      value: n,
-      is_public: false,
-      updated_by: user.id,
-    },
-    { onConflict: "key" }
-  );
-
-  if (error) return { error: "No se pudo guardar la base de caja" };
-
-  revalidatePath("/admin/caja");
   return {};
 }

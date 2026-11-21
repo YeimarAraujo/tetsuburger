@@ -43,12 +43,14 @@ async function syncExpenseMovement(
         amount: -data.amount,
         description: data.concept,
         metodo,
+        bolsillo: data.bolsillo,
       })
       .eq("id", existing.id);
   } else if (wants && !existing) {
     await supabase.from("caja_movements").insert({
       movement_date: data.expense_date,
       tipo: "GASTO",
+      bolsillo: data.bolsillo,
       metodo,
       amount: -data.amount,
       description: data.concept,
@@ -71,7 +73,9 @@ export async function createExpense(input: unknown): Promise<ActionResult & { id
   const parsed = parseInput(input);
   if (!parsed.ok) return { error: parsed.error };
 
-  const { metodo, ...expenseData } = parsed.data;
+  // metodo y bolsillo solo viven en el movimiento de caja, no en expenses.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { metodo, bolsillo: _bolsillo, ...expenseData } = parsed.data;
 
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -94,7 +98,8 @@ export async function updateExpense(id: string, input: unknown): Promise<ActionR
   const parsed = parseInput(input);
   if (!parsed.ok) return { error: parsed.error };
 
-  const { metodo, ...expenseData } = parsed.data;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { metodo, bolsillo: _bolsillo, ...expenseData } = parsed.data;
 
   const supabase = await createClient();
 
