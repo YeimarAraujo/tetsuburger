@@ -198,6 +198,24 @@ Cada movimiento se registra con fecha, cantidad, tipo y referencia.
 
 ---
 
+### 🏦 Caja y Pagos (`/admin/caja`) — dos bases
+**Qué hace:** separa la plata en dos bases, cada una con saldo en **efectivo** y en **transferencia**:
+
+- **Base de Compras:** plata para reponer insumos.
+- **Base de Ganancia:** lo que ganas (margen).
+
+**Cómo se llenan:** al marcar un pedido como *Entregado*, el **costo** de lo vendido entra a Compras y el **margen** (venta − costo) entra a Ganancia, en el medio con que pagó el cliente (en pago mixto se reparte en proporción). Si un producto no tiene costo cargado, todo su valor cae en Ganancia y el movimiento lo indica ("sin costo cargado").
+
+**Cómo se descuentan:** en *Compras del día*, *Gastos* y *Movimiento manual* eliges **de qué base sale** y por qué medio. Por defecto las compras salen de Compras y los gastos/retiros de Ganancia.
+
+**Saldo inicial:** la Base de Compras arranca con $518.000 ($166.000 en efectivo y $352.000 en transferencia), trasladados desde el historial de la caja. La Ganancia es lo que queda aparte de esa base. Para mover plata después, usa **Trasladar**.
+
+**Trasladar:** mueve plata de una base a la otra (mismo medio). No cuenta como ingreso ni egreso.
+
+> Requiere ejecutar en el SQL Editor de Supabase, **una a la vez y en este orden**, `0038_caja_bolsillos.sql` y luego `0039_caja_saldo_inicial_bases.sql`.
+
+---
+
 ### 💰 Finanzas (`/admin/finanzas`)
 **Qué hace:** Vista consolidada de la salud financiera.
 

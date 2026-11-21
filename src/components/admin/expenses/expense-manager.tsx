@@ -48,6 +48,7 @@ export interface ExpenseRow {
   description: string;
   from_caja: boolean;
   movimiento_metodo?: "EFECTIVO" | "TRANSFERENCIA" | null;
+  movimiento_bolsillo?: "COMPRAS" | "GANANCIA" | null;
   category_name: string | null;
 }
 
@@ -152,6 +153,7 @@ export function ExpenseManager({
       description: String(formData.get("description") ?? ""),
       from_caja: String(formData.get("from_caja") === "on"),
       metodo: String(formData.get("metodo") ?? "EFECTIVO"),
+      bolsillo: String(formData.get("bolsillo") ?? "GANANCIA"),
     };
 
     const result = editing
@@ -395,31 +397,33 @@ export function ExpenseManager({
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="exp-concept">Concepto *</Label>
-              <Input
-                id="exp-concept"
-                name="concept"
-                defaultValue={preset?.concept ?? editing?.concept ?? ""}
-                placeholder="Ej: Carne para 50 hamburguesas"
-                required
-                maxLength={120}
-              />
-            </div>
+            <div className="grid grid-cols-[3fr_2fr] gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="exp-concept">Concepto *</Label>
+                <Input
+                  id="exp-concept"
+                  name="concept"
+                  defaultValue={preset?.concept ?? editing?.concept ?? ""}
+                  placeholder="Ej: Carne para 50 hamburguesas"
+                  required
+                  maxLength={120}
+                />
+              </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="exp-amount">Valor (COP) *</Label>
-              <Input
-                id="exp-amount"
-                name="amount"
-                type="number"
-                min={0}
-                step="any"
-                inputMode="decimal"
-                defaultValue={editing?.amount ?? ""}
-                placeholder="3250"
-                required
-              />
+              <div className="space-y-2">
+                <Label htmlFor="exp-amount">Valor (COP) *</Label>
+                <Input
+                  id="exp-amount"
+                  name="amount"
+                  type="number"
+                  min={0}
+                  step="any"
+                  inputMode="decimal"
+                  defaultValue={editing?.amount ?? ""}
+                  placeholder="3250"
+                  required
+                />
+              </div>
             </div>
 
             <div className="space-y-2">
@@ -450,8 +454,22 @@ export function ExpenseManager({
               </p>
             </div>
 
+            <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="exp-metodo">Medio de pago (si sale de caja)</Label>
+              <Label htmlFor="exp-bolsillo">¿De qué base sale?</Label>
+              <Select name="bolsillo" defaultValue={editing?.movimiento_bolsillo ?? "GANANCIA"}>
+                <SelectTrigger id="exp-bolsillo" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="GANANCIA">Base de Ganancia</SelectItem>
+                  <SelectItem value="COMPRAS">Base de Compras</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="exp-metodo">Medio de pago</Label>
               <Select name="metodo" defaultValue={editing?.movimiento_metodo ?? "EFECTIVO"}>
                 <SelectTrigger id="exp-metodo" className="w-full">
                   <SelectValue />
@@ -462,6 +480,10 @@ export function ExpenseManager({
                 </SelectContent>
               </Select>
             </div>
+            </div>
+            <p className="-mt-2 text-xs text-muted-foreground">
+              Solo aplican si el gasto salió de la caja.
+            </p>
 
             {error ? (
               <p className="text-sm font-medium text-destructive" role="alert">

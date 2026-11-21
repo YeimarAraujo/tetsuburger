@@ -1604,34 +1604,36 @@ function ChargeDialog({
             void handleSave();
           }}
         >
-          <div className="space-y-1.5">
-            <Label htmlFor="charge-subtotal">Subtotal de productos</Label>
-            <Input
-              id="charge-subtotal"
-              type="number"
-              inputMode="decimal"
-              min={0}
-              step="any"
-              value={subtotal}
-              onChange={(e) => setSubtotal(e.target.value)}
-            />
-            <p className="text-xs text-muted-foreground">Bájalo si regalas un producto.</p>
-          </div>
-
-          {isDelivery ? (
+          <div className={isDelivery ? "grid grid-cols-2 gap-4" : undefined}>
             <div className="space-y-1.5">
-              <Label htmlFor="charge-fee">Domicilio</Label>
+              <Label htmlFor="charge-subtotal">Subtotal de productos</Label>
               <Input
-                id="charge-fee"
+                id="charge-subtotal"
                 type="number"
                 inputMode="decimal"
                 min={0}
                 step="any"
-                value={fee}
-                onChange={(e) => setFee(e.target.value)}
+                value={subtotal}
+                onChange={(e) => setSubtotal(e.target.value)}
               />
+              <p className="text-xs text-muted-foreground">Bájalo si regalas un producto.</p>
             </div>
-          ) : null}
+
+            {isDelivery ? (
+              <div className="space-y-1.5">
+                <Label htmlFor="charge-fee">Domicilio</Label>
+                <Input
+                  id="charge-fee"
+                  type="number"
+                  inputMode="decimal"
+                  min={0}
+                  step="any"
+                  value={fee}
+                  onChange={(e) => setFee(e.target.value)}
+                />
+              </div>
+            ) : null}
+          </div>
 
           <div className="space-y-1.5">
             <Label htmlFor="charge-final">Valor final a cobrar (opcional)</Label>

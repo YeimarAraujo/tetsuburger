@@ -2,12 +2,18 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowDownLeft, ArrowUpRight, CalendarDays, CircleDollarSign, Coins, CreditCard, Landmark, Loader2, PiggyBank, Plus, Save, Scale, Trash2, TrendingDown, TrendingUp, Wallet } from "lucide-react";
+import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, CalendarDays, CircleDollarSign, Coins, CreditCard, Landmark, Loader2, PiggyBank, Plus, Scale, Trash2, TrendingDown, TrendingUp, Wallet } from "lucide-react";
 import { toast } from "sonner";
-import { createCajaMovement, deleteCajaMovement, saveCajaBase } from "@/features/caja/actions";
+import { createCajaMovement, createCajaTransfer, deleteCajaMovement } from "@/features/caja/actions";
 import { formatCOP, formatDate } from "@/lib/format";
 import { bogotaToday } from "@/lib/bogota";
-import type { CajaMetodo, CajaTipo } from "@/types/db";
+import {
+  BOLSILLOS,
+  BOLSILLO_LABEL,
+  saldoBolsillo,
+  type BolsilloSaldo,
+} from "@/lib/caja-bolsillos";
+import type { CajaBolsillo, CajaMetodo, CajaTipo } from "@/types/db";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -36,13 +42,19 @@ export interface CajaRow {
   movement_date: string;
   tipo: CajaTipo;
   metodo: CajaMetodo;
+  bolsillo: CajaBolsillo;
   amount: number;
   description: string;
   fuente: string;
   created_at: string;
 }
 
-const MANUAL_TIPOS: CajaTipo[] = ["INGRESO_EXTRA", "RETIRO", "AJUSTE"];
+const MANUAL_TIPOS: CajaTipo[] = ["INGRESO_EXTRA", "RETIRO", "AJUSTE", "TRASLADO"];
+
+const BOLSILLO_META: Record<CajaBolsillo, { label: string; className: string }> = {
+  COMPRAS: { label: "Compras", className: "bg-amber-500/10 text-amber-700" },
+  GANANCIA: { label: "Ganancia", className: "bg-violet-500/10 text-violet-600" },
+};
 
 const METODO_META: Record<CajaMetodo, { label: string; className: string }> = {
   EFECTIVO: { label: "Efectivo", className: "bg-emerald-500/10 text-emerald-600" },
@@ -57,6 +69,7 @@ const TIPO_META: Record<CajaTipo, { label: string; className: string }> = {
   INGRESO_EXTRA: { label: "Ingreso extra", className: "bg-emerald-500/10 text-emerald-600" },
   RETIRO: { label: "Retiro", className: "bg-orange-500/10 text-orange-600" },
   AJUSTE: { label: "Ajuste", className: "bg-blue-500/10 text-blue-600" },
+  TRASLADO: { label: "Traslado", className: "bg-slate-500/10 text-slate-600" },
 };
 
 function addDays(dateStr: string, delta: number): string {
@@ -82,24 +95,74 @@ function lastMovementDate(rows: CajaRow[], cutoff: string): string | null {
   return max;
 }
 
-interface SaldoCuenta {
-  efectivo: number;
-  transferencia: number;
-  total: number;
+/** Tarjeta de una base: saldo en efectivo, transferencia y total. */
+function BaseCard({
+  bolsillo,
+  saldo,
+  onTransfer,
+}: {
+  bolsillo: CajaBolsillo;
+  saldo: BolsilloSaldo;
+  onTransfer: () => void;
+}) {
+  const meta = BOLSILLO_META[bolsillo];
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Landmark className="size-4 text-primary" />
+          {BOLSILLO_LABEL[bolsillo]}
+          <Badge variant="secondary" className={cn("ml-1", meta.className)}>
+            {bolsillo === "COMPRAS" ? "Reposición de insumos" : "Lo que ganas"}
+          </Badge>
+        </CardTitle>
+        <CardDescription>
+          {bolsillo === "COMPRAS"
+            ? "Recibe el costo de cada venta entregada. De aquí salen las compras de materia prima."
+            : "Es lo que se acumula aparte de la Base de Compras: recibe el margen de cada venta entregada (venta − costo). De aquí salen gastos y retiros."}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-lg border p-3">
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Wallet className="size-3.5" /> Efectivo
+            </p>
+            <p className={cn("text-lg font-bold", saldo.efectivo >= 0 ? "text-emerald-600" : "text-red-600")}>
+              {formatCOP(saldo.efectivo)}
+            </p>
+          </div>
+          <div className="rounded-lg border p-3">
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <CreditCard className="size-3.5" /> Transferencia
+            </p>
+            <p className={cn("text-lg font-bold", saldo.transferencia >= 0 ? "text-blue-600" : "text-red-600")}>
+              {formatCOP(saldo.transferencia)}
+            </p>
+          </div>
+          <div className="rounded-lg bg-primary/5 p-3">
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Scale className="size-3.5" /> Total
+            </p>
+            <p className={cn("text-lg font-bold", saldo.total >= 0 ? "text-foreground" : "text-red-600")}>
+              {formatCOP(saldo.total)}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex justify-end border-t pt-4">
+          <Button type="button" size="sm" variant="outline" onClick={onTransfer}>
+            <ArrowLeftRight className="size-4" />
+            Trasladar
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
-function saldoAtDate(rows: CajaRow[], date: string): SaldoCuenta {
-  let efectivo = 0;
-  let transferencia = 0;
-  for (const r of rows) {
-    if (r.movement_date > date) continue;
-    if (r.metodo === "TRANSFERENCIA") transferencia += Number(r.amount);
-    else efectivo += Number(r.amount);
-  }
-  return { efectivo, transferencia, total: efectivo + transferencia };
-}
-
-export function CajaManager({ rows, base }: { rows: CajaRow[]; base: number }) {
+export function CajaManager({ rows }: { rows: CajaRow[] }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -115,28 +178,41 @@ export function CajaManager({ rows, base }: { rows: CajaRow[]; base: number }) {
   const [manTipo, setManTipo] = useState<"INGRESO_EXTRA" | "RETIRO" | "AJUSTE">("INGRESO_EXTRA");
   const [manIngreso, setManIngreso] = useState(false);
   const [manMetodo, setManMetodo] = useState<CajaMetodo>("EFECTIVO");
+  const [manBolsillo, setManBolsillo] = useState<CajaBolsillo>("GANANCIA");
 
-  const [baseInput, setBaseInput] = useState(() => String(base));
+  const [transferOpen, setTransferOpen] = useState(false);
+  const [trDesde, setTrDesde] = useState<CajaBolsillo>("GANANCIA");
+  const [trMetodo, setTrMetodo] = useState<CajaMetodo>("EFECTIVO");
+
+  const [bolsilloFilter, setBolsilloFilter] = useState<"TODAS" | CajaBolsillo>("TODAS");
   const [corteDate, setCorteDate] = useState(() => lastMovementDate(rows, bogotaToday()) ?? bogotaToday());
   const [weekIdx, setWeekIdx] = useState(0);
 
-  const saldo = useMemo(() => rows.reduce((s, r) => s + Number(r.amount), 0), [rows]);
-  const saldoEfectivo = useMemo(
-    () => rows.filter((r) => r.metodo === "EFECTIVO").reduce((s, r) => s + Number(r.amount), 0),
+  // Saldo de cada base = suma de sus movimientos (efectivo y transferencia).
+  const saldos = useMemo(
+    () => ({
+      COMPRAS: saldoBolsillo(rows, "COMPRAS"),
+      GANANCIA: saldoBolsillo(rows, "GANANCIA"),
+    }),
     [rows]
   );
-  const saldoTransferencia = useMemo(
-    () => rows.filter((r) => r.metodo === "TRANSFERENCIA").reduce((s, r) => s + Number(r.amount), 0),
-    [rows]
-  );
+  const saldoTotal = saldos.COMPRAS.total + saldos.GANANCIA.total;
 
   const filtered = useMemo(
-    () => rows.filter((r) => r.movement_date >= from && r.movement_date <= to),
-    [rows, from, to]
+    () =>
+      rows.filter(
+        (r) =>
+          r.movement_date >= from &&
+          r.movement_date <= to &&
+          (bolsilloFilter === "TODAS" || r.bolsillo === bolsilloFilter)
+      ),
+    [rows, from, to, bolsilloFilter]
   );
   const pager = usePagination(filtered);
-  const ingresos = filtered.filter((r) => r.amount > 0).reduce((s, r) => s + Number(r.amount), 0);
-  const egresos = filtered.filter((r) => r.amount < 0).reduce((s, r) => s + Number(r.amount), 0);
+  // Los traslados entre bases no son ingresos ni egresos reales: se excluyen.
+  const reales = filtered.filter((r) => r.tipo !== "TRASLADO");
+  const ingresos = reales.filter((r) => r.amount > 0).reduce((s, r) => s + Number(r.amount), 0);
+  const egresos = reales.filter((r) => r.amount < 0).reduce((s, r) => s + Number(r.amount), 0);
 
   const dayRows = useMemo(
     () => rows.filter((r) => r.movement_date === arqueoDate),
@@ -151,7 +227,14 @@ export function CajaManager({ rows, base }: { rows: CajaRow[]; base: number }) {
   // Saldo acumulado hasta la fecha de corte (día puntual).
   const corteData = useMemo(() => {
     const ultimoDia = lastMovementDate(rows, corteDate) ?? corteDate;
-    return { corte: corteDate, ultimoDia, saldos: saldoAtDate(rows, ultimoDia) };
+    const compras = saldoBolsillo(rows, "COMPRAS", ultimoDia);
+    const ganancia = saldoBolsillo(rows, "GANANCIA", ultimoDia);
+    return {
+      corte: corteDate,
+      ultimoDia,
+      saldos: { COMPRAS: compras, GANANCIA: ganancia } as Record<CajaBolsillo, BolsilloSaldo>,
+      total: compras.total + ganancia.total,
+    };
   }, [rows, corteDate]);
 
   // Ganancia por semana: comparación del saldo final de cada semana.
@@ -167,22 +250,23 @@ export function CajaManager({ rows, base }: { rows: CajaRow[]; base: number }) {
   const weekData = useMemo(() => {
     const week = weeks[weekIdx];
     const weekEnd = addDays(week.start, 6);
-    const finSemana = lastMovementDate(rows, weekEnd);
+    const ultimo = lastMovementDate(rows, weekEnd);
+    const finSemana = ultimo !== null && ultimo >= week.start ? ultimo : null;
     const cutoffPrevio = addDays(week.start, -1);
-    const finAnterior = lastMovementDate(rows, cutoffPrevio) ?? cutoffPrevio;
-    const saldoFin = saldoAtDate(rows, finSemana ?? weekEnd);
-    const saldoPrev = saldoAtDate(rows, finAnterior);
+    const gananciaFin = saldoBolsillo(rows, "GANANCIA", weekEnd);
+    const gananciaPrev = saldoBolsillo(rows, "GANANCIA", cutoffPrevio);
+    const comprasFin = saldoBolsillo(rows, "COMPRAS", weekEnd);
+    const comprasPrev = saldoBolsillo(rows, "COMPRAS", cutoffPrevio);
     return {
       start: week.start,
       end: weekEnd,
       finSemana,
-      finAnterior: cutoffPrevio,
-      saldoFin,
-      saldoPrev,
-      gananciaSemana: saldoFin.total - saldoPrev.total,
-      acumuladoBase: saldoFin.total - base,
+      gananciaFin,
+      gananciaPrev,
+      gananciaSemana: gananciaFin.total - gananciaPrev.total,
+      comprasSemana: comprasFin.total - comprasPrev.total,
     };
-  }, [rows, weekIdx, weeks, base]);
+  }, [rows, weekIdx, weeks]);
 
   async function handleCreate(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -193,6 +277,7 @@ export function CajaManager({ rows, base }: { rows: CajaRow[]; base: number }) {
     const payload = {
       movement_date: String(fd.get("movement_date") ?? bogotaToday()),
       tipo: manTipo,
+      bolsillo: manBolsillo,
       metodo: manTipo === "AJUSTE" ? "EFECTIVO" : manMetodo,
       es_ingreso: String(manIngreso),
       amount: String(fd.get("amount") ?? ""),
@@ -236,23 +321,39 @@ export function CajaManager({ rows, base }: { rows: CajaRow[]; base: number }) {
     startTransition(() => router.refresh());
   }
 
-  async function handleSaveBase(e: React.FormEvent<HTMLFormElement>) {
+  function openTransfer(desde: CajaBolsillo) {
+    setTrDesde(desde);
+    setError(null);
+    setTransferOpen(true);
+  }
+
+  async function handleTransfer(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setSaving(true);
-    const result = await saveCajaBase({ base: Number(baseInput || 0) });
+    setError(null);
+
+    const fd = new FormData(e.currentTarget);
+    const result = await createCajaTransfer({
+      movement_date: String(fd.get("movement_date") ?? bogotaToday()),
+      desde: trDesde,
+      metodo: trMetodo,
+      amount: String(fd.get("amount") ?? ""),
+      description: String(fd.get("description") ?? ""),
+    });
     setSaving(false);
 
     if (result.error) {
-      toast.error(result.error);
+      setError(result.error);
       return;
     }
 
-    toast.success("Base de caja guardada");
+    toast.success("Traslado registrado");
+    setTransferOpen(false);
     startTransition(() => router.refresh());
   }
 
   async function handleDelete(id: string, label: string) {
-    if (!confirm(`¿Eliminar el movimiento "${label}"? Solo es posible para movimientos manuales.`)) return;
+    if (!confirm(`¿Eliminar el movimiento "${label}"? Solo es posible para movimientos manuales y traslados (el traslado se elimina completo).`)) return;
 
     const result = await deleteCajaMovement(id);
     if (result.error) {
@@ -266,43 +367,29 @@ export function CajaManager({ rows, base }: { rows: CajaRow[]; base: number }) {
 
   return (
     <>
+      {/* Las dos bases: saldo (efectivo / transferencia) y monto definido */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        {BOLSILLOS.map((b) => (
+          <BaseCard
+            key={b}
+            bolsillo={b}
+            saldo={saldos[b]}
+            onTransfer={() => openTransfer(b)}
+          />
+        ))}
+      </div>
+
       {/* KPIs */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <KpiCard
-          icon={Wallet}
-          tileClassName="bg-emerald-500/10"
-          iconClassName="text-emerald-600"
-          label="Saldo en efectivo"
-          value={formatCOP(saldoEfectivo)}
-          valueClassName={saldoEfectivo >= 0 ? "text-emerald-600" : "text-red-600"}
-          caption="Efectivo físico · todas las fechas"
-          help={{
-            what: "Plata física en caja (billetes y monedas), sumando todos los movimientos en efectivo registrados.",
-            formula: "Σ ingresos − Σ egresos en efectivo (histórico)",
-          }}
-        />
-        <KpiCard
-          icon={CreditCard}
-          tileClassName="bg-blue-500/10"
-          iconClassName="text-blue-600"
-          label="Saldo en transferencia"
-          value={formatCOP(saldoTransferencia)}
-          valueClassName={saldoTransferencia >= 0 ? "text-blue-600" : "text-red-600"}
-          caption="Bancos · todas las fechas"
-          help={{
-            what: "Dinero que entra o sale por transferencia (bancos), sumando todos los movimientos de ese medio.",
-            formula: "Σ ingresos − Σ egresos por transferencia (histórico)",
-          }}
-        />
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard
           icon={Scale}
           label="Saldo total"
-          value={formatCOP(saldo)}
-          valueClassName={saldo >= 0 ? "text-emerald-600" : "text-red-600"}
-          caption="Efectivo + transferencias"
+          value={formatCOP(saldoTotal)}
+          valueClassName={saldoTotal >= 0 ? "text-emerald-600" : "text-red-600"}
+          caption="Base de Compras + Base de Ganancia"
           help={{
-            what: "El saldo general del módulo: efectivo más transferencias, sumando todos los movimientos.",
-            formula: "Saldo en efectivo + Saldo en transferencia",
+            what: "El saldo general de la caja: lo que hay en las dos bases juntas (efectivo y transferencias).",
+            formula: "Saldo Base de Compras + Saldo Base de Ganancia",
           }}
         />
         <KpiCard
@@ -312,9 +399,9 @@ export function CajaManager({ rows, base }: { rows: CajaRow[]; base: number }) {
           label="Ingresos del período"
           value={formatCOP(ingresos)}
           valueClassName="text-emerald-600"
-          caption={`${filtered.length} movimientos`}
+          caption={`${reales.length} movimientos`}
           help={{
-            what: "Entradas en el rango de fechas filtrado (ventas en efectivo, ventas por transferencia y abonos).",
+            what: "Entradas en el rango de fechas y la base filtrados (ventas, abonos). Los traslados entre bases no cuentan.",
             formula: "Σ movimientos tipo ingreso en el filtro",
           }}
         />
@@ -327,7 +414,7 @@ export function CajaManager({ rows, base }: { rows: CajaRow[]; base: number }) {
           valueClassName="text-red-600"
           caption="Compras, gastos y retiros"
           help={{
-            what: "Salidas en el rango de fechas filtrado: compras de materia prima, gastos y retiros del dueño (efectivo o transferencia).",
+            what: "Salidas en el rango de fechas y la base filtrados: compras de materia prima, gastos y retiros del dueño. Los traslados entre bases no cuentan.",
             formula: "Σ movimientos tipo egreso en el filtro",
           }}
         />
@@ -407,45 +494,6 @@ export function CajaManager({ rows, base }: { rows: CajaRow[]; base: number }) {
         </CardContent>
       </Card> */}
 
-      {/* Base de caja */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Landmark className="size-4 text-primary" />
-            Base de caja
-          </CardTitle>
-          <CardDescription>
-            Plata que no se toca (para cambio del cajón). La ganancia es todo lo
-            que la caja acumule por encima de este valor.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-wrap items-end gap-4">
-          <div className="space-y-1.5">
-            <Label>Base actual</Label>
-            <div className="rounded-lg bg-muted px-4 py-2 font-bold">{formatCOP(base)}</div>
-          </div>
-          <form onSubmit={handleSaveBase} className="flex flex-wrap items-end gap-3">
-            <div className="space-y-1.5">
-              <Label>Nueva base (COP)</Label>
-              <Input
-                type="number"
-                min={0}
-                step="any"
-                inputMode="decimal"
-                value={baseInput}
-                onChange={(e) => setBaseInput(e.target.value)}
-                placeholder="0"
-                className="w-40"
-              />
-            </div>
-            <Button type="submit" size="sm" disabled={saving}>
-              {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-              Guardar
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
-
       {/* Saldo a una fecha */}
       <Card>
         <CardHeader>
@@ -454,8 +502,8 @@ export function CajaManager({ rows, base }: { rows: CajaRow[]; base: number }) {
             Saldo a una fecha
           </CardTitle>
           <CardDescription>
-            Cuánto hay acumulado en caja (efectivo + transferencia) hasta el día
-            de corte y la ganancia por encima de la base.
+            Cuánto hay acumulado en cada base (efectivo + transferencia) hasta el
+            día de corte.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -486,28 +534,29 @@ export function CajaManager({ rows, base }: { rows: CajaRow[]; base: number }) {
               {formatDate(`${corteData.ultimoDia}T12:00:00Z`)}
             </span>
           </p>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="rounded-lg border p-3">
-              <p className="text-xs text-muted-foreground">Efectivo</p>
-              <p className="text-lg font-bold text-emerald-600">{formatCOP(corteData.saldos.efectivo)}</p>
+          {BOLSILLOS.map((b) => (
+            <div key={b} className="space-y-2">
+              <p className="text-sm font-semibold">{BOLSILLO_LABEL[b]}</p>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs text-muted-foreground">Efectivo</p>
+                  <p className="text-lg font-bold text-emerald-600">{formatCOP(corteData.saldos[b].efectivo)}</p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs text-muted-foreground">Transferencia</p>
+                  <p className="text-lg font-bold text-blue-600">{formatCOP(corteData.saldos[b].transferencia)}</p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs text-muted-foreground">Total</p>
+                  <p className="text-lg font-bold">{formatCOP(corteData.saldos[b].total)}</p>
+                </div>
+              </div>
             </div>
-            <div className="rounded-lg border p-3">
-              <p className="text-xs text-muted-foreground">Transferencia</p>
-              <p className="text-lg font-bold text-blue-600">{formatCOP(corteData.saldos.transferencia)}</p>
-            </div>
-            <div className="rounded-lg border p-3">
-              <p className="text-xs text-muted-foreground">Saldo total</p>
-              <p className="text-lg font-bold">{formatCOP(corteData.saldos.total)}</p>
-            </div>
-            <div className="rounded-lg border p-3">
-              <p className="text-xs text-muted-foreground">Base</p>
-              <p className="text-lg font-bold text-muted-foreground">{formatCOP(base)}</p>
-            </div>
-          </div>
+          ))}
           <div className="rounded-lg bg-primary/5 px-4 py-3">
-            <p className="text-xs text-muted-foreground">Ganancia acumulada (saldo total − base)</p>
-            <p className={`text-xl font-bold ${corteData.saldos.total - base >= 0 ? "text-emerald-600" : "text-red-600"}`}>
-              {formatCOP(corteData.saldos.total - base)}
+            <p className="text-xs text-muted-foreground">Saldo total (ambas bases)</p>
+            <p className={`text-xl font-bold ${corteData.total >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+              {formatCOP(corteData.total)}
             </p>
           </div>
         </CardContent>
@@ -521,8 +570,8 @@ export function CajaManager({ rows, base }: { rows: CajaRow[]; base: number }) {
             Ganancia por semana
           </CardTitle>
           <CardDescription>
-            Cuánto creció la caja en la semana (saldo final vs saldo de la semana
-            anterior) y cuánto hay por encima de la base.
+            Cuánto creció la Base de Ganancia en la semana (saldo final vs saldo
+            de la semana anterior) y cómo se movió la Base de Compras.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -544,12 +593,12 @@ export function CajaManager({ rows, base }: { rows: CajaRow[]; base: number }) {
           </p>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div className="rounded-lg border p-3">
-              <p className="text-xs text-muted-foreground">Saldo fin de semana</p>
-              <p className="text-lg font-bold">{formatCOP(weekData.saldoFin.total)}</p>
+              <p className="text-xs text-muted-foreground">Ganancia · saldo fin de semana</p>
+              <p className="text-lg font-bold">{formatCOP(weekData.gananciaFin.total)}</p>
             </div>
             <div className="rounded-lg border p-3">
-              <p className="text-xs text-muted-foreground">Saldo fin semana anterior</p>
-              <p className="text-lg font-bold text-muted-foreground">{formatCOP(weekData.saldoPrev.total)}</p>
+              <p className="text-xs text-muted-foreground">Ganancia · saldo fin semana anterior</p>
+              <p className="text-lg font-bold text-muted-foreground">{formatCOP(weekData.gananciaPrev.total)}</p>
             </div>
             <div className="rounded-lg border p-3">
               <p className="text-xs text-muted-foreground">Ganancia de la semana</p>
@@ -558,9 +607,9 @@ export function CajaManager({ rows, base }: { rows: CajaRow[]; base: number }) {
               </p>
             </div>
             <div className="rounded-lg border p-3">
-              <p className="text-xs text-muted-foreground">Por encima de la base</p>
-              <p className={`text-lg font-bold ${weekData.acumuladoBase >= 0 ? "text-emerald-600" : "text-red-600"}`}>
-                {formatCOP(weekData.acumuladoBase)}
+              <p className="text-xs text-muted-foreground">Variación de Compras en la semana</p>
+              <p className={`text-lg font-bold ${weekData.comprasSemana >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                {formatCOP(weekData.comprasSemana)}
               </p>
             </div>
           </div>
@@ -577,6 +626,20 @@ export function CajaManager({ rows, base }: { rows: CajaRow[]; base: number }) {
         }}
         pending={isPending}
       >
+        <Select value={bolsilloFilter} onValueChange={(v) => setBolsilloFilter(v as "TODAS" | CajaBolsillo)}>
+          <SelectTrigger className="w-44" aria-label="Filtrar por base">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="TODAS">Ambas bases</SelectItem>
+            <SelectItem value="COMPRAS">Base de Compras</SelectItem>
+            <SelectItem value="GANANCIA">Base de Ganancia</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button size="sm" variant="outline" onClick={() => openTransfer("GANANCIA")}>
+          <ArrowLeftRight className="size-4" />
+          Trasladar
+        </Button>
         <Button size="sm" onClick={() => setDialogOpen(true)}>
           <Plus className="size-4" />
           Registrar movimiento
@@ -613,6 +676,7 @@ export function CajaManager({ rows, base }: { rows: CajaRow[]; base: number }) {
                   {pager.visible.map((r) => {
                     const meta = TIPO_META[r.tipo];
                     const medio = METODO_META[r.metodo] ?? METODO_META.EFECTIVO;
+                    const baseMeta = BOLSILLO_META[r.bolsillo] ?? BOLSILLO_META.GANANCIA;
                     return (
                       <tr key={r.id} className="border-b last:border-0">
                         <td className="py-2 pr-3 whitespace-nowrap">
@@ -625,6 +689,9 @@ export function CajaManager({ rows, base }: { rows: CajaRow[]; base: number }) {
                             </Badge>
                             <Badge variant="secondary" className={cn("gap-1", medio.className)}>
                               {medio.label}
+                            </Badge>
+                            <Badge variant="secondary" className={cn("gap-1", baseMeta.className)}>
+                              {baseMeta.label}
                             </Badge>
                           </div>
                         </td>
@@ -700,6 +767,41 @@ export function CajaManager({ rows, base }: { rows: CajaRow[]; base: number }) {
               </div>
             </div>
 
+            <div className={manTipo === "AJUSTE" ? "space-y-4" : "grid grid-cols-2 gap-4"}>
+              <div className="space-y-2">
+                <Label>
+                  Base{" "}
+                  <span className="text-muted-foreground">
+                    ({manTipo === "INGRESO_EXTRA" || (manTipo === "AJUSTE" && manIngreso) ? "a la que entra" : "de la que sale"})
+                  </span>
+                </Label>
+                <Select value={manBolsillo} onValueChange={(v) => setManBolsillo(v as CajaBolsillo)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="GANANCIA">Base de Ganancia</SelectItem>
+                    <SelectItem value="COMPRAS">Base de Compras</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {manTipo !== "AJUSTE" ? (
+                <div className="space-y-2">
+                  <Label>Medio</Label>
+                  <Select value={manMetodo} onValueChange={(v) => setManMetodo(v as CajaMetodo)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="EFECTIVO">Efectivo</SelectItem>
+                      <SelectItem value="TRANSFERENCIA">Transferencia</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : null}
+            </div>
+
             {manTipo === "AJUSTE" ? (
               <div className="space-y-2">
                 <Label>Dirección del ajuste</Label>
@@ -725,39 +827,28 @@ export function CajaManager({ rows, base }: { rows: CajaRow[]; base: number }) {
                   El ajuste siempre es en efectivo (nace de la plata contada en el cajón).
                 </p>
               </div>
-            ) : (
+            ) : null}
+
+            <div className="grid grid-cols-[2fr_3fr] gap-4">
               <div className="space-y-2">
-                <Label>Medio</Label>
-                <Select value={manMetodo} onValueChange={(v) => setManMetodo(v as CajaMetodo)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="EFECTIVO">Efectivo</SelectItem>
-                    <SelectItem value="TRANSFERENCIA">Transferencia</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label>
+                  Valor (COP) *{" "}
+                  <span className="text-muted-foreground">
+                    ({manTipo === "INGRESO_EXTRA" || (manTipo === "AJUSTE" && manIngreso) ? "entra" : "sale"})
+                  </span>
+                </Label>
+                <Input name="amount" type="number" min={0.01} step="any" inputMode="decimal" placeholder="50000" required />
               </div>
-            )}
 
-            <div className="space-y-2">
-              <Label>
-                Valor (COP) *{" "}
-                <span className="text-muted-foreground">
-                  ({manTipo === "INGRESO_EXTRA" || (manTipo === "AJUSTE" && manIngreso) ? "entra" : "sale"})
-                </span>
-              </Label>
-              <Input name="amount" type="number" min={0.01} step="any" inputMode="decimal" placeholder="50000" required />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Descripción *</Label>
-              <Input
-                name="description"
-                required
-                maxLength={200}
-                placeholder="Ej: Abono de cliente, pago de fiado, precaución de cambio…"
-              />
+              <div className="space-y-2">
+                <Label>Descripción *</Label>
+                <Input
+                  name="description"
+                  required
+                  maxLength={200}
+                  placeholder="Ej: Abono de cliente, pago de fiado…"
+                />
+              </div>
             </div>
 
             {error ? <p className="text-sm font-medium text-destructive">{error}</p> : null}
@@ -769,6 +860,80 @@ export function CajaManager({ rows, base }: { rows: CajaRow[]; base: number }) {
               <Button type="submit" disabled={saving}>
                 {saving ? <Loader2 className="size-4 animate-spin" /> : null}
                 Registrar
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Diálogo: traslado entre bases */}
+      <Dialog open={transferOpen} onOpenChange={setTransferOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Trasladar plata entre bases</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleTransfer} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Sale de</Label>
+                <Select value={trDesde} onValueChange={(v) => setTrDesde(v as CajaBolsillo)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="GANANCIA">Base de Ganancia</SelectItem>
+                    <SelectItem value="COMPRAS">Base de Compras</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Entra a</Label>
+                <div className="flex h-9 items-center rounded-md border bg-muted px-3 text-sm">
+                  {BOLSILLO_LABEL[trDesde === "COMPRAS" ? "GANANCIA" : "COMPRAS"]}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Medio</Label>
+                <Select value={trMetodo} onValueChange={(v) => setTrMetodo(v as CajaMetodo)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="EFECTIVO">Efectivo</SelectItem>
+                    <SelectItem value="TRANSFERENCIA">Transferencia</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Fecha</Label>
+                <Input name="movement_date" type="date" defaultValue={bogotaToday()} />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-[2fr_3fr] gap-4">
+              <div className="space-y-2">
+                <Label>Valor (COP) *</Label>
+                <Input name="amount" type="number" min={0.01} step="any" inputMode="decimal" placeholder="50000" required />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Nota (opcional)</Label>
+                <Input name="description" maxLength={200} placeholder="Ej: Completar compra de carne" />
+              </div>
+            </div>
+
+            {error ? <p className="text-sm font-medium text-destructive">{error}</p> : null}
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="outline" onClick={() => setTransferOpen(false)}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={saving}>
+                {saving ? <Loader2 className="size-4 animate-spin" /> : null}
+                Trasladar
               </Button>
             </div>
           </form>

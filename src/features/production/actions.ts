@@ -18,6 +18,8 @@ const purchaseSchema = z.object({
   notes: z.string().trim().max(300).default(""),
   from_caja: z.string().transform((v) => v === "true").default(false),
   metodo: z.enum(["EFECTIVO", "TRANSFERENCIA"]).default("EFECTIVO"),
+  /** Base de la que sale la plata (por defecto la Base de Compras). */
+  bolsillo: z.enum(["COMPRAS", "GANANCIA"]).default("COMPRAS"),
 });
 
 const createItemSchema = z.object({
@@ -91,12 +93,13 @@ export async function createProductionRecord(input: unknown): Promise<ActionResu
     }
   }
 
-  // Si la compra salió de la caja, la plata sale del saldo (efectivo o
-  // transferencia, según el medio elegido).
+  // Si la compra salió de la caja, la plata sale del saldo de la base elegida
+  // (efectivo o transferencia, según el medio elegido).
   if (data.from_caja && totalCost > 0) {
     await supabase.from("caja_movements").insert({
       movement_date: data.record_date,
       tipo: "COMPRA",
+      bolsillo: data.bolsillo,
       metodo: data.metodo,
       amount: -totalCost,
       description: data.description,

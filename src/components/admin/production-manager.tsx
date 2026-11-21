@@ -152,6 +152,7 @@ export function ProductionManager({
       notes: String(fd.get("notes") ?? ""),
       from_caja: String(fd.get("from_caja") === "on"),
       metodo: String(fd.get("metodo") ?? "EFECTIVO"),
+      bolsillo: String(fd.get("bolsillo") ?? "COMPRAS"),
     };
 
     const result = await createProductionRecord(payload);
@@ -373,18 +374,36 @@ export function ProductionManager({
               </p>
             </div>
 
-            <div className="space-y-2">
-              <Label>Medio de pago (si sale de caja)</Label>
-              <Select name="metodo" defaultValue="EFECTIVO">
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="EFECTIVO">Efectivo</SelectItem>
-                  <SelectItem value="TRANSFERENCIA">Transferencia</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>¿De qué base sale?</Label>
+                <Select name="bolsillo" defaultValue="COMPRAS">
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="COMPRAS">Base de Compras</SelectItem>
+                    <SelectItem value="GANANCIA">Base de Ganancia</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Medio de pago</Label>
+                <Select name="metodo" defaultValue="EFECTIVO">
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="EFECTIVO">Efectivo</SelectItem>
+                    <SelectItem value="TRANSFERENCIA">Transferencia</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
+            <p className="-mt-2 text-xs text-muted-foreground">
+              Solo aplican si la compra salió de la caja.
+            </p>
 
             <div className="space-y-2">
               <Label>Notas</Label>
