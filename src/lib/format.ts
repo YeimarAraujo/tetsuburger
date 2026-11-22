@@ -8,13 +8,15 @@ export function toFiniteNumber(value: unknown): number {
 
 /** Formatea montos en COP sin decimales: 68000 -> "$68.000" */
 export function formatCOP(amount: number | string): string {
-  const value = typeof amount === "string" ? parseFloat(amount) : amount;
+  const parsed = typeof amount === "string" ? parseFloat(amount) : amount;
+  // Math.round(...) || 0 convierte -0 (y valores que redondean a 0) en 0 para no mostrar "-$ 0".
+  const value = Number.isFinite(parsed) ? Math.round(parsed) || 0 : 0;
   return new Intl.NumberFormat("es-CO", {
     style: "currency",
     currency: "COP",
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
-  }).format(Number.isFinite(value) ? value : 0);
+  }).format(value);
 }
 
 /** Monto compacto para ejes y etiquetas de gráficas: 1250000 -> "$1,3 M" */
