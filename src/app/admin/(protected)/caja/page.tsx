@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { CajaManager, type CajaRow } from "@/components/admin/caja-manager";
 import { PageHeader } from "@/components/admin/page-header";
+import type { SocioMovRow, SocioRow } from "@/components/admin/caja-socios-card";
 
 export const metadata = {
   title: "Caja y Pagos · TETSU BURGER Admin",
@@ -39,6 +40,28 @@ export default async function CajaPage() {
     created_at: r.created_at,
   }));
 
+  const [{ data: sociosData }, { data: sociosMovData }] = await Promise.all([
+    supabase
+      .from("caja_socios")
+      .select("id, nombre")
+      .eq("activo", true)
+      .order("nombre", { ascending: true }),
+    supabase
+      .from("caja_socio_movimientos")
+      .select("id, socio_id, tipo, movement_date, amount, metodo, bolsillo, description, created_at")
+      .order("movement_date", { ascending: false })
+      .order("created_at", { ascending: false }),
+  ]);
+
+  const socios: SocioRow[] = ((sociosData ?? []) as unknown as SocioRow[]).map((s) => ({
+    id: s.id,
+    nombre: s.nombre,
+  }));
+
+  const socioMovs: SocioMovRow[] = ((sociosMovData ?? []) as unknown as (Omit<SocioMovRow, "amount"> & {
+    amount: number | string;
+  })[]).map((m) => ({ ...m, amount: Number(m.amount) }));
+
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6 p-4 lg:p-6">
       <PageHeader
@@ -46,7 +69,7 @@ export default async function CajaPage() {
         description=" "
       />
 
-      <CajaManager rows={rows} />
+      <CajaManager rows={rows} socios={socios} socioMovs={socioMovs} />
     </div>
   );
 }

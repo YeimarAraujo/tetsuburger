@@ -36,6 +36,11 @@ import { cn } from "@/lib/utils";
 import { KpiCard } from "@/components/admin/kpi-card";
 import { DateRangeFilter } from "@/components/admin/date-range-filter";
 import { TablePagination, usePagination } from "@/components/admin/table-pagination";
+import {
+  CajaSociosCard,
+  type SocioMovRow,
+  type SocioRow,
+} from "@/components/admin/caja-socios-card";
 
 export interface CajaRow {
   id: string;
@@ -162,7 +167,15 @@ function BaseCard({
   );
 }
 
-export function CajaManager({ rows }: { rows: CajaRow[] }) {
+export function CajaManager({
+  rows,
+  socios,
+  socioMovs,
+}: {
+  rows: CajaRow[];
+  socios: SocioRow[];
+  socioMovs: SocioMovRow[];
+}) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -615,6 +628,9 @@ export function CajaManager({ rows }: { rows: CajaRow[] }) {
           </div>
         </CardContent>
       </Card>
+
+      {/* Deuda de socios */}
+      <CajaSociosCard socios={socios} movimientos={socioMovs} />
 
       {/* Filtros */}
       <DateRangeFilter
