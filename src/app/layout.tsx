@@ -5,6 +5,8 @@ import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { isProductionDeployment, getSiteUrl } from "@/lib/site-url";
+import { getSiteAppearance } from "@/lib/site-appearance";
+import { SiteAppearanceProvider } from "@/components/site-appearance-provider";
 
 import "./globals.css";
 
@@ -70,23 +72,27 @@ export const viewport: Viewport = {
   themeColor: "#ff6633",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const appearance = await getSiteAppearance();
+
   return (
     <html
       lang="es-CO"
       className={`${jakarta.variable} ${anton.variable}`}
     >
       <body>
-        <TooltipProvider delayDuration={150}>
-          {children}
-          <Toaster richColors position="top-center" />
-          <Analytics />
-          <SpeedInsights />
-        </TooltipProvider>
+        <SiteAppearanceProvider value={appearance}>
+          <TooltipProvider delayDuration={150}>
+            {children}
+            <Toaster richColors position="top-center" />
+            <Analytics />
+            <SpeedInsights />
+          </TooltipProvider>
+        </SiteAppearanceProvider>
       </body>
     </html>
   );

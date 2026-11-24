@@ -102,6 +102,7 @@ export const ADMIN_SECTIONS: Record<
   configuracion: [
     { href: "/admin/configuracion", label: "Negocio" },
     { href: "/admin/horarios", label: "Horarios" },
+    { href: "/admin/apariencia", label: "Apariencia" },
     { href: "/admin/pqr", label: "PQR" },
     { href: "/admin/auditoria", label: "Auditoría" },
   ],
