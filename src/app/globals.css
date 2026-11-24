@@ -159,6 +159,39 @@
   }
 }
 
+/* Decoración navideña (ver components/public/christmas-decor.tsx) */
+@keyframes christmas-fall {
+  from {
+    transform: translate3d(0, -10px, 0);
+  }
+
+  to {
+    transform: translate3d(24px, 120vh, 0);
+  }
+}
+
+@keyframes christmas-twinkle {
+
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 8px 2px currentColor;
+  }
+
+  50% {
+    opacity: 0.45;
+    box-shadow: 0 0 2px 0 currentColor;
+  }
+}
+
+.christmas-flake {
+  animation: christmas-fall linear infinite;
+}
+
+.christmas-light {
+  animation: christmas-twinkle 1.8s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
 
   *,
@@ -168,5 +201,13 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+}
+
+/* Con "reducir movimiento" los copos quedan quietos en vez de desaparecer. */
+@media (prefers-reduced-motion: reduce) {
+  .christmas-flake {
+    animation: none !important;
+    top: var(--flake-y, 20%);
   }
 }

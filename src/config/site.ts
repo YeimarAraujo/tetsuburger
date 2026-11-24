@@ -32,7 +32,7 @@ export const site = {
 
   social: {
     instagram: "https://www.instagram.com/tetsu.burger/",
-    facebook: "https://www.facebook.com/tetsuburger26" as string | null,
+    facebook: "https://www.facebook.com/share/19tsuXRKxh/?mibextid=wwXIfr" as string | null,
     tiktok: "https://www.tiktok.com/@tetsuburger" as string | null,
     googleBusiness: null as string | null,
   },

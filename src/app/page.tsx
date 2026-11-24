@@ -21,6 +21,8 @@ import { SiteFooter } from "@/components/public/site-footer";
 import { createPublicClient } from "@/lib/supabase/public";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { currentMinute } from "@/lib/business-hours";
+import { getSiteAppearance } from "@/lib/site-appearance";
+import { ChristmasDecor } from "@/components/public/christmas-decor";
 import { buildProductCards } from "@/lib/product-cards";
 import {
   buildMenuJsonLd,
@@ -31,6 +33,7 @@ import {
 export const revalidate = 300;
 
 export default async function HomePage() {
+  const { theme, mascot: heroImage } = await getSiteAppearance();
   const supabase = createPublicClient();
 
   const [
@@ -166,6 +169,7 @@ export default async function HomePage() {
           )}
           */}
           <BurgerPattern id="hero" opacity={0.18} />
+          {theme === "navidad" ? <ChristmasDecor /> : null}
 
           {/* Texto y mascota lado a lado; en móvil el conjunto queda centrado en la pantalla.
               Desde sm la mascota se posiciona aparte, a la derecha del contenedor. */}
@@ -193,10 +197,10 @@ export default async function HomePage() {
             </div>
 
             <Image
-              src="/images/tetsitoHero.webp"
+              src={heroImage.src}
               alt=""
-              width={443}
-              height={432}
+              width={heroImage.width}
+              height={heroImage.height}
               priority
               fetchPriority="high"
               sizes="(min-width: 1024px) 320px, (min-width: 640px) 256px, 144px"
